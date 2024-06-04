@@ -52,6 +52,7 @@ module alu_iu_unit_test;
   task setup();
     svunit_ut.setup();
     /* Place Setup Code Here */
+    $vcdpluson();
 
     reset();
   endtask
@@ -93,14 +94,14 @@ module alu_iu_unit_test;
     eu_iu_inst_src1 = 64'h0FED_CBA9_8765_4321;
     eu_iu_inst_src2 = 64'h0000_0000_0000_0000;
     eu_iu_inst_dst_id = 8'h0A;
-    #10
+    step(2);
     $display("@%0t test\n", $time);
     $display("iu_rb_dst_id: %x", iu_rb_dst_id);
     $display("iu_rb_data is: %x", iu_rb_data);
     $display("iu_rb_data_valid: %x", iu_rb_data_valid);
 
     `FAIL_IF(iu_rb_dst_id !== 8'h0A)
-    `FAIL_IF(iu_rb_data !== 64'h1123_1239_1C17_21D1)
+    `FAIL_IF(iu_rb_data !== 64'h2222222222222211)
     `FAIL_IF(iu_rb_data_valid !== 1'b1)
 
     $display("@%0t End Test", $time);

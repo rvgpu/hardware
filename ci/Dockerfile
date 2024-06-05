@@ -2,7 +2,8 @@
 
 FROM phyzli/ubuntu18.04_xfce4_vnc4server_synopsys
 
-RUN apt-get update && apt-get install -y git tigervnc-standalone-server && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y git tigervnc-standalone-server python3-pip && rm -rf /var/lib/apt/lists/*
+RUN pip3 install --no-cache-dir pytest -i https://mirrors.aliyun.com/pypi/simple/
 
 # Setup SVUNIT
 RUN cd /root; git clone https://github.com/svunit/svunit.git

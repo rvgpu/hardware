@@ -130,7 +130,8 @@ module iu_alu_unit_test;
     input [20:0]    rslt_sel,
     input [6 :0]    dst_preg,
     input [63:0]    src0,
-    input [64:0]    src1
+    input [63:0]    src1,
+    input [63:0]    result
   );
     // 开始测试前的准备工作  
     $display("@%0t Begin Test", $time);
@@ -156,6 +157,12 @@ module iu_alu_unit_test;
     // 等待下一个采样点
     nextSamplePoint();
     $display("@%0t Sample Point\n", $time);
+
+    `FAIL_IF(alu_rbus_ex1_pipe0_data_vld !== 1'b1)
+    `FAIL_IF(alu_rbus_ex1_pipe0_fwd_vld !== 1'b0)
+    `FAIL_IF(alu_rbus_ex1_pipe0_preg !== dst_preg)
+    `FAIL_IF(alu_rbus_ex1_pipe0_data !== result) 
+
   endtask
 
   //===================================
@@ -177,35 +184,19 @@ module iu_alu_unit_test;
   // verify the combinational output
   //---------------------------------
   `SVTEST(test_add)
-    logic[20:0] op = 21'h00001;
-    logic[6 :0] dstid = 7'b000_0001;
     logic[63:0] src0 = 64'h12345678_9abcdef0;
     logic[63:0] src1 = 64'h11111111_11111111;
-    test_alu_iu_short_register_result(op, dstid, src0, src1);
-
-    `FAIL_IF(alu_rbus_ex1_pipe0_data_vld !== 1'b1)
-    `FAIL_IF(alu_rbus_ex1_pipe0_fwd_vld !== 1'b0)
-    `FAIL_IF(alu_rbus_ex1_pipe0_preg !== dstid)
-    `FAIL_IF(alu_rbus_ex1_pipe0_data !== (src0 + src1))
+    test_alu_iu_short_register_result(21'h00001, 7'h01, src0, src1, (src0 + src1));
   `SVTEST_END
 
   `SVTEST(test_addw)
-    logic[20:0] op = 21'h00002;
-    logic[6 :0] dstid = 7'b000_0001;
     logic[63:0] src0 = 64'h12345678_9abcdef0;
     logic[63:0] src1 = 64'h11111111_11111111;
 
     logic[31:0] sum = src0[31:0] + src1[31:0];
     logic[31:0] sext = {32{sum[31]}};
     logic[63:0] res = {sext, sum};
-    test_alu_iu_short_register_result(op, dstid, src0, src1);
-
-    `FAIL_IF(alu_rbus_ex1_pipe0_data_vld !== 1'b1)
-    `FAIL_IF(alu_rbus_ex1_pipe0_fwd_vld !== 1'b0)
-    `FAIL_IF(alu_rbus_ex1_pipe0_preg !== dstid)
-    `FAIL_IF(alu_rbus_ex1_pipe0_data !== res)
-
-    $display("@%0t End Test", $time);
+    test_alu_iu_short_register_result(21'h00002, 7'h01, src0, src1, res);
   `SVTEST_END
 
   `SVUNIT_TESTS_END

@@ -189,9 +189,45 @@ module iu_alu_unit_test;
     test_alu_iu_short_register_result(21'h00001, 7'h01, src0, src1, (src0 + src1));
   `SVTEST_END
 
+  `SVTEST(test_add_overflow)
+    logic[63:0] src0 = 64'hf2345678_9abcdef0;
+    logic[63:0] src1 = 64'h21111111_11111111;
+    test_alu_iu_short_register_result(21'h00001, 7'h01, src0, src1, (src0 + src1));
+  `SVTEST_END
+
   `SVTEST(test_addw)
     logic[63:0] src0 = 64'h12345678_9abcdef0;
     logic[63:0] src1 = 64'h11111111_11111111;
+
+    logic[31:0] sum = src0[31:0] + src1[31:0];
+    logic[31:0] sext = {32{sum[31]}};
+    logic[63:0] res = {sext, sum};
+    test_alu_iu_short_register_result(21'h00002, 7'h01, src0, src1, res);
+  `SVTEST_END
+
+  `SVTEST(test_addw_non_signed)
+    logic[63:0] src0 = 64'h12345678_1abcdef0;
+    logic[63:0] src1 = 64'h11111111_11111111;
+
+    logic[31:0] sum = src0[31:0] + src1[31:0];
+    logic[31:0] sext = {32{sum[31]}};
+    logic[63:0] res = {sext, sum};
+    test_alu_iu_short_register_result(21'h00002, 7'h01, src0, src1, res);
+  `SVTEST_END
+
+  `SVTEST(test_addw_overflow_non_signed)
+    logic[63:0] src0 = 64'h12345678_9abcdef0;
+    logic[63:0] src1 = 64'h11111111_91111111;
+
+    logic[31:0] sum = src0[31:0] + src1[31:0];
+    logic[31:0] sext = {32{sum[31]}};
+    logic[63:0] res = {sext, sum};
+    test_alu_iu_short_register_result(21'h00002, 7'h01, src0, src1, res);
+  `SVTEST_END
+
+  `SVTEST(test_addw_overflow_signed)
+    logic[63:0] src0 = 64'h12345678_fabcdef0;
+    logic[63:0] src1 = 64'h11111111_ff111111;
 
     logic[31:0] sum = src0[31:0] + src1[31:0];
     logic[31:0] sext = {32{sum[31]}};

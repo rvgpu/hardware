@@ -1,6 +1,7 @@
 `include "svunit_defines.svh"
 `include "clk_and_reset.svh"
 `include "rcore_iu_alu.v"
+`include "project.v"
 
 module iu_alu_unit_test;
   import svunit_pkg::svunit_testcase;
@@ -165,6 +166,20 @@ module iu_alu_unit_test;
 
   endtask
 
+  // 定义结构体和函数声明
+  typedef struct {
+    logic[63:0] src0;
+    logic[63:0] src1;
+    logic[63:0] expected_result;
+  } test_data_t;
+
+  function automatic int read_test_data(input string filename, output test_data_t test_data[$]);
+    // 创建一个动态数组来存储测试数据
+    // test_data_t testData[$];
+
+    // return testData;
+  endfunction
+
   //===================================
   // All tests are defined between the
   // SVUNIT_TESTS_BEGIN/END macros
@@ -184,55 +199,51 @@ module iu_alu_unit_test;
   // verify the combinational output
   //---------------------------------
   `SVTEST(test_add)
-    logic[63:0] src0 = 64'h12345678_9abcdef0;
-    logic[63:0] src1 = 64'h11111111_11111111;
-    test_alu_iu_short_register_result(21'h00001, 7'h01, src0, src1, (src0 + src1));
-  `SVTEST_END
+    string filename = "add.hex";
+    string realpath = {`RVGPU_HARDWARE_TOPPATH_STR, "/test/ut/core/basic_alu_testdata/", filename};
+    int fd;
 
-  `SVTEST(test_add_overflow)
-    logic[63:0] src0 = 64'hf2345678_9abcdef0;
-    logic[63:0] src1 = 64'h21111111_11111111;
-    test_alu_iu_short_register_result(21'h00001, 7'h01, src0, src1, (src0 + src1));
+    $display(realpath);
+    if ((fd = $fopen(realpath, "r")) == 0) begin
+      $display("Error: Unable to open file %s", realpath);
+      `FAIL_IF(1)
+    end
+
+    while (!$feof(fd)) begin
+        string line;
+        if ($fgets(line, fd)) begin
+            logic[63:0] src0, src1, result;
+            $sscanf(line, "%h %h %h", src0, src1, result);
+            $display("read 0x%h 0x%h 0x%h", src0, src1, result);
+            test_alu_iu_short_register_result(21'h00001, 7'h01, src0, src1, result);
+
+            reset();
+        end
+    end
   `SVTEST_END
 
   `SVTEST(test_addw)
-    logic[63:0] src0 = 64'h12345678_9abcdef0;
-    logic[63:0] src1 = 64'h11111111_11111111;
+    string filename = "addw.hex";
+    string realpath = {`RVGPU_HARDWARE_TOPPATH_STR, "/test/ut/core/basic_alu_testdata/", filename};
+    int fd;
 
-    logic[31:0] sum = src0[31:0] + src1[31:0];
-    logic[31:0] sext = {32{sum[31]}};
-    logic[63:0] res = {sext, sum};
-    test_alu_iu_short_register_result(21'h00002, 7'h01, src0, src1, res);
-  `SVTEST_END
+    $display(realpath);
+    if ((fd = $fopen(realpath, "r")) == 0) begin
+      $display("Error: Unable to open file %s", realpath);
+      `FAIL_IF(1)
+    end
 
-  `SVTEST(test_addw_non_signed)
-    logic[63:0] src0 = 64'h12345678_1abcdef0;
-    logic[63:0] src1 = 64'h11111111_11111111;
+    while (!$feof(fd)) begin
+        string line;
+        if ($fgets(line, fd)) begin
+            logic[63:0] src0, src1, result;
+            $sscanf(line, "%h %h %h", src0, src1, result);
+            $display("read 0x%h 0x%h 0x%h", src0, src1, result);
+            test_alu_iu_short_register_result(21'h00002, 7'h01, src0, src1, result);
 
-    logic[31:0] sum = src0[31:0] + src1[31:0];
-    logic[31:0] sext = {32{sum[31]}};
-    logic[63:0] res = {sext, sum};
-    test_alu_iu_short_register_result(21'h00002, 7'h01, src0, src1, res);
-  `SVTEST_END
-
-  `SVTEST(test_addw_overflow_non_signed)
-    logic[63:0] src0 = 64'h12345678_9abcdef0;
-    logic[63:0] src1 = 64'h11111111_91111111;
-
-    logic[31:0] sum = src0[31:0] + src1[31:0];
-    logic[31:0] sext = {32{sum[31]}};
-    logic[63:0] res = {sext, sum};
-    test_alu_iu_short_register_result(21'h00002, 7'h01, src0, src1, res);
-  `SVTEST_END
-
-  `SVTEST(test_addw_overflow_signed)
-    logic[63:0] src0 = 64'h12345678_fabcdef0;
-    logic[63:0] src1 = 64'h11111111_ff111111;
-
-    logic[31:0] sum = src0[31:0] + src1[31:0];
-    logic[31:0] sext = {32{sum[31]}};
-    logic[63:0] res = {sext, sum};
-    test_alu_iu_short_register_result(21'h00002, 7'h01, src0, src1, res);
+            reset();
+        end
+    end
   `SVTEST_END
 
   `SVUNIT_TESTS_END

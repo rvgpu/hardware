@@ -3,7 +3,7 @@
 ```
 export RVGPU_HARDWARE=/root/hardware
 
-pip3 install -r requirements -i https://mirrors.aliyun.com/pypi/simple/
+pip3 install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
 
 pytest -s test_core_int.py
 ```

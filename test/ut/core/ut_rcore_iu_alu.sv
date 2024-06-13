@@ -47,7 +47,7 @@ module iu_alu_unit_test;
   logic     [4 :0]  iu_vfpu_ex1_pipe0_mtvr_inst;
   logic     [7 :0]  iu_vfpu_ex1_pipe0_mtvr_vl;
   logic             iu_vfpu_ex1_pipe0_mtvr_vld;
-  logic     [1 :0]  iu_vfpu_ex1_pipe0_mtvr_vlmu;
+  logic     [1 :0]  iu_vfpu_ex1_pipe0_mtvr_vlmul;
   logic     [6 :0]  iu_vfpu_ex1_pipe0_mtvr_vreg;
   logic     [2 :0]  iu_vfpu_ex1_pipe0_mtvr_vsew;
   logic     [63:0]  iu_vfpu_ex2_pipe0_mtvr_src0;
@@ -170,14 +170,28 @@ module iu_alu_unit_test;
   typedef struct {
     logic[63:0] src0;
     logic[63:0] src1;
-    logic[63:0] expected_result;
+    logic[63:0] result;
   } test_data_t;
 
-  function automatic int read_test_data(input string filename, output test_data_t test_data[$]);
-    // 创建一个动态数组来存储测试数据
-    // test_data_t testData[$];
+  function automatic read_test_data(input string filename, output test_data_t test_data[$]);
+    int fd;
+    int ret;
+    $display(filename);
+    if ((fd = $fopen(filename, "r")) == 0) begin
+      $display("Error: Unable to open file %s", filename);
+    end
 
-    // return testData;
+    while (!$feof(fd)) begin
+      string line;
+      if ($fgets(line, fd)) begin
+        test_data_t data;
+        ret = $sscanf(line, "%h %h %h", data.src0, data.src1, data.result);
+        if (ret == 3) begin
+          test_data.push_back(data);
+        end
+      end
+    end
+   
   endfunction
 
   //===================================
@@ -201,48 +215,28 @@ module iu_alu_unit_test;
   `SVTEST(test_add)
     string filename = "add.hex";
     string realpath = {`RVGPU_HARDWARE_TOPPATH_STR, "/test/ut/core/basic_alu_testdata/", filename};
-    int fd;
 
-    $display(realpath);
-    if ((fd = $fopen(realpath, "r")) == 0) begin
-      $display("Error: Unable to open file %s", realpath);
-      `FAIL_IF(1)
-    end
+    test_data_t test_data[$];
+    read_test_data(realpath, test_data);
 
-    while (!$feof(fd)) begin
-        string line;
-        if ($fgets(line, fd)) begin
-            logic[63:0] src0, src1, result;
-            $sscanf(line, "%h %h %h", src0, src1, result);
-            $display("read 0x%h 0x%h 0x%h", src0, src1, result);
-            test_alu_iu_short_register_result(21'h00001, 7'h01, src0, src1, result);
-
-            reset();
-        end
+    foreach (test_data[i]) begin
+      $display("test_data[%0d]: 0x%h 0x%h 0x%h", i, test_data[i].src0, test_data[i].src1, test_data[i].result);
+      test_alu_iu_short_register_result(21'h00001, 7'h01, test_data[i].src0, test_data[i].src1, test_data[i].result);
+      reset();
     end
   `SVTEST_END
 
   `SVTEST(test_addw)
     string filename = "addw.hex";
     string realpath = {`RVGPU_HARDWARE_TOPPATH_STR, "/test/ut/core/basic_alu_testdata/", filename};
-    int fd;
 
-    $display(realpath);
-    if ((fd = $fopen(realpath, "r")) == 0) begin
-      $display("Error: Unable to open file %s", realpath);
-      `FAIL_IF(1)
-    end
+    test_data_t test_data[$];
+    read_test_data(realpath, test_data);
 
-    while (!$feof(fd)) begin
-        string line;
-        if ($fgets(line, fd)) begin
-            logic[63:0] src0, src1, result;
-            $sscanf(line, "%h %h %h", src0, src1, result);
-            $display("read 0x%h 0x%h 0x%h", src0, src1, result);
-            test_alu_iu_short_register_result(21'h00002, 7'h01, src0, src1, result);
-
-            reset();
-        end
+    foreach (test_data[i]) begin
+      $display("test_data[%0d]: 0x%h 0x%h 0x%h", i, test_data[i].src0, test_data[i].src1, test_data[i].result);
+      test_alu_iu_short_register_result(21'h00002, 7'h01, test_data[i].src0, test_data[i].src1, test_data[i].result);
+      reset();
     end
   `SVTEST_END
 

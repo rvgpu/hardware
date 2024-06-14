@@ -176,9 +176,10 @@ module iu_alu_unit_test;
   function automatic read_test_data(input string filename, output test_data_t test_data[$]);
     int fd;
     int ret;
-    $display(filename);
-    if ((fd = $fopen(filename, "r")) == 0) begin
-      $display("Error: Unable to open file %s", filename);
+    string realpath = {`RVGPU_HARDWARE_TOPPATH_STR, "/test/ut/core/basic_alu_testdata/", filename};
+    $display(realpath);
+    if ((fd = $fopen(realpath, "r")) == 0) begin
+      $display("Error: Unable to open file %s", realpath);
     end
 
     while (!$feof(fd)) begin
@@ -214,10 +215,9 @@ module iu_alu_unit_test;
   //---------------------------------
   `SVTEST(test_add)
     string filename = "add.hex";
-    string realpath = {`RVGPU_HARDWARE_TOPPATH_STR, "/test/ut/core/basic_alu_testdata/", filename};
 
     test_data_t test_data[$];
-    read_test_data(realpath, test_data);
+    read_test_data(filename, test_data);
 
     foreach (test_data[i]) begin
       $display("test_data[%0d]: 0x%h 0x%h 0x%h", i, test_data[i].src0, test_data[i].src1, test_data[i].result);
@@ -228,10 +228,9 @@ module iu_alu_unit_test;
 
   `SVTEST(test_addw)
     string filename = "addw.hex";
-    string realpath = {`RVGPU_HARDWARE_TOPPATH_STR, "/test/ut/core/basic_alu_testdata/", filename};
 
     test_data_t test_data[$];
-    read_test_data(realpath, test_data);
+    read_test_data(filename, test_data);
 
     foreach (test_data[i]) begin
       $display("test_data[%0d]: 0x%h 0x%h 0x%h", i, test_data[i].src0, test_data[i].src1, test_data[i].result);

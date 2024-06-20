@@ -1,0 +1,5 @@
+test/__pycache__/
+test/assets/
+test/ut/core/.__testsuite.sv
+test/ut/core/.testrunner.sv
+test/ut/core/out/

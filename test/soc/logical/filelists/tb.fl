@@ -14,13 +14,4 @@ limitations under the License.
 */
 +libext+.v+.h+.V+.sv+
 
--y ../logical/ahb
--y ../logical/apb
--y ../logical/axi
--y ../logical/bus
--y ../logical/clk
--y ../logical/common
--y ../logical/gpio
--y ../logical/mem
--y ../logical/uart
-
++incdir+../logical/tb+

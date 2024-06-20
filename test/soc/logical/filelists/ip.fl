@@ -12,5 +12,5 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
--f ${CODE_BASE_PATH}/gen_rtl/filelists/C906_asic_rtl.fl
--f ${CODE_BASE_PATH}/gen_rtl/filelists/tdt_dmi_top_rtl.fl
+-f ${RVGPU_HARDWARE}/rtl/filelists/C906_asic_rtl.fl
+-f ${RVGPU_HARDWARE}/rtl/filelists/tdt_dmi_top_rtl.fl

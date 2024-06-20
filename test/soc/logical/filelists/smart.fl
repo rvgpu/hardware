@@ -14,8 +14,13 @@ limitations under the License.
 */
 +libext+.v+.h+.V+.sv+
 
-+incdir+../logical/tb+
-
--y ../logical/tb
-../logical/tb/tb.v
+-y ${RVGPU_HARDWARE}/test/soc/logical/ahb
+-y ${RVGPU_HARDWARE}/test/soc/logical/apb
+-y ${RVGPU_HARDWARE}/test/soc/logical/axi
+-y ${RVGPU_HARDWARE}/test/soc/logical/bus
+-y ${RVGPU_HARDWARE}/test/soc/logical/clk
+-y ${RVGPU_HARDWARE}/test/soc/logical/common
+-y ${RVGPU_HARDWARE}/test/soc/logical/gpio
+-y ${RVGPU_HARDWARE}/test/soc/logical/mem
+-y ${RVGPU_HARDWARE}/test/soc/logical/uart
 

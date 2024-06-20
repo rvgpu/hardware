@@ -12,6 +12,6 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
--f ../logical/filelists/ip.fl
--f ../logical/filelists/smart.fl
--f ../logical/filelists/tb.fl
+-f ${RVGPU_HARDWARE}/test/soc/logical/filelists/ip.fl
+-f ${RVGPU_HARDWARE}/test/soc/logical/filelists/smart.fl
+-f ${RVGPU_HARDWARE}/test/soc/logical/filelists/tb.fl

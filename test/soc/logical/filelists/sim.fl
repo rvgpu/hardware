@@ -14,4 +14,3 @@ limitations under the License.
 */
 -f ${RVGPU_HARDWARE}/test/soc/logical/filelists/ip.fl
 -f ${RVGPU_HARDWARE}/test/soc/logical/filelists/smart.fl
--f ${RVGPU_HARDWARE}/test/soc/logical/filelists/tb.fl

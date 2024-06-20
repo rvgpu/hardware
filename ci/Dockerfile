@@ -12,6 +12,8 @@ ENV LM_LICENSE_FILE="${SYNOPSYS_DIR}/Liscen/Synopsys.dat"
 
 # Setup SVUNIT
 RUN cd /root; git clone https://github.com/svunit/svunit.git
+ENV SVUNIT_INSTALL=/root/svunit
+ENV PATH="$SVUNIT_INSTALL/bin:${PATH}"
 
 # Setup VNC
 RUN mkdir -p /root/.vnc
@@ -24,3 +26,5 @@ RUN echo '#!/bin/bash'  >> /usr/bin/start_vnc.sh  && \
     echo 'vncserver $DISPLAY -rfbport $VNC_PORT -localhost no -PasswordFile ~/.vnc/passwd' >> /usr/bin/start_vnc.sh
 
 RUN chmod +x /usr/bin/start_vnc.sh
+
+WORKDIR /root

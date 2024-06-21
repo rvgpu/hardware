@@ -109,7 +109,7 @@ module iu_alu_unit_test;
   function automatic read_test_data(input string filename, output test_data_t test_data[$]);
     int fd;
     int ret;
-    string realpath = {`RVGPU_HARDWARE_TOPPATH_STR, "/test/ut/core/basic_alu_testdata/", filename};
+    string realpath = {`RVGPU_HARDWARE_TOPPATH_STR, "/test/ut/core/basic_testdata/", filename};
     $display(realpath);
     if ((fd = $fopen(realpath, "r")) == 0) begin
       $display("Error: Unable to open file %s", realpath);
@@ -147,7 +147,7 @@ module iu_alu_unit_test;
   // verify the combinational output
   //---------------------------------
   `SVTEST(test_add)
-    string filename = "add.hex";
+    string filename = "alu_add_u64.hex";
 
     test_data_t test_data[$];
     read_test_data(filename, test_data);

@@ -16,27 +16,29 @@ module iu_alu_unit_test;
   //===================================
 
   `CLK_RESET_FIXTURE(5, 10)
-
-  logic [7:0]   eu_iu_inst_opcode;
-  logic [63:0]  eu_iu_inst_src0;
-  logic [63:0]  eu_iu_inst_src1;
-  logic [63:0]  eu_iu_inst_src2;
-  logic [7:0]   eu_iu_inst_dst_id;
-  logic [7:0]   iu_rb_dst_id;
+    
+  logic         idu_iu_pipe_sel;
+  logic [7:0]   idu_iu_inst_opcode;
+  logic [63:0]  idu_iu_inst_src0;
+  logic [63:0]  idu_iu_inst_src1;
+  logic [63:0]  idu_iu_inst_src2;
+  logic [7:0]   idu_iu_inst_dstid;
+  logic [7:0]   iu_rb_dstid;
   logic [63:0]  iu_rb_data;
-  logic         iu_rb_data_valid;
+  logic         iu_rb_data_vld;
 
   rcore_iu_alu x_rcore_iu_alu(
     .clk(clk),
-    .reset_n(rst_n),
-    .eu_iu_inst_opcode(eu_iu_inst_opcode),
-    .eu_iu_inst_src0(eu_iu_inst_src0),  
-    .eu_iu_inst_src1(eu_iu_inst_src1),  
-    .eu_iu_inst_src2(eu_iu_inst_src2),
-    .eu_iu_inst_dst_id(eu_iu_inst_dst_id),  
-    .iu_rb_dst_id(iu_rb_dst_id),  
+    .rst_n(rst_n),
+    .idu_iu_pipe_sel(idu_iu_pipe_sel),
+    .idu_iu_inst_opcode(idu_iu_inst_opcode),
+    .idu_iu_inst_src0(idu_iu_inst_src0),  
+    .idu_iu_inst_src1(idu_iu_inst_src1),  
+    .idu_iu_inst_src2(idu_iu_inst_src2),
+    .idu_iu_inst_dstid(idu_iu_inst_dstid),  
+    .iu_rb_dstid(iu_rb_dstid),  
     .iu_rb_data(iu_rb_data),  
-    .iu_rb_data_valid(iu_rb_data_valid)  
+    .iu_rb_data_vld(iu_rb_data_vld)  
   );
 
   //===================================
@@ -80,21 +82,23 @@ module iu_alu_unit_test;
     // 开始测试前的准备工作  
     $display("@%0t Begin Test", $time);
     
-    eu_iu_inst_opcode       = opcode;
-    eu_iu_inst_src0         = src0;
-    eu_iu_inst_src1         = src1;
-    eu_iu_inst_src2         = 64'h00000000_00000000;
-    eu_iu_inst_dst_id       = dst_preg;
+    idu_iu_pipe_sel          <= 1'b1;
+    idu_iu_inst_opcode       <= opcode;
+    idu_iu_inst_src0         <= src0;
+    idu_iu_inst_src1         <= src1;
+    idu_iu_inst_src2         <= 64'h00000000_00000000;
+    idu_iu_inst_dstid        <= dst_preg;
 
     step();
     // 关闭时钟和其他清理工作
-
+    idu_iu_pipe_sel          <= 1'b0;
+      
     // 等待下一个采样点
     nextSamplePoint();
     $display("@%0t Sample Point", $time);
 
-    `FAIL_IF(iu_rb_data_valid   !== 1'b1)
-    `FAIL_IF(iu_rb_dst_id       !== dst_preg)
+    `FAIL_IF(iu_rb_data_vld     !== 1'b1)
+    `FAIL_IF(iu_rb_dstid        !== dst_preg)
     `FAIL_IF(iu_rb_data         !== result) 
 
   endtask

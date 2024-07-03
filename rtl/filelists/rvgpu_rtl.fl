@@ -1,0 +1,2 @@
+${RVGPU_HARDWARE}/rtl/core/iu/rcore_iu_alu.v
+${RVGPU_HARDWARE}/rtl/core/iu/rcore_iu_top.v

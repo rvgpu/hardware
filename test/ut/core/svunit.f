@@ -1,3 +1,5 @@
 +incdir+$SVUNIT_INSTALL/svunit_base/util
-+incdir+$RVGPU_HARDWARE/rtl/core/iu
+
+-f ${RVGPU_HARDWARE}/rtl/filelists/rvgpu_incdir.f
+-f ${RVGPU_HARDWARE}/rtl/filelists/rvgpu_rtl.fl
 

@@ -14,5 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-`define OPCODE_ADD 8'h01
-`define OPCODE_SUB 8'h02
+`define OPCODE_ADD64    8'h01
+`define OPCODE_ADD32    8'h02
+`define OPCODE_SUB64    8'h03
+`define OPCODE_SUB32    8'h04

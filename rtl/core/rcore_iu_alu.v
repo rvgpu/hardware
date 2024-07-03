@@ -117,11 +117,11 @@ always @( inst_opcode_r[3:0]
        or adder_dataout_sub32[31:0])
 begin
     case (inst_opcode_r[3:0])
-    4'h1:       result_data_adder[63:0] = adder_dataout_add64[63:0];
-    4'h2:       result_data_adder[63:0] = {{32{adder_dataout_add32[31]}}, adder_dataout_add32[31:0]};
-    4'h4:       result_data_adder[63:0] = adder_dataout_sub64[63:0];
-    4'h8:       result_data_adder[63:0] = {{32{adder_dataout_sub32[31]}}, adder_dataout_add32[31:0]};
-    default:    result_data_adder[63:0] = {64{1'bx}};
+    `OPCODE_ADD64:    result_data_adder[63:0] = adder_dataout_add64[63:0];
+    `OPCODE_ADD32:    result_data_adder[63:0] = {{32{adder_dataout_add32[31]}}, adder_dataout_add32[31:0]};
+    `OPCODE_SUB64:    result_data_adder[63:0] = adder_dataout_sub64[63:0];
+    `OPCODE_SUB32:    result_data_adder[63:0] = {{32{adder_dataout_sub32[31]}}, adder_dataout_add32[31:0]};
+    default:          result_data_adder[63:0] = {64{1'bx}};
     endcase
 end
 

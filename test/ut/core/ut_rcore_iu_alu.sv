@@ -152,7 +152,7 @@ module iu_alu_unit_test;
   //---------------------------------
   // verify the combinational output
   //---------------------------------
-  `SVTEST(test_add)
+  `SVTEST(test_add_u64)
     string filename = "alu_add_u64.hex";
 
     test_data_t test_data[$];
@@ -160,7 +160,20 @@ module iu_alu_unit_test;
 
     foreach (test_data[i]) begin
       $display("test_data[%0d]: 0x%h 0x%h 0x%h", i, test_data[i].src0, test_data[i].src1, test_data[i].result);
-      test_alu_iu_short_register_result(`OPCODE_ADD, 8'h01, test_data[i].src0, test_data[i].src1, test_data[i].result);
+      test_alu_iu_short_register_result(`OPCODE_ADD64, 8'h01, test_data[i].src0, test_data[i].src1, test_data[i].result);
+      reset();
+    end
+  `SVTEST_END
+
+  `SVTEST(test_add)
+    string filename = "alu_sub64.hex";
+
+    test_data_t test_data[$];
+    read_test_data(filename, test_data);
+
+    foreach (test_data[i]) begin
+      $display("test_data[%0d]: 0x%h 0x%h 0x%h", i, test_data[i].src0, test_data[i].src1, test_data[i].result);
+      test_alu_iu_short_register_result(`OPCODE_SUB64, 8'h01, test_data[i].src0, test_data[i].src1, test_data[i].result);
       reset();
     end
   `SVTEST_END

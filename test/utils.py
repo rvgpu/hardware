@@ -7,6 +7,9 @@ import pathlib
 import pytest
 
 def all_files_in_dir(dirname):
+    if os.environ.get('RVGPU_HARDWARE') is None:
+        os.environ['RVGPU_HARDWARE'] = '/root/hardware'
+
     dirpath = os.path.join(os.path.dirname(os.path.realpath(__file__)), dirname)
     return pytest.mark.datafiles(*pathlib.Path(dirpath).iterdir(), keep_top_dir=True)
 

@@ -1,5 +1,3 @@
 +incdir+$SVUNIT_INSTALL/svunit_base/util
-+incdir+$RVGPU_HARDWARE/rtl/core
-+incdir+$RVGPU_HARDWARE/rtl/clk
++incdir+$RVGPU_HARDWARE/rtl/core/iu
 
-${RVGPU_HARDWARE}/rtl/clk/gated_clk_cell.v

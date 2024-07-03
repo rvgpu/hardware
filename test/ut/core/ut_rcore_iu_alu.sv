@@ -82,6 +82,7 @@ module iu_alu_unit_test;
     // 开始测试前的准备工作  
     $display("@%0t Begin Test", $time);
     
+    @(posedge clk);
     idu_iu_pipe_sel          <= 1'b1;
     idu_iu_inst_opcode       <= opcode;
     idu_iu_inst_src0         <= src0;
@@ -91,6 +92,7 @@ module iu_alu_unit_test;
 
     step();
     // 关闭时钟和其他清理工作
+    @(posedge clk);
     idu_iu_pipe_sel          <= 1'b0;
       
     // 等待下一个采样点

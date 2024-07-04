@@ -6,10 +6,36 @@ import subprocess
 import pathlib
 import pytest
 
-def all_files_in_dir(dirname):
+def svunit_command(simulator, testfile):
     if os.environ.get('RVGPU_HARDWARE') is None:
         os.environ['RVGPU_HARDWARE'] = '/root/hardware'
 
+    projdir = os.environ.get('RVGPU_HARDWARE')
+    svunitfile = projdir + '/test/common/svunit.f'
+
+    command = []
+    command.append('runSVUnit')
+    command.append('-s')
+    command.append(simulator)
+    command.append('-f')
+    command.append(svunitfile)
+    command.append('-o')
+    command.append('out')
+    command.append('-c')
+    command.append('-debug_access+all')
+    command.append('-t')
+    command.append(testfile)
+
+    return command
+
+def run_testcase(datafiles, simulator, testfile):
+    print(testfile)
+
+    with datafiles.as_cwd():
+        subprocess.check_call(svunit_command(simulator, testfile))
+        expect_testrunner_pass('out/run.log')
+
+def all_files_in_dir(dirname):
     dirpath = os.path.join(os.path.dirname(os.path.realpath(__file__)), dirname)
     return pytest.mark.datafiles(*pathlib.Path(dirpath).iterdir(), keep_top_dir=True)
 

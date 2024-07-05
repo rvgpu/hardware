@@ -2,6 +2,9 @@
 `include "clk_and_reset.svh"
 `include "project.v"
 
+`include "sim_ram.v"
+`include "rvgpu_spsram_256x59.v"
+
 module spsram_256x59_unit_test;
   import svunit_pkg::svunit_testcase;
 

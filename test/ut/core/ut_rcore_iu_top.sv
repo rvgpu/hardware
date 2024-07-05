@@ -1,8 +1,10 @@
 `include "svunit_defines.svh"
 `include "clk_and_reset.svh"
-`include "rcore_iu_top.v"
 `include "opcode.vh"
 `include "project.v"
+
+`include "rcore_iu_alu.v"
+`include "rcore_iu_top.v"
 
 module iu_top_unit_test;
   import svunit_pkg::svunit_testcase;

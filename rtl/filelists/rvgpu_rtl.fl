@@ -1,2 +1,4 @@
 ${RVGPU_HARDWARE}/rtl/core/iu/rcore_iu_alu.v
 ${RVGPU_HARDWARE}/rtl/core/iu/rcore_iu_top.v
+${RVGPU_HARDWARE}/rtl/mem/rvgpu_spsram_256x59.v
+${RVGPU_HARDWARE}/rtl/mem/sim_ram.v

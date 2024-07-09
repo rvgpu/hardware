@@ -25,25 +25,21 @@ module icache_tag_array_unit_test;
 
   `CLK_RESET_FIXTURE(5, 10)
 
-  logic                 cp0_yy_clk_en;
   logic                 icache_tag_cen;
   logic   [DATAW-1:0]   icache_tag_din;
   logic   [ADDRW-1 :0]  icache_tag_idx;
   logic   [2 :0]        icache_tag_wen;
-  logic                 pad_yy_icg_scan_en;
   logic   [DATAW-1:0]   icache_tag_dout;
 
   rcore_ifu_icache_tag_array x_rcore_ifu_icache_tag_array (
-    .cp0_yy_clk_en(cp0_yy_clk_en),
     .forever_cpuclk(clk),
     .icache_tag_cen(icache_tag_cen),
     .icache_tag_din(icache_tag_din),
     .icache_tag_dout(icache_tag_dout),
     .icache_tag_idx(icache_tag_idx),
-    .icache_tag_wen(icache_tag_wen),
-    .pad_yy_icg_scan_en(pad_yy_icg_scan_en)
+    .icache_tag_wen(icache_tag_wen)
   );
-    
+
   //===================================
   // Build
   //===================================
@@ -94,8 +90,6 @@ module icache_tag_array_unit_test;
   //---------------------------------
   `SVTEST(test_spsram_read_write)
   integer i;
-  cp0_yy_clk_en = 1'b0;
-  pad_yy_icg_scan_en = 1'b0;
 
   @(posedge clk);
   #1;

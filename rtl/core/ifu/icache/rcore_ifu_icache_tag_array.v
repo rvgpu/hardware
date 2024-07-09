@@ -17,26 +17,21 @@ limitations under the License.
 `include "rvgpu_config.vh"
 
 module rcore_ifu_icache_tag_array(
-  cp0_yy_clk_en,
   forever_cpuclk,
   icache_tag_cen,
   icache_tag_din,
   icache_tag_dout,
   icache_tag_idx,
-  icache_tag_wen,
-  pad_yy_icg_scan_en
+  icache_tag_wen
 );
 
-input           cp0_yy_clk_en;     
 input           forever_cpuclk;    
 input           icache_tag_cen;    
 input   [58:0]  icache_tag_din;    
 input   [8 :0]  icache_tag_idx;    
 input   [2 :0]  icache_tag_wen;    
-input           pad_yy_icg_scan_en; 
 output  [58:0]  icache_tag_dout;   
 
-wire            cp0_yy_clk_en;     
 wire            forever_cpuclk;    
 wire    [58:0]  icache_tag_bwen_b; 
 wire            icache_tag_cen;    
@@ -49,7 +44,6 @@ wire            icache_tag_icg_en;
 wire    [8 :0]  icache_tag_idx;    
 wire    [7 :0]  icache_tag_index;  
 wire    [2 :0]  icache_tag_wen;    
-wire            pad_yy_icg_scan_en; 
 
 
 parameter TAG_INDEX = `ICACHE_TAG_INDEX_WIDTH;
@@ -69,10 +63,10 @@ gated_clk_cell  x_icache_tag_icg_cell (
   .clk_in             (forever_cpuclk    ),
   .clk_out            (icache_tag_clk    ),
   .external_en        (1'b0              ),
-  .global_en          (cp0_yy_clk_en     ),
+  .global_en          (1'b0              ),
   .local_en           (icache_tag_icg_en ),
   .module_en          (1'b0              ),
-  .pad_yy_icg_scan_en (pad_yy_icg_scan_en)
+  .pad_yy_icg_scan_en (1'b0              )
 );
 
 //------------------------------------------------

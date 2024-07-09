@@ -6,7 +6,7 @@
 `include "gated_clk_cell.v"
 
 `include "rvgpu_spsram_256x59.v"
-`include "rvgpu_ifu_icache_tag_array.v"
+`include "rcore_ifu_icache_tag_array.v"
 
 module icache_tag_array_unit_test;
   import svunit_pkg::svunit_testcase;

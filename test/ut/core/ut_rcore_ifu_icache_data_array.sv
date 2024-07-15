@@ -80,6 +80,41 @@ module icache_tag_array_unit_test;
 
   endtask
 
+  task data_array_clean(input [1:0] wen,  input [127:0] data);
+    integer i;
+
+    @(posedge clk);
+    #1;
+    icache_data_ren[1:0]      = 2'b00;
+    icache_data_wen[1:0]      = 2'b00;
+    icache_data_idx[13:0]     = 14'b00_0000_0000_0000;
+    iop_rd_data               = 1'b0;
+    iop_rd_way                = 1'b0;
+
+    step();
+
+    for (i=0; i<(2**ICADDR); i=i+4) begin
+      @(posedge clk);
+      #1;
+      icache_data_idx         = i;
+      icache_data_din[127:0]  = data;
+      icache_data_ren[1:0]    = 2'b00;
+      icache_data_wen[1:0]    = wen;
+
+      step();
+    end
+
+    @(posedge clk);
+    #1;
+    icache_data_ren[1:0]      = 2'b00;
+    icache_data_wen[1:0]      = 2'b00;
+    icache_data_idx[13:0]     = 14'b00_0000_0000_0000;
+    iop_rd_data               = 1'b0;
+    iop_rd_way                = 1'b0;
+
+    step(10);
+  endtask
+
   task data_array_write(input [1:0] wen);
     integer i;
 
@@ -115,8 +150,26 @@ module icache_tag_array_unit_test;
     step(10);
   endtask
 
-  task data_array_read_and_check_1234();
+  task data_array_read_and_check(input rd_way);
     integer i;
+    integer data0;
+    integer data1;
+    integer data2;
+    integer data3;
+
+    if (rd_way == 1'b1) begin
+      data0 = 32'h02345678;
+      data1 = 32'h12345678;
+      data2 = 32'h22345678;
+      data3 = 32'h32345678;
+    end
+    else begin
+      data0 = 32'h22345678;
+      data1 = 32'h32345678;
+      data2 = 32'h02345678;
+      data3 = 32'h12345678;
+    end
+
     step(10);
 
     for (i=0; i<(2**ICADDR); i=i+4) begin
@@ -126,7 +179,7 @@ module icache_tag_array_unit_test;
       icache_data_ren[1:0]    = 2'b00;
       icache_data_wen[1:0]    = 2'b00;
       iop_rd_data             = 1'b1;
-      iop_rd_way              = 1'b1;
+      iop_rd_way              = rd_way;
 
       step();
 
@@ -135,18 +188,18 @@ module icache_tag_array_unit_test;
         $display("data1: %x", icache_data1_dout[31:0]);
         $display("data2: %x", icache_data2_dout[31:0]);
         $display("data3: %x", icache_data3_dout[31:0]);
-        `FAIL_IF(icache_data0_dout[31:0] != 32'h02345678 + i - 4)
-        `FAIL_IF(icache_data1_dout[31:0] != 32'h12345678 + i - 4)
-        `FAIL_IF(icache_data2_dout[31:0] != 32'h22345678 + i - 4)
-        `FAIL_IF(icache_data3_dout[31:0] != 32'h32345678 + i - 4)
+        `FAIL_IF(icache_data0_dout[31:0] != data0 + i - 4)
+        `FAIL_IF(icache_data1_dout[31:0] != data1 + i - 4)
+        `FAIL_IF(icache_data2_dout[31:0] != data2 + i - 4)
+        `FAIL_IF(icache_data3_dout[31:0] != data3 + i - 4)
       end
     end
 
     @(posedge clk);
     #1;
-    icache_data_ren[1:0]  = 2'b00;
-    icache_data_wen[1:0]  = 2'b00;
-    icache_data_idx[13:0] = 14'b00_0000_0000_0000;
+    icache_data_ren[1:0]      = 2'b00;
+    icache_data_wen[1:0]      = 2'b00;
+    icache_data_idx[13:0]     = 14'b00_0000_0000_0000;
     iop_rd_data               = 1'b0;
     iop_rd_way                = 1'b0;
 
@@ -157,10 +210,10 @@ module icache_tag_array_unit_test;
     $display("data1: %x", icache_data1_dout[31:0]);
     $display("data2: %x", icache_data2_dout[31:0]);
     $display("data3: %x", icache_data3_dout[31:0]);
-    `FAIL_IF(icache_data0_dout[31:0] != 32'h02345678 + i - 4)
-    `FAIL_IF(icache_data1_dout[31:0] != 32'h12345678 + i - 4)
-    `FAIL_IF(icache_data2_dout[31:0] != 32'h22345678 + i - 4)
-    `FAIL_IF(icache_data3_dout[31:0] != 32'h32345678 + i - 4)
+    `FAIL_IF(icache_data0_dout[31:0] != data0 + i - 4)
+    `FAIL_IF(icache_data1_dout[31:0] != data1 + i - 4)
+    `FAIL_IF(icache_data2_dout[31:0] != data2 + i - 4)
+    `FAIL_IF(icache_data3_dout[31:0] != data3 + i - 4)
   endtask
   //===================================
   // All tests are defined between the
@@ -181,8 +234,19 @@ module icache_tag_array_unit_test;
   // verify the combinational output
   //---------------------------------
   `SVTEST(test_icache_data_array_write_1234)
+    data_array_clean(2'b10, {32'hdeaddead, 32'hdeaddead, 32'hdeaddead, 32'hdeaddead});
+    data_array_clean(2'b01, {32'hdeaddead, 32'hdeaddead, 32'hdeaddead, 32'hdeaddead});
+
     data_array_write(2'b10);
-    data_array_read_and_check_1234();
+    data_array_read_and_check(1'b1);
+  `SVTEST_END
+
+  `SVTEST(test_icache_data_array_write_3412)
+    data_array_clean(2'b10, {32'hdeaddead, 32'hdeaddead, 32'hdeaddead, 32'hdeaddead});
+    data_array_clean(2'b01, {32'hdeaddead, 32'hdeaddead, 32'hdeaddead, 32'hdeaddead});
+
+    data_array_write(2'b01);
+    data_array_read_and_check(1'b0);
   `SVTEST_END
 
   `SVUNIT_TESTS_END

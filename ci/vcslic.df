@@ -1,0 +1,11 @@
+# docker image build -f vcslic.df -t rvgpu/vcslic:latest .
+
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y lsb iproute2 && rm -rf /var/lib/apt/lists/*
+
+COPY synopsys_lic /home/synopsys
+
+RUN mkdir -p /usr/local/flexlm/licenses/ && cp /home/synopsys/Liscen/Synopsys.dat /usr/local/flexlm/licenses/license.dat

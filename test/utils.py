@@ -28,7 +28,9 @@ import pytest
 
 def svunit_command(simulator, testfile):
     if os.environ.get('RVGPU_HARDWARE') is None:
-        os.environ['RVGPU_HARDWARE'] = '/root/hardware'
+        current_file_dir = os.path.dirname(os.path.realpath(__file__))
+        parent_dir = os.path.dirname(current_file_dir)
+        os.environ['RVGPU_HARDWARE'] = parent_dir
 
     projdir = os.environ.get('RVGPU_HARDWARE')
     svunitfile = projdir + '/test/common/svunit.f'

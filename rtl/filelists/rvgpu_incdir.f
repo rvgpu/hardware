@@ -4,3 +4,4 @@
 +incdir+$RVGPU_HARDWARE/rtl/mem
 +incdir+$RVGPU_HARDWARE/rtl/clk
 +incdir+$RVGPU_HARDWARE/rtl/common
++incdir+$RVGPU_HARDWARE/rtl/internal_noc

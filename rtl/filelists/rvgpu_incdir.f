@@ -5,3 +5,4 @@
 +incdir+$RVGPU_HARDWARE/rtl/clk
 +incdir+$RVGPU_HARDWARE/rtl/common
 +incdir+$RVGPU_HARDWARE/rtl/internal_noc
++incdir+$RVGPU_HARDWARE/rtl/control_unit

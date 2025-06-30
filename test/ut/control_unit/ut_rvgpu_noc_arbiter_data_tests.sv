@@ -3,6 +3,7 @@
 `include "rvgpu_internal_noc_pkg.sv"
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_noc_arbiter.sv"
+`include "rvgpu_noc_arbiter_test_base.svh"
 `include "project.v"
 
 module rvgpu_noc_arbiter_data_tests_unit_test;
@@ -31,78 +32,24 @@ module rvgpu_noc_arbiter_data_tests_unit_test;
     .noc_if(noc_if.device)
   );
 
-  // Test data patterns for comprehensive testing
-  logic [255:0] test_patterns[8];
-  logic [31:0] strobe_patterns[4];
+  // Test base class instance
+  rvgpu_noc_arbiter_test_base test_base;
+
+  // Test data patterns are now provided by test_base
 
   function void build();
     svunit_ut = new(name);
     
-    // Initialize test patterns
-    test_patterns[0] = 256'h0000000000000000000000000000000000000000000000000000000000000000;  // All zeros
-    test_patterns[1] = 256'hFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;  // All ones
-    test_patterns[2] = 256'hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA;  // 1010 pattern
-    test_patterns[3] = 256'h5555555555555555555555555555555555555555555555555555555555555555;  // 0101 pattern
-    test_patterns[4] = 256'hDEADBEEFCAFEBABE123456789ABCDEF0FEDCBA9876543210ABCDEF0123456789;  // Random 1
-    test_patterns[5] = 256'h123456789ABCDEF0FEDCBA9876543210ABCDEF0123456789DEADBEEFCAFEBABE;  // Random 2
-    test_patterns[6] = 256'hF0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0;  // Byte pattern
-    test_patterns[7] = 256'h0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F;  // Inverse byte
-
-    // Initialize strobe patterns
-    strobe_patterns[0] = 32'hFFFFFFFF;  // Full transfer
-    strobe_patterns[1] = 32'hF0F0F0F0;  // Alternating bytes
-    strobe_patterns[2] = 32'h0000FFFF;  // Lower half
-    strobe_patterns[3] = 32'hFFFF0000;  // Upper half
+    // Create test base instance
+    test_base = new(cp_if, mmu_if, noc_if);
   endfunction
 
-  task initialize_signals();
-    // CP interface - device side (test acts as device, DUT acts as NOC)
-    cp_if.m_req_valid = 0;
-    cp_if.m_req_header = 0;
-    cp_if.m_req_data = 0;
-    cp_if.m_req_strb = 0;
-    cp_if.m_req_last = 0;
-    cp_if.m_resp_ready = 0;
-    cp_if.s_req_ready = 0;
-    cp_if.s_resp_valid = 0;
-    cp_if.s_resp_header = 0;
-    cp_if.s_resp_data = 0;
-    cp_if.s_resp_status = RESP_OKAY;
-    cp_if.s_resp_last = 0;
-
-    // MMU interface - device side (test acts as device, DUT acts as NOC)
-    mmu_if.m_req_valid = 0;
-    mmu_if.m_req_header = 0;
-    mmu_if.m_req_data = 0;
-    mmu_if.m_req_strb = 0;
-    mmu_if.m_req_last = 0;
-    mmu_if.m_resp_ready = 0;
-    mmu_if.s_req_ready = 0;
-    mmu_if.s_resp_valid = 0;
-    mmu_if.s_resp_header = 0;
-    mmu_if.s_resp_data = 0;
-    mmu_if.s_resp_status = RESP_OKAY;
-    mmu_if.s_resp_last = 0;
-
-    // NOC interface - NOC side (test acts as NOC, DUT acts as device)
-    noc_if.m_req_ready = 0;      // NOC ready to accept requests (controlled by test)
-    noc_if.m_resp_valid = 0;     // NOC sends responses
-    noc_if.m_resp_header = 0;
-    noc_if.m_resp_data = 0;
-    noc_if.m_resp_status = RESP_OKAY;
-    noc_if.m_resp_last = 0;
-    noc_if.s_req_valid = 0;      // NOC sends slave requests
-    noc_if.s_req_header = 0;
-    noc_if.s_req_data = 0;
-    noc_if.s_req_strb = 0;
-    noc_if.s_req_last = 0;
-    noc_if.s_resp_ready = 0;     // NOC ready to accept slave responses
-  endtask
+  // initialize_signals() is now provided by test_base
 
   task setup();
     svunit_ut.setup();
     $vcdpluson();
-    initialize_signals();
+    test_base.initialize_signals();
     reset();
   endtask
 
@@ -195,48 +142,24 @@ module rvgpu_noc_arbiter_data_tests_unit_test;
     $display("Testing %s", test_name);
     
     // Test immediate transmission
-    initialize_signals();
+    test_base.initialize_signals();
     noc_if.m_req_ready = 1'b1;
     step(2);
     test_immediate_transmission(test_data, test_strb);
-    clear_requests();
+    test_base.clear_requests();
     noc_if.m_req_ready = 1'b0;
     step(1);
     
     // Test with backpressure
-    initialize_signals();
+    test_base.initialize_signals();
     noc_if.m_req_ready = 1'b0;
     step(2);
     test_transmission_with_backpressure(test_data, test_strb, 2);
-    clear_requests();
+    test_base.clear_requests();
     noc_if.m_req_ready = 1'b0;
     step(1);
     
     $display("%s test completed", test_name);
-  endtask
-
-  // Verify NOC receives exact data
-  task verify_noc_data(logic [255:0] expected_data, logic [31:0] expected_strb);
-    `FAIL_IF(noc_if.m_req_valid !== 1'b1)
-    `FAIL_IF(noc_if.m_req_data !== expected_data)
-    `FAIL_IF(noc_if.m_req_strb !== expected_strb)
-    `FAIL_IF(noc_if.m_req_last !== 1'b1)
-    $display("@%0t: NOC Data Verified: 0x%064x", $time, expected_data);
-  endtask
-
-  // Clear request signals
-  task clear_requests();
-    cp_if.m_req_valid = 1'b0;
-    cp_if.m_req_header = 32'h0;
-    cp_if.m_req_data = 256'h0;
-    cp_if.m_req_strb = 32'h0;
-    cp_if.m_req_last = 1'b0;
-    
-    mmu_if.m_req_valid = 1'b0;
-    mmu_if.m_req_header = 32'h0;
-    mmu_if.m_req_data = 256'h0;
-    mmu_if.m_req_strb = 32'h0;
-    mmu_if.m_req_last = 1'b0;
   endtask
 
   //===================================
@@ -254,13 +177,13 @@ module rvgpu_noc_arbiter_data_tests_unit_test;
         for (int strobe_idx = 0; strobe_idx < 4; strobe_idx++) begin
           $display("Testing immediate transmission: pattern %0d, strobe %0d", pattern_idx, strobe_idx);
           
-          initialize_signals();
+          test_base.initialize_signals();
           noc_if.m_req_ready = 1'b1;  // Pre-set ready for immediate transmission
           step(2);
           
-          test_immediate_transmission(test_patterns[pattern_idx], strobe_patterns[strobe_idx]);
+          test_immediate_transmission(test_base.test_patterns[pattern_idx], test_base.strobe_patterns[strobe_idx]);
           
-          clear_requests();
+          test_base.clear_requests();
           noc_if.m_req_ready = 1'b0;
           step(1);
         end
@@ -279,14 +202,14 @@ module rvgpu_noc_arbiter_data_tests_unit_test;
         for (int strobe_idx = 0; strobe_idx < 4; strobe_idx++) begin
           $display("Testing backpressure transmission: pattern %0d, strobe %0d", pattern_idx, strobe_idx);
           
-          initialize_signals();
+          test_base.initialize_signals();
           noc_if.m_req_ready = 1'b0;  // Start with ready = 0 for backpressure
           step(2);
           
           // Test with 3-cycle backpressure delay
-          test_transmission_with_backpressure(test_patterns[pattern_idx], strobe_patterns[strobe_idx], 3);
+          test_transmission_with_backpressure(test_base.test_patterns[pattern_idx], test_base.strobe_patterns[strobe_idx], 3);
           
-          clear_requests();
+          test_base.clear_requests();
           noc_if.m_req_ready = 1'b0;
           step(1);
         end
@@ -302,15 +225,15 @@ module rvgpu_noc_arbiter_data_tests_unit_test;
       $display("============== 3. Testing Data Integrity During Arbitration ==============");
       
       // Test sequential requests to ensure no data mixing
-      initialize_signals();
+      test_base.initialize_signals();
       step(2);
       
       // Test 1: Send CP request first
       $display("Testing CP request with AAAA pattern");
       cp_if.m_req_valid = 1'b1;
       cp_if.m_req_header = build_noc_header(MSG_MEM_READ_REQ, 8'h10, NODE_CONTROL, NODE_L2_CACHE, 8'h00);
-      cp_if.m_req_data = test_patterns[2];    // AAAA pattern
-      cp_if.m_req_strb = strobe_patterns[1];  // F0F0 strobe
+      cp_if.m_req_data = test_base.test_patterns[2];    // AAAA pattern
+      cp_if.m_req_strb = test_base.strobe_patterns[1];  // F0F0 strobe
       cp_if.m_req_last = 1'b1;
       
       step(1);
@@ -318,7 +241,7 @@ module rvgpu_noc_arbiter_data_tests_unit_test;
       
       // Verify CP data transmitted correctly before completing handshake
       `FAIL_IF(dut.arb_state !== dut.REQ_ARB_CP)
-      verify_noc_data(test_patterns[2], strobe_patterns[1]);
+      test_base.verify_noc_data(test_base.test_patterns[2], test_base.strobe_patterns[1]);
       
       // Complete CP handshake
       noc_if.m_req_ready = 1'b1;
@@ -334,8 +257,8 @@ module rvgpu_noc_arbiter_data_tests_unit_test;
       $display("Testing MMU request with 5555 pattern");
       mmu_if.m_req_valid = 1'b1;
       mmu_if.m_req_header = build_noc_header(MSG_MEM_WRITE_REQ, 8'h20, NODE_CONTROL, NODE_L2_CACHE, 8'h10);
-      mmu_if.m_req_data = test_patterns[3];   // 5555 pattern
-      mmu_if.m_req_strb = strobe_patterns[2]; // Lower half strobe
+      mmu_if.m_req_data = test_base.test_patterns[3];   // 5555 pattern
+      mmu_if.m_req_strb = test_base.strobe_patterns[2]; // Lower half strobe
       mmu_if.m_req_last = 1'b1;
       
       step(1);
@@ -343,7 +266,7 @@ module rvgpu_noc_arbiter_data_tests_unit_test;
       
       // Verify MMU data transmitted correctly before completing handshake
       `FAIL_IF(dut.arb_state !== dut.REQ_ARB_MMU)
-      verify_noc_data(test_patterns[3], strobe_patterns[2]);
+      test_base.verify_noc_data(test_base.test_patterns[3], test_base.strobe_patterns[2]);
       
       // Complete MMU handshake
       noc_if.m_req_ready = 1'b1;
@@ -351,7 +274,7 @@ module rvgpu_noc_arbiter_data_tests_unit_test;
       nextSamplePoint();
       `FAIL_IF(dut.arb_state !== dut.REQ_ARB_IDLE)
       
-      clear_requests();
+      test_base.clear_requests();
       step(1);
       
       $display("============== 3. Arbitration data integrity test PASSED ==============");
@@ -366,14 +289,14 @@ module rvgpu_noc_arbiter_data_tests_unit_test;
       for (int i = 0; i < 4; i++) begin
         $display("Testing response data pattern %0d", i);
         
-        initialize_signals();
+        test_base.initialize_signals();
         step(2);
         
         // Send response from NOC with specific pattern (CP not ready initially)
         cp_if.m_resp_ready = 1'b0;
         noc_if.m_resp_valid = 1'b1;
         noc_if.m_resp_header = build_noc_header(MSG_MEM_READ_RESP, 8'h50, NODE_L2_CACHE, NODE_CONTROL, 8'h05);
-        noc_if.m_resp_data = test_patterns[i];
+        noc_if.m_resp_data = test_base.test_patterns[i];
         noc_if.m_resp_status = RESP_OKAY;
         noc_if.m_resp_last = 1'b1;
         
@@ -383,7 +306,7 @@ module rvgpu_noc_arbiter_data_tests_unit_test;
         // Verify response routing and data before completing handshake
         `FAIL_IF(dut.route_state !== dut.RESP_ROUTE_CP)
         `FAIL_IF(cp_if.m_resp_valid !== 1'b1)
-        `FAIL_IF(cp_if.m_resp_data !== test_patterns[i])
+        `FAIL_IF(cp_if.m_resp_data !== test_base.test_patterns[i])
         `FAIL_IF(cp_if.m_resp_status !== RESP_OKAY)
         
         // Complete handshake

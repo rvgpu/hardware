@@ -429,7 +429,7 @@ module rvgpu_noc_arbiter_baisc_unit_test;
       // CP slave interface is unused (CP only acts as master)
       
       // Test slave request forwarding (NOC -> MMU)
-      slave_req_packet.header = build_noc_header(MSG_MEM_READ_REQ, 8'h70, NODE_L2_CACHE, NODE_CONTROL, 8'h10);
+      slave_req_packet.header = test_base.create_slave_request_header(8'h70, 8'h10);
       slave_req_packet.data = 256'hAABBCCDD_EEFF0011_22334455_66778899_AABBCCDD_EEFF0011_22334455_66778899;
       slave_req_packet.strb = 32'hFFFFFFFF;
       
@@ -452,7 +452,7 @@ module rvgpu_noc_arbiter_baisc_unit_test;
       test_base.clear_slave_request();
       
       // Test slave response forwarding (MMU -> NOC)
-      slave_resp_packet.header = build_noc_header(MSG_MEM_READ_RESP, 8'h80, NODE_CONTROL, NODE_L2_CACHE, 8'h00);
+      slave_resp_packet.header = test_base.create_slave_response_header(8'h80, 8'h00);
       slave_resp_packet.data = 256'h11223344_55667788_99AABBCC_DDEEFF00_11223344_55667788_99AABBCC_DDEEFF00;
       slave_resp_packet.strb = 32'hFFFFFFFF;
       
@@ -504,7 +504,7 @@ module rvgpu_noc_arbiter_baisc_unit_test;
       // Test various slave request scenarios to confirm CP is never involved
       
       // Scenario 1: Send slave request from NOC
-      slave_req_packet.header = build_noc_header(MSG_MEM_WRITE_REQ, 8'h90, NODE_L2_CACHE, NODE_CONTROL, 8'h10);
+      slave_req_packet.header = test_base.create_slave_write_request_header(8'h90, 8'h10);
       slave_req_packet.data = 256'hFFFFFFFF_FFFFFFFF_FFFFFFFF_FFFFFFFF_FFFFFFFF_FFFFFFFF_FFFFFFFF_FFFFFFFF;
       slave_req_packet.strb = 32'hFFFFFFFF;
       
@@ -560,7 +560,7 @@ module rvgpu_noc_arbiter_baisc_unit_test;
       test_base.initialize_signals();
       step(5);      
       // Test response with unknown local_addr (0x2x range)
-      unknown_resp_packet.header = build_noc_header(MSG_MEM_READ_RESP, 8'h90, NODE_L2_CACHE, NODE_CONTROL, 8'h25);
+      unknown_resp_packet.header = test_base.create_unknown_response_header(8'h90, 8'h25);
       unknown_resp_packet.data = 256'hFFFFFFFF_FFFFFFFF_FFFFFFFF_FFFFFFFF_FFFFFFFF_FFFFFFFF_FFFFFFFF_FFFFFFFF;
       unknown_resp_packet.strb = 32'hFFFFFFFF;
       

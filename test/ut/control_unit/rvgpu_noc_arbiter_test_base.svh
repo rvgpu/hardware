@@ -28,6 +28,12 @@ class rvgpu_noc_arbiter_test_base;
   logic [255:0] test_patterns[8];
   logic [31:0] strobe_patterns[4];
 
+  // Data integrity monitor variables for capturing transmitted data
+  logic [255:0] captured_data;
+  logic [31:0] captured_strb;
+  logic [31:0] captured_header;
+  logic data_transmission_detected;
+
   // Constructor
   function new(noc_vif_t cp_vif, noc_vif_t mmu_vif, noc_vif_t noc_vif);
     this.cp_if = cp_vif;
@@ -37,7 +43,7 @@ class rvgpu_noc_arbiter_test_base;
     // Initialize test patterns
     test_patterns[0] = 256'h0000000000000000000000000000000000000000000000000000000000000000;  // All zeros
     test_patterns[1] = 256'hFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;  // All ones
-    test_patterns[2] = 256'hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA;  // 1010 pattern
+    test_patterns[2] = 256'hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA;          // 1010 pattern
     test_patterns[3] = 256'h5555555555555555555555555555555555555555555555555555555555555555;  // 0101 pattern
     test_patterns[4] = 256'hDEADBEEFCAFEBABE123456789ABCDEF0FEDCBA9876543210ABCDEF0123456789;  // Random 1
     test_patterns[5] = 256'h123456789ABCDEF0FEDCBA9876543210ABCDEF0123456789DEADBEEFCAFEBABE;  // Random 2
@@ -227,8 +233,43 @@ class rvgpu_noc_arbiter_test_base;
     $display("@%0t: All interface signals in correct reset state", $time);
   endtask
 
-  // Note: send_request_and_wait_handshake is not included here because it requires
-  // access to the clock signal, which should be handled by individual testbenches
+  // Initialize data monitoring variables
+  task initialize_data_monitor();
+    captured_data = 256'h0;
+    captured_strb = 32'h0;
+    captured_header = 32'h0;
+    data_transmission_detected = 1'b0;
+  endtask
+
+  // Manual check for data transmission (for use when no automatic monitor is available)
+  task check_data_transmission_manual();
+    if (noc_if.m_req_valid && noc_if.m_req_ready && noc_if.m_req_last) begin
+      captured_data = noc_if.m_req_data;
+      captured_strb = noc_if.m_req_strb;
+      captured_header = noc_if.m_req_header;
+      data_transmission_detected = 1'b1;
+    end else begin
+      data_transmission_detected = 1'b0;
+    end
+  endtask
+
+  // Verify captured data matches expected values
+  task verify_captured_data(logic [255:0] expected_data, logic [31:0] expected_strb, logic [31:0] expected_header);
+    `FAIL_IF(captured_data !== expected_data)
+    `FAIL_IF(captured_strb !== expected_strb)
+    `FAIL_IF(captured_header !== expected_header)
+    $display("@%0t: Captured data verified: 0x%064x, strobe: 0x%08x", $time, expected_data, expected_strb);
+  endtask
+
+  // Send CP request with specific data pattern (simplified version)
+  task send_cp_data_request(logic [255:0] data_pattern, logic [31:0] strb_pattern);
+    cp_if.m_req_valid = 1'b1;
+    cp_if.m_req_header = create_cp_mem_read_header(8'h10, 8'h00);
+    cp_if.m_req_data = data_pattern;
+    cp_if.m_req_strb = strb_pattern;
+    cp_if.m_req_last = 1'b1;
+    $display("@%0t: CP Data=0x%064x, Strobe=0x%08x", $time, data_pattern, strb_pattern);
+  endtask
 
   //===================================
   // Common NOC Header Helper Functions
@@ -277,6 +318,16 @@ class rvgpu_noc_arbiter_test_base;
   // Create standard slave response header (MMU to NOC)
   function noc_header_t create_slave_response_header(logic [7:0] trans_id, logic [7:0] local_addr);
     return build_noc_header(MSG_MEM_READ_RESP, trans_id, NODE_CONTROL, NODE_L2_CACHE, local_addr);
+  endfunction
+
+  // Create unknown response header (for testing error handling)
+  function noc_header_t create_unknown_response_header(logic [7:0] trans_id, logic [7:0] local_addr);
+    return build_noc_header(MSG_MEM_READ_RESP, trans_id, NODE_L2_CACHE, NODE_CONTROL, local_addr);
+  endfunction
+
+  // Create slave write request header (NOC to MMU)
+  function noc_header_t create_slave_write_request_header(logic [7:0] trans_id, logic [7:0] local_addr);
+    return build_noc_header(MSG_MEM_WRITE_REQ, trans_id, NODE_L2_CACHE, NODE_CONTROL, local_addr);
   endfunction
 
   //===================================  

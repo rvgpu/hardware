@@ -50,6 +50,7 @@ module rvgpu_noc_arbiter_data_tests_unit_test;
     svunit_ut.setup();
     $vcdpluson();
     test_base.initialize_signals();
+    test_base.initialize_data_monitor();
     reset();
   endtask
 
@@ -57,31 +58,20 @@ module rvgpu_noc_arbiter_data_tests_unit_test;
     svunit_ut.teardown();
   endtask
 
-  // Send CP request with specific data pattern
-  task send_cp_data_request(logic [255:0] data_pattern, logic [31:0] strb_pattern);
-    cp_if.m_req_valid = 1'b1;
-    cp_if.m_req_header = test_base.create_cp_mem_read_header(8'h10, 8'h00);
-    cp_if.m_req_data = data_pattern;
-    cp_if.m_req_strb = strb_pattern;
-    cp_if.m_req_last = 1'b1;
-    $display("@%0t: CP Data=0x%064x, Strobe=0x%08x", $time, data_pattern, strb_pattern);
-  endtask
+  // send_cp_data_request() is now provided by test_base
 
-  // Data integrity monitor for capturing transmitted data
-  logic [255:0] captured_data;
-  logic [31:0] captured_strb;
-  logic [31:0] captured_header;
-  logic data_transmission_detected;
+  // Data integrity monitor variables are now provided by test_base
+  // But we still need the always block here because it requires clock access
 
   // Monitor NOC interface for data transmissions
   always @(posedge clk) begin
     if (noc_if.m_req_valid && noc_if.m_req_ready && noc_if.m_req_last) begin
-      captured_data <= noc_if.m_req_data;
-      captured_strb <= noc_if.m_req_strb;
-      captured_header <= noc_if.m_req_header;
-      data_transmission_detected <= 1'b1;
+      test_base.captured_data <= noc_if.m_req_data;
+      test_base.captured_strb <= noc_if.m_req_strb;
+      test_base.captured_header <= noc_if.m_req_header;
+      test_base.data_transmission_detected <= 1'b1;
     end else begin
-      data_transmission_detected <= 1'b0;
+      test_base.data_transmission_detected <= 1'b0;
     end
   end
 
@@ -91,27 +81,19 @@ module rvgpu_noc_arbiter_data_tests_unit_test;
     expected_header = test_base.create_cp_mem_read_header(8'h10, 8'h00);
     
     // Clear previous capture
-    data_transmission_detected = 1'b0;
+    test_base.data_transmission_detected = 1'b0;
     
-    // Send request
-    cp_if.m_req_valid = 1'b1;
-    cp_if.m_req_header = expected_header;
-    cp_if.m_req_data = expected_data;
-    cp_if.m_req_strb = expected_strb;
-    cp_if.m_req_last = 1'b1;
+    // Send request using test_base function
+    test_base.send_cp_data_request(expected_data, expected_strb);
     
     // Wait for transmission to be captured
-    while (!data_transmission_detected) begin
+    while (!test_base.data_transmission_detected) begin
       step(1);
       nextSamplePoint();
     end
     
-    // Verify data integrity
-    `FAIL_IF(captured_data !== expected_data)
-    `FAIL_IF(captured_strb !== expected_strb)
-    `FAIL_IF(captured_header !== expected_header)
-    
-    $display("@%0t: Data transmission verified: 0x%064x, strobe: 0x%08x", $time, expected_data, expected_strb);
+    // Verify data integrity using test_base function
+    test_base.verify_captured_data(expected_data, expected_strb, expected_header);
   endtask
 
   // Test data transmission with simulated backpressure
@@ -161,8 +143,6 @@ module rvgpu_noc_arbiter_data_tests_unit_test;
     
     $display("%s test completed", test_name);
   endtask
-
-
 
   //===================================
   // Enhanced Data Integrity Tests
@@ -233,7 +213,7 @@ module rvgpu_noc_arbiter_data_tests_unit_test;
       // Test 1: Send CP request first
       $display("Testing CP request with AAAA pattern");
       cp_if.m_req_valid = 1'b1;
-      cp_if.m_req_header = build_noc_header(MSG_MEM_READ_REQ, 8'h10, NODE_CONTROL, NODE_L2_CACHE, 8'h00);
+      cp_if.m_req_header = test_base.create_cp_mem_read_header(8'h10, 8'h00);
       cp_if.m_req_data = test_base.test_patterns[2];    // AAAA pattern
       cp_if.m_req_strb = test_base.strobe_patterns[1];  // F0F0 strobe
       cp_if.m_req_last = 1'b1;
@@ -258,7 +238,7 @@ module rvgpu_noc_arbiter_data_tests_unit_test;
       
       $display("Testing MMU request with 5555 pattern");
       mmu_if.m_req_valid = 1'b1;
-      mmu_if.m_req_header = build_noc_header(MSG_MEM_WRITE_REQ, 8'h20, NODE_CONTROL, NODE_L2_CACHE, 8'h10);
+      mmu_if.m_req_header = test_base.create_mmu_mem_write_header(8'h20, 8'h10);
       mmu_if.m_req_data = test_base.test_patterns[3];   // 5555 pattern
       mmu_if.m_req_strb = test_base.strobe_patterns[2]; // Lower half strobe
       mmu_if.m_req_last = 1'b1;
@@ -297,7 +277,7 @@ module rvgpu_noc_arbiter_data_tests_unit_test;
         // Send response from NOC with specific pattern (CP not ready initially)
         cp_if.m_resp_ready = 1'b0;
         noc_if.m_resp_valid = 1'b1;
-        noc_if.m_resp_header = build_noc_header(MSG_MEM_READ_RESP, 8'h50, NODE_L2_CACHE, NODE_CONTROL, 8'h05);
+        noc_if.m_resp_header = test_base.create_mem_read_resp_header(8'h50, 8'h05);
         noc_if.m_resp_data = test_base.test_patterns[i];
         noc_if.m_resp_status = RESP_OKAY;
         noc_if.m_resp_last = 1'b1;

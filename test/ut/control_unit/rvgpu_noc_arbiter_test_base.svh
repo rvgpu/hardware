@@ -20,18 +20,16 @@ typedef virtual rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) noc_vif
 class rvgpu_noc_arbiter_test_base;
 
   // Interface references (to be connected from testbench)
-  virtual rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) cp_if;
-  virtual rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) mmu_if;
-  virtual rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) noc_if;
+  noc_vif_t cp_if;
+  noc_vif_t mmu_if;
+  noc_vif_t noc_if;
   
   // Test data patterns for comprehensive testing
   logic [255:0] test_patterns[8];
   logic [31:0] strobe_patterns[4];
 
   // Constructor
-  function new(virtual rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) cp_vif,
-               virtual rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) mmu_vif,
-               virtual rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) noc_vif);
+  function new(noc_vif_t cp_vif, noc_vif_t mmu_vif, noc_vif_t noc_vif);
     this.cp_if = cp_vif;
     this.mmu_if = mmu_vif;
     this.noc_if = noc_vif;
@@ -114,7 +112,7 @@ class rvgpu_noc_arbiter_test_base;
   endtask
 
   // Clear request signals for a specific interface
-  task clear_request(virtual rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) master_if);
+  task clear_request(noc_vif_t master_if);
     master_if.m_req_valid = 1'b0;
     master_if.m_req_header = 32'h0;
     master_if.m_req_data = 256'h0;

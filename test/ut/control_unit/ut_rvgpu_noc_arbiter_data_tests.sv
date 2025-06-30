@@ -60,7 +60,7 @@ module rvgpu_noc_arbiter_data_tests_unit_test;
   // Send CP request with specific data pattern
   task send_cp_data_request(logic [255:0] data_pattern, logic [31:0] strb_pattern);
     cp_if.m_req_valid = 1'b1;
-    cp_if.m_req_header = build_noc_header(MSG_MEM_READ_REQ, 8'h10, NODE_CONTROL, NODE_L2_CACHE, 8'h00);
+    cp_if.m_req_header = test_base.create_cp_mem_read_header(8'h10, 8'h00);
     cp_if.m_req_data = data_pattern;
     cp_if.m_req_strb = strb_pattern;
     cp_if.m_req_last = 1'b1;
@@ -88,7 +88,7 @@ module rvgpu_noc_arbiter_data_tests_unit_test;
   // Send CP request and verify data transmission (works for both pre-ready and controlled scenarios)
   task send_cp_request_and_verify_transmission(logic [255:0] expected_data, logic [31:0] expected_strb);
     logic [31:0] expected_header;
-    expected_header = build_noc_header(MSG_MEM_READ_REQ, 8'h10, NODE_CONTROL, NODE_L2_CACHE, 8'h00);
+    expected_header = test_base.create_cp_mem_read_header(8'h10, 8'h00);
     
     // Clear previous capture
     data_transmission_detected = 1'b0;
@@ -161,6 +161,8 @@ module rvgpu_noc_arbiter_data_tests_unit_test;
     
     $display("%s test completed", test_name);
   endtask
+
+
 
   //===================================
   // Enhanced Data Integrity Tests

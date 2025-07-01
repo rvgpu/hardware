@@ -44,4 +44,40 @@ def test_control_unit_rvgpu_noc_arbiter_data_tests(datafiles, simulator):
     """
     run_testcase(datafiles, simulator, 'ut_rvgpu_noc_arbiter_data_tests.sv')
 
+@all_files_in_dir('ut/control_unit')
+@all_available_simulators()
+def test_control_unit_rvgpu_axi_adapter_basic(datafiles, simulator):
+    """
+    Basic functionality test for RVGPU AXI Adapter.
+    Tests fundamental AXI4-Lite protocol compliance, state machine transitions,
+    write/read operations, and basic control interface conversion.
+    
+    Test Coverage:
+    - Reset and initialization
+    - Write state machine (W_IDLE → W_ADDR → W_DATA → W_CTRL_REQ → W_CTRL_RESP → W_BRESP)
+    - Read state machine (R_IDLE → R_ADDR → R_CTRL_REQ → R_CTRL_RESP → R_DATA)
+    - Concurrent read/write operations with arbitration
+    - Error response handling (SLVERR, DECERR)
+    - AXI protocol compliance verification
+    """
+    run_testcase(datafiles, simulator, 'ut_rvgpu_axi_adapter_basic.sv')
+
+@all_files_in_dir('ut/control_unit')
+@all_available_simulators()
+def test_control_unit_rvgpu_axi_adapter_data_tests(datafiles, simulator):
+    """
+    Comprehensive data integrity test for RVGPU AXI Adapter.
+    Tests data transmission accuracy across all data patterns, address ranges,
+    and strobe configurations to ensure end-to-end data integrity.
+    
+    Test Coverage:
+    - Comprehensive data patterns (8×4×4 = 128 combinations)
+    - Write data integrity (4×8×8 = 256 combinations)
+    - Read data integrity (8×8 = 64 combinations)
+    - Concurrent transaction data integrity
+    - Strobe pattern handling (8 different patterns)
+    - Address range data integrity (8 boundary conditions)
+    - Error response data handling (4×3 = 12 combinations)
+    """
+    run_testcase(datafiles, simulator, 'ut_rvgpu_axi_adapter_data_tests.sv')
 

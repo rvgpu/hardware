@@ -17,11 +17,9 @@
 `define RVGPU_INTERFACE_AXI_SVH
 
 `include "rvgpu_config.svh"
-`include "rvgpu_interface_axi.svh"
-`include "rvgpu_types_toplevel_parameter.svh"
 
 //=============================================================================
-// Host Interface (AXI Slave)
+// Host Interface (AXI-Lite Slave)
 //=============================================================================
 
 interface host_if #(
@@ -63,10 +61,6 @@ interface host_if #(
     logic                          rvalid;
     logic                          rready;
     
-    // Clock and Reset
-    logic clk;
-    logic rst_n;
-    
     // Master Port (Host)
     modport master (
         output awaddr, awlen, awsize, awburst, awvalid,
@@ -78,8 +72,7 @@ interface host_if #(
         output araddr, arlen, arsize, arburst, arvalid,
         input  arready,
         input  rdata, rresp, rlast, rvalid,
-        output rready,
-        input  clk, rst_n
+        output rready
     );
     
     // Slave Port (RVGPU)
@@ -93,13 +86,7 @@ interface host_if #(
         input  araddr, arlen, arsize, arburst, arvalid,
         output arready,
         output rdata, rresp, rlast, rvalid,
-        input  rready,
-        input  clk, rst_n
-    );
-    
-    // Clock Generation
-    modport clocking (
-        input  clk, rst_n
+        input  rready
     );
     
 endinterface : host_if
@@ -147,10 +134,6 @@ interface memory_if #(
     logic                          rvalid;
     logic                          rready;
     
-    // Clock and Reset
-    logic clk;
-    logic rst_n;
-    
     // Master Port (RVGPU)
     modport master (
         output awaddr, awlen, awsize, awburst, awvalid,
@@ -162,8 +145,7 @@ interface memory_if #(
         output araddr, arlen, arsize, arburst, arvalid,
         input  arready,
         input  rdata, rresp, rlast, rvalid,
-        output rready,
-        input  clk, rst_n
+        output rready
     );
     
     // Slave Port (Memory)
@@ -177,15 +159,9 @@ interface memory_if #(
         input  araddr, arlen, arsize, arburst, arvalid,
         output arready,
         output rdata, rresp, rlast, rvalid,
-        input  rready,
-        input  clk, rst_n
-    );
-    
-    // Clock Generation
-    modport clocking (
-        input  clk, rst_n
+        input  rready
     );
     
 endinterface : memory_if
 
-`endif // RVGPU_INTERFACE_AXI_SVH 
+`endif // RVGPU_INTERFACE_AXI_SVH

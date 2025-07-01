@@ -16,10 +16,11 @@
 `ifndef RVGPU_INTERNAL_NOC_IF_SVH
 `define RVGPU_INTERNAL_NOC_IF_SVH
 
+`include "rvgpu_internal_noc_pkg.sv"
 import rvgpu_internal_noc_pkg::*;
 
 interface rvgpu_internal_noc_if #(
-    parameter rvgpu_internal_noc_pkg::noc_config_t NOC_CONFIG = rvgpu_internal_noc_pkg::DEFAULT_NOC_CONFIG
+    parameter noc_config_t NOC_CONFIG = DEFAULT_NOC_CONFIG
 );
     // Master通道信号 - 设备作为发起者发送请求
     logic                                   m_req_valid;

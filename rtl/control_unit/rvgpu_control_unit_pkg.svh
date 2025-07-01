@@ -17,8 +17,9 @@
 `define RVGPU_CONTROL_UNIT_PKG_SV
 
 `include "rvgpu_constant.svh"
+`include "rvgpu_internal_noc_pkg.sv"
 `include "rvgpu_internal_noc_if.svh"
-`include "rvgpu_interface_axi.svh"
+`include "../gpu_top/rvgpu_interface_axi.svh"
 
 package rvgpu_control_unit_pkg;
 
@@ -44,7 +45,7 @@ package rvgpu_control_unit_pkg;
         va_width: `RVGPU_CONST_CONTROL_UNIT_CONFIG_VA_WIDTH,
         pa_width: `RVGPU_CONST_CONTROL_UNIT_CONFIG_PA_WIDTH,
         axi_addr_width: `RVGPU_CONST_CONTROL_UNIT_CONFIG_AXI_ADDR_WIDTH,
-        axi_data_width: `RVGPU_CONST_CONTROL_UNIT_CONFIG_AXI_DATA_WIDTH,
+        axi_data_width: `RVGPU_CONST_CONTROL_UNIT_CONFIG_AXI_DATA_WIDTH
     };
 
     //=============================================================================

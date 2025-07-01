@@ -3,11 +3,13 @@
 `include "svunit_defines.svh"
 `include "rvgpu_axi_adapter_test_base.svh"
 `include "rvgpu_clk_rst.svh"
+`include "rvgpu_axi_adapter.sv"
 
-module ut_rvgpu_axi_adapter_basic;
+// SVUnit中模块名必须以_unit_test结尾
+module ut_rvgpu_axi_adapter_basic_unit_test;
   import svunit_pkg::svunit_testcase;
 
-  string name = "ut_rvgpu_axi_adapter_basic";
+  string name = "ut_rvgpu_axi_adapter_basic_unit_test";
   svunit_testcase svunit_ut;
 
   //===================================
@@ -78,6 +80,7 @@ module ut_rvgpu_axi_adapter_basic;
     
     // Create test base with clock manager
     test_base = new(axi_if, ctrl_if, clk_rst_if, clk_mgr);
+    
     
     $display("@%0t: Build completed", $time);
     clk_mgr.display_status();
@@ -169,23 +172,31 @@ module ut_rvgpu_axi_adapter_basic;
      test_addr = 64'h1000;
      test_data = 64'hDEADBEEFCAFEBABE;
      
-     // Fork concurrent processes
-     fork
-       begin
-         // Host side: Send AXI write transaction
-         clk_mgr.wait_clks(2);
-         test_base.send_axi_write_addr(test_addr);
-         test_base.send_axi_write_data(test_data);
-         test_base.accept_axi_write_resp();
-       end
-       
-       begin
-         // Control processor side: Handle the request
-         test_base.accept_ctrl_request();
-         clk_mgr.wait_clks(1);
-         test_base.send_ctrl_response(test_data);
-       end
-     join
+     // Step 1: Send AXI write address
+     clk_mgr.wait_clks(2);
+     $display("@%0t: DUT write state before address: %0d", $time, dut.write_state_q);
+     test_base.send_axi_write_addr(test_addr);
+     $display("@%0t: DUT write state after address: %0d", $time, dut.write_state_q);
+     
+     // Step 2: Send AXI write data
+     test_base.send_axi_write_data(test_data);
+     clk_mgr.wait_clks(1);  // Wait for state machine to update
+     $display("@%0t: DUT write state after data: %0d", $time, dut.write_state_q);
+     
+     // Step 3: Accept control request (DUT should send this after receiving write data)
+     test_base.accept_ctrl_request();
+     $display("@%0t: DUT write state after control request: %0d", $time, dut.write_state_q);
+     
+     // Step 4: Send control response (this should trigger AXI write response)
+     clk_mgr.wait_clks(1);
+     $display("@%0t: DUT write state before control response: %0d", $time, dut.write_state_q);
+     $display("@%0t: ctrl_if.resp_ready before sending response: %b", $time, ctrl_if.resp_ready);
+     $display("@%0t: ctrl_req_is_write: %b", $time, dut.ctrl_req_is_write);
+     $display("@%0t: write_ctrl_req: %b", $time, dut.write_ctrl_req);
+     test_base.send_ctrl_response(test_data);
+     
+     // Step 5: Accept AXI write response
+     test_base.accept_axi_write_resp();
      
      $display("@%0t: Basic AXI write test completed", $time);
    `SVTEST_END

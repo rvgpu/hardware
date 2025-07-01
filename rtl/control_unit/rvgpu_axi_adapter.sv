@@ -85,6 +85,7 @@ module rvgpu_axi_adapter #(
     // 控制接口仲裁信号
     logic write_ctrl_req, read_ctrl_req;
     logic ctrl_req_is_write;
+    logic current_op_is_write;  // 记住当前操作是写还是读
     
     //=============================================================================
     // 1. 时序逻辑 - 状态寄存器更新
@@ -103,6 +104,8 @@ module rvgpu_axi_adapter #(
             read_addr_q <= '0;
             read_data_q <= '0;
             read_resp_q <= 2'b00;
+            
+            current_op_is_write <= 1'b0;  // 初始化操作类型
         end else begin
             // 更新状态寄存器
             write_state_q <= write_state_d;
@@ -115,6 +118,13 @@ module rvgpu_axi_adapter #(
             read_addr_q <= read_addr_d;
             read_data_q <= read_data_d;
             read_resp_q <= read_resp_d;
+            
+            // 更新操作类型
+            if (write_ctrl_req) begin
+                current_op_is_write <= 1'b1;
+            end else if (read_ctrl_req) begin
+                current_op_is_write <= 1'b0;
+            end
         end
     end
     
@@ -358,7 +368,7 @@ module rvgpu_axi_adapter #(
         ctrl_if.req_we    = 1'b0;
         ctrl_if.resp_ready = 1'b0;
         
-        if (ctrl_req_is_write && write_ctrl_req) begin
+        if (write_ctrl_req) begin
             // 写请求
             ctrl_if.req_valid = 1'b1;
             ctrl_if.req_addr  = write_addr_q;
@@ -366,31 +376,20 @@ module rvgpu_axi_adapter #(
             ctrl_if.req_strb  = write_strb_q;
             ctrl_if.req_we    = 1'b1;
             
-            case (write_state_q)
-                W_CTRL_RESP: begin
-                    ctrl_if.resp_ready = 1'b1;
-                end
-                default: begin
-                    ctrl_if.resp_ready = 1'b0;
-                end
-            endcase
-            
-        end else if (!ctrl_req_is_write && read_ctrl_req) begin
+        end else if (read_ctrl_req) begin
             // 读请求
             ctrl_if.req_valid = 1'b1;
             ctrl_if.req_addr  = read_addr_q;
             ctrl_if.req_data  = '0;
             ctrl_if.req_strb  = {(DATA_WIDTH/8){1'b1}};  // 读操作全选择
             ctrl_if.req_we    = 1'b0;
-            
-            case (read_state_q)
-                R_CTRL_RESP: begin
-                    ctrl_if.resp_ready = 1'b1;
-                end
-                default: begin
-                    ctrl_if.resp_ready = 1'b0;
-                end
-            endcase
+        end
+        
+        // 设置resp_ready基于当前操作类型和状态
+        if (current_op_is_write && write_state_q == W_CTRL_RESP) begin
+            ctrl_if.resp_ready = 1'b1;
+        end else if (!current_op_is_write && read_state_q == R_CTRL_RESP) begin
+            ctrl_if.resp_ready = 1'b1;
         end
     end
 

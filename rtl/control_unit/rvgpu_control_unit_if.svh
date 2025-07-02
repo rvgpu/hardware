@@ -63,6 +63,35 @@ interface control_if #(
 endinterface : control_if
 
 //=============================================================================
+// Job Dispatcher Interface - Command Processor ↔ Job Dispatcher
+// 用于Command Processor与Job Dispatcher之间的控制通信
+//=============================================================================
+interface job_dispatcher_if;
+    // Control Channel (Command Processor → Job Dispatcher)
+    logic                    enable;         // 使能信号
+    logic                    reset;          // 复位信号
+    logic [63:0]             package_addr;   // Package基地址
+    logic [63:0]             mmu_addr;       // MMU页表基地址
+    
+    // Status Channel (Job Dispatcher → Command Processor)
+    logic                    complete;       // 完成信号
+    logic                    error;          // 错误信号
+    logic                    busy;           // 忙碌状态
+    
+    // Master modport (Command Processor side)
+    modport master (
+        output enable, reset, package_addr, mmu_addr,
+        input  complete, error, busy
+    );
+    
+    // Slave modport (Job Dispatcher side)
+    modport slave (
+        input  enable, reset, package_addr, mmu_addr,
+        output complete, error, busy
+    );
+endinterface : job_dispatcher_if
+
+//=============================================================================
 // MMU Interface - Command Processor ↔ MMU
 // 用于Command Processor与MMU之间的地址转换请求
 //=============================================================================

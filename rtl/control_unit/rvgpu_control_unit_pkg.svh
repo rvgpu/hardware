@@ -22,7 +22,6 @@
 `include "../gpu_top/rvgpu_interface_axi.svh"
 
 package rvgpu_control_unit_pkg;
-
     //=============================================================================
     // Control Unit Configuration Parameters
     //=============================================================================
@@ -49,83 +48,14 @@ package rvgpu_control_unit_pkg;
     };
 
     //=============================================================================
-    // Command Package Data Structures  
+    // Command Package Data Structures: Define the data structures of command package
     //=============================================================================
-    
-    // Command Package Header (64位/8字节) - 与C语言结构体字节序一致
-    typedef struct packed {
-        logic [15:0] payload_size;   // [63:48] 负载数据大小(字节)
-        logic [15:0] flags;          // [47:32] 标志位  
-        logic [31:0] command_type;   // [31:0]  命令类型
-    } command_header_t;
-    
-    // 命令类型定义
-    typedef enum logic [31:0] {
-        CMD_COMPUTE_JOB      = 32'h00000001,  // 计算任务
-        CMD_MEMORY_COPY      = 32'h00000002,  // 内存拷贝
-        CMD_SYNCHRONIZATION  = 32'h00000003   // 同步操作
-    } command_type_t;
-    
-    // 标志位定义
-    typedef struct packed {
-        logic [13:0] reserved;      // [15:2] 保留位
-        logic        high_priority; // [1] 高优先级任务
-        logic        last_package;  // [0] 最后一个Package
-    } command_flags_t;
+    `include "rvgpu_command_package.svh"
 
     //=============================================================================
-    // State Machine Definitions
+    // Register Space: Define the register space which host can access
     //=============================================================================
-    
-    // Command Processor主状态机
-    typedef enum logic [3:0] {
-        CP_IDLE             = 4'b0000,   // 空闲状态，等待START命令
-        CP_MMU_CONFIG       = 4'b0001,   // 配置MMU页表
-        CP_HEADER_FETCH     = 4'b0010,   // 读取Package Header
-        CP_PAYLOAD_FETCH    = 4'b0011,   // 读取Package Payload  
-        CP_TASK_DISPATCH    = 4'b0100,   // 向Shader Core分发任务
-        CP_EXECUTION_MONITOR = 4'b0101,  // 监控任务执行状态
-        CP_PACKAGE_CHECK    = 4'b0110,   // 检查是否还有更多Package
-        CP_IRQ_TRIGGER      = 4'b0111,   // 触发中断
-        CP_ERROR_HANDLER    = 4'b1000    // 错误处理状态
-    } cp_state_t;
-
-    //=============================================================================
-    // Register Addresses
-    //=============================================================================
-    
-    // Command Processor寄存器地址映射
-    localparam logic [15:0] REG_MMU_PAGETABLE_LO    = 16'h0000;  // 页表基地址低32位
-    localparam logic [15:0] REG_MMU_PAGETABLE_HI    = 16'h0004;  // 页表基地址高32位
-    localparam logic [15:0] REG_COMMAND_PACKET_LO   = 16'h0008;  // Package数组虚拟地址低32位
-    localparam logic [15:0] REG_COMMAND_PACKET_HI   = 16'h000C;  // Package数组虚拟地址高32位
-    localparam logic [15:0] REG_CONTROL             = 16'h0010;  // 控制寄存器
-    localparam logic [15:0] REG_STATUS              = 16'h0014;  // 状态寄存器
-    localparam logic [15:0] REG_IRQ_STATUS          = 16'h0018;  // 中断状态寄存器
-    
-    // 控制寄存器位域定义
-    typedef struct packed {
-        logic [28:0] reserved;      // [31:3] 保留位
-        logic        irq_en;        // [2] 中断使能  
-        logic        reset;         // [1] 复位Command Processor
-        logic        start;         // [0] 启动GPU工作
-    } control_reg_t;
-    
-    // 状态寄存器位域定义
-    typedef struct packed {
-        logic [27:0] reserved;      // [31:4] 保留位
-        logic        mmu_ready;     // [3] MMU配置完成
-        logic        error;         // [2] 发生错误
-        logic        complete;      // [1] 任务完成
-        logic        idle;          // [0] GPU空闲
-    } status_reg_t;
-    
-    // 中断状态寄存器位域定义
-    typedef struct packed {
-        logic [29:0] reserved;      // [31:2] 保留位
-        logic        error_irq;     // [1] 错误中断状态 (写1清除)
-        logic        complete_irq;  // [0] 完成中断状态 (写1清除)
-    } irq_status_reg_t;
+    `include "rvgpu_register_space.svh"
 
 endpackage : rvgpu_control_unit_pkg
 

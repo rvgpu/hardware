@@ -19,8 +19,10 @@
 `include "rvgpu_control_unit_pkg.svh"
 `include "rvgpu_control_unit_if.svh"
 
-// 导入控制单元包
+`ifndef RVGPU_CONTROL_UNIT_PKG_IMPORTED
+`define RVGPU_CONTROL_UNIT_PKG_IMPORTED
 import rvgpu_control_unit_pkg::*;
+`endif // RVGPU_CONTROL_UNIT_PKG_IMPORTED
 
 //=============================================================================
 // RVGPU AXI-Lite to Control Interface Adapter
@@ -38,7 +40,7 @@ module rvgpu_axi_adapter #(
     host_if.slave axi_if,
     
     // Control Interface to Command Processor
-    control_if.master ctrl_if
+    control_if.axiadapter_port ctrl_if
 );
 
     //=============================================================================

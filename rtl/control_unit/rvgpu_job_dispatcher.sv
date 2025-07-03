@@ -35,10 +35,10 @@ module rvgpu_job_dispatcher #(
     rvgpu_internal_noc_if.device noc_if,
 
     // MMU Interface - 地址转换
-    mmu_if.master mmu_if,
+    mmu_if.cp_port mmu_if,
 
     // Command Processor Interface
-    job_dispatcher_if.master jd_if
+    job_dispatcher_if.jd_port jd_if
 );
 
     //=============================================================================
@@ -318,7 +318,7 @@ module rvgpu_job_dispatcher #(
             DISP_PAYLOAD_FETCH: begin
                 if (noc_state == NOC_IDLE && !payload_fetch_done) begin
                     mmu_if.req_valid = 1'b1;
-                    mmu_if.req_vaddr = (current_package_addr + 8)[47:0];
+                    mmu_if.req_vaddr = current_package_addr + 8'h8;
                     mmu_if.req_read = 1'b1;
                     mmu_if.req_write = 1'b0;
                 end

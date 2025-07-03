@@ -28,13 +28,13 @@ module rvgpu_command_processor #(
     input  logic rst_n,
 
     // Host Interface (Host IF -> AXI adpater -> Command Processor)
-    control_if.slave ctrl_if,
+    control_if.cp_port ctrl_if,
 
     // NOC Interface  
     rvgpu_internal_noc_if.device noc_if,
 
     // MMU Interface
-    mmu_if.master mmu_if,
+    mmu_if.cp_port mmu_if,
 
     // Interrupt Output
     output logic                           gpu_irq

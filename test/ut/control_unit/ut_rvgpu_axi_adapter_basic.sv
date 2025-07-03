@@ -47,7 +47,7 @@ module ut_rvgpu_axi_adapter_basic_unit_test;
     .clk(clk),
     .rst_n(rst_n),
     .axi_if(axi_if.slave),
-    .ctrl_if(ctrl_if.master)
+    .ctrl_if(ctrl_if.axiadapter_port)
   );
 
   // Test base class instance

@@ -45,16 +45,16 @@ interface control_if #(
     logic [1:0]              resp_status;
     logic                    resp_ready;
     
-    // Master modport (AXI Adapter side)
-    modport master (
+    // AXI Adapter port (initiates transactions)
+    modport axiadapter_port (
         output req_valid, req_addr, req_data, req_strb, req_we,
         input  req_ready,
         input  resp_valid, resp_data, resp_status,
         output resp_ready
     );
     
-    // Slave modport (Command Processor side)
-    modport slave (
+    // Command Processor port (responds to transactions)
+    modport cp_port (
         input  req_valid, req_addr, req_data, req_strb, req_we,
         output req_ready,
         output resp_valid, resp_data, resp_status,
@@ -78,14 +78,14 @@ interface job_dispatcher_if;
     logic                    error;          // 错误信号
     logic                    busy;           // 忙碌状态
     
-    // Master modport (Command Processor side)
-    modport master (
+    // Command Processor port (controls Job Dispatcher)
+    modport cp_port (
         output enable, reset, package_addr, mmu_addr,
         input  complete, error, busy
     );
     
-    // Slave modport (Job Dispatcher side)
-    modport slave (
+    // Job Dispatcher port (receives control signals)
+    modport jd_port (
         input  enable, reset, package_addr, mmu_addr,
         output complete, error, busy
     );
@@ -113,16 +113,16 @@ interface mmu_if #(
     logic [1:0]              resp_status;
     logic                    resp_ready;
     
-    // Master modport (Command Processor side)
-    modport master (
+    // Command Processor port (requests address translation)
+    modport cp_port (
         output req_valid, req_vaddr, req_read, req_write,
         input  req_ready,
         input  resp_valid, resp_paddr, resp_hit, resp_status,
         output resp_ready
     );
     
-    // Slave modport (MMU side)
-    modport slave (
+    // MMU port (performs address translation)
+    modport mmu_port (
         input  req_valid, req_vaddr, req_read, req_write,
         output req_ready,
         output resp_valid, resp_paddr, resp_hit, resp_status,

@@ -20,8 +20,10 @@
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_control_unit_if.svh"
 
-// 导入NOC package
+`ifndef RVGPU_INTERNAL_NOC_PKG_IMPORTED
+`define RVGPU_INTERNAL_NOC_PKG_IMPORTED
 import rvgpu_internal_noc_pkg::*;
+`endif // RVGPU_INTERNAL_NOC_PKG_IMPORTED
 
 module rvgpu_noc_arbiter (
     // Clock and Reset Interface

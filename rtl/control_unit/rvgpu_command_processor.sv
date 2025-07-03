@@ -20,8 +20,6 @@
 `include "rvgpu_control_unit_if.svh"
 `include "rvgpu_job_dispatcher.sv"
 
-import rvgpu_control_unit_pkg::*;
-
 module rvgpu_command_processor #(
     parameter control_unit_config_t CONTROL_UNIT_CONFIG = DEFAULT_CONTROL_UNIT_CONFIG
 ) (

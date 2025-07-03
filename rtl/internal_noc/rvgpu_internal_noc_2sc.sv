@@ -16,8 +16,13 @@
 `ifndef RVGPU_INTERNAL_NOC_2SC_SV
 `define RVGPU_INTERNAL_NOC_2SC_SV
 
-import rvgpu_internal_noc_pkg::*;
 `include "rvgpu_internal_noc_if.svh"
+`include "rvgpu_internal_noc_pkg.sv"
+
+`ifndef RVGPU_INTERNAL_NOC_PKG_IMPORTED
+`define RVGPU_INTERNAL_NOC_PKG_IMPORTED
+import rvgpu_internal_noc_pkg::*;
+`endif // RVGPU_INTERNAL_NOC_PKG_IMPORTED
 
 module rvgpu_internal_noc #(
     parameter noc_config_t NOC_CONFIG = DEFAULT_NOC_CONFIG

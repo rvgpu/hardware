@@ -19,8 +19,10 @@
 `include "rvgpu_control_unit_pkg.svh"
 `include "rvgpu_control_unit_if.svh"
 
-// 导入控制单元包
+`ifndef RVGPU_CONTROL_UNIT_PKG_IMPORTED
+`define RVGPU_CONTROL_UNIT_PKG_IMPORTED
 import rvgpu_control_unit_pkg::*;
+`endif // RVGPU_CONTROL_UNIT_PKG_IMPORTED
 
 module rvgpu_job_dispatcher #(
     parameter control_unit_config_t CONTROL_UNIT_CONFIG = DEFAULT_CONTROL_UNIT_CONFIG

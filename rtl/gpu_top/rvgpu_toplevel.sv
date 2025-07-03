@@ -19,8 +19,10 @@
 `include "rvgpu_config.svh"
 `include "rvgpu_interface_axi.svh"
 
-// 导入NOC package
+`ifndef RVGPU_INTERNAL_NOC_PKG_IMPORTED
+`define RVGPU_INTERNAL_NOC_PKG_IMPORTED
 import rvgpu_internal_noc_pkg::*;
+`endif // RVGPU_INTERNAL_NOC_PKG_IMPORTED
 
 module rvgpu_toplevel #(
     // Structure Parameter: system_config_t

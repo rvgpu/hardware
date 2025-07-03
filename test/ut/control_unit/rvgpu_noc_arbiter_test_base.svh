@@ -4,7 +4,10 @@
 `include "rvgpu_internal_noc_pkg.sv"
 `include "rvgpu_internal_noc_if.svh"
 
+`ifndef RVGPU_INTERNAL_NOC_PKG_IMPORTED
+`define RVGPU_INTERNAL_NOC_PKG_IMPORTED
 import rvgpu_internal_noc_pkg::*;
+`endif // RVGPU_INTERNAL_NOC_PKG_IMPORTED
 
 // Common type definitions for NOC arbiter testing
 typedef struct packed {

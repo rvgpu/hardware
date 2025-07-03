@@ -6,7 +6,10 @@
 `include "rvgpu_interface_axi.svh"
 `include "rvgpu_clk_rst.svh"
 
+`ifndef RVGPU_CONTROL_UNIT_PKG_IMPORTED
+`define RVGPU_CONTROL_UNIT_PKG_IMPORTED
 import rvgpu_control_unit_pkg::*;
+`endif // RVGPU_CONTROL_UNIT_PKG_IMPORTED
 
 // Common type definitions for AXI adapter testing
 typedef struct packed {

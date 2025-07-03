@@ -71,13 +71,13 @@ def test_control_unit_rvgpu_axi_adapter_data_tests(datafiles, simulator):
     and strobe configurations to ensure end-to-end data integrity.
     
     Test Coverage:
-    - Comprehensive data patterns (8×4×4 = 128 combinations)
-    - Write data integrity (4×8×8 = 256 combinations)
-    - Read data integrity (8×8 = 64 combinations)
+    - Comprehensive data patterns (8x4x4 = 128 combinations)
+    - Write data integrity (4x8x8 = 256 combinations)
+    - Read data integrity (8x8 = 64 combinations)
     - Concurrent transaction data integrity
     - Strobe pattern handling (8 different patterns)
     - Address range data integrity (8 boundary conditions)
-    - Error response data handling (4×3 = 12 combinations)
+    - Error response data handling (4x3 = 12 combinations)
     """
     run_testcase(datafiles, simulator, 'ut_rvgpu_axi_adapter_data_tests.sv')
 

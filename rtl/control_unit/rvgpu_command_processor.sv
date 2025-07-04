@@ -18,6 +18,7 @@
 
 `include "rvgpu_control_unit_pkg.svh"
 `include "rvgpu_control_unit_if.svh"
+`include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_job_dispatcher.sv"
 
 module rvgpu_command_processor #(
@@ -28,7 +29,7 @@ module rvgpu_command_processor #(
     input  logic rst_n,
 
     // Host Interface (Host IF -> AXI adpater -> Command Processor)
-    control_if.cp_port ctrl_if,
+    control_if.cp_port ctrl_cp,
 
     // NOC Interface  
     rvgpu_internal_noc_if.device noc_if,
@@ -78,7 +79,7 @@ module rvgpu_command_processor #(
         .rst_n(rst_n),
         .noc_if(noc_if),
         .mmu_if(mmu_if),
-        .jd_if(cp_jd.slave)
+        .jd_if(cp_jd.jd_port)
     );
     
     //=============================================================================
@@ -91,7 +92,9 @@ module rvgpu_command_processor #(
         end else begin
             // 如果CP正在运行，则根据Job Dispatcher的完成和错误信号更新运行状态
             // 如果CP未运行，则根据控制寄存器的START信号更新运行状态
-            cp_running <= cp_running ? !(cp_jd.complete || cp_jd.error) : control_reg.start;
+            logic next_cp_running;
+            next_cp_running = cp_running ? !(cp_jd.complete || cp_jd.error) : control_reg.start;
+            cp_running <= next_cp_running;
         end
     end
     
@@ -109,88 +112,50 @@ module rvgpu_command_processor #(
     assign gpu_irq = control_reg.irq_en && (cp_jd.complete || cp_jd.error);
     
     //=============================================================================
-    // 寄存器访问逻辑（组合逻辑，无状态机）
+    // 寄存器读写逻辑
     //=============================================================================
     
-    always_comb begin
-        // 默认值
-        ctrl_if.req_ready = 1'b1;  // 总是准备好接收请求
-        ctrl_if.resp_valid = 1'b0;
-        ctrl_if.resp_data = 64'h0;
-        ctrl_if.resp_status = 2'b00;  // STATUS_OK
-        
-        // 处理请求
-        if (ctrl_if.req_valid) begin
-            if (ctrl_if.req_we) begin
-                // 写操作：直接处理，无需状态机
-                ctrl_if.resp_valid = 1'b1;
-                ctrl_if.resp_data = 64'h0;
-                ctrl_if.resp_status = 2'b00;  // STATUS_OK
-            end else begin
-                // 读操作：直接响应
-                ctrl_if.resp_valid = 1'b1;
-                case (ctrl_if.req_addr[15:0])
-                    REG_MMU_PAGETABLE_LO: ctrl_if.resp_data = mmu_pagetable_addr[31:0];
-                    REG_MMU_PAGETABLE_HI: ctrl_if.resp_data = mmu_pagetable_addr[63:32];
-                    REG_COMMAND_PACKET_LO: ctrl_if.resp_data = command_packet_addr[31:0];
-                    REG_COMMAND_PACKET_HI: ctrl_if.resp_data = command_packet_addr[63:32];
-                    REG_CONTROL: ctrl_if.resp_data = {28'h0, control_reg.irq_en, control_reg.reset, control_reg.start};
-                    REG_STATUS: ctrl_if.resp_data = {28'h0, status_reg.mmu_ready, status_reg.error, status_reg.complete, status_reg.idle};
-                    default: begin
-                        ctrl_if.resp_data = 64'h0;
-                        ctrl_if.resp_status = 2'b01; // STATUS_ERROR
-                    end
-                endcase
-            end
-        end
-    end
+    // 组合逻辑 - 读数据生成（使用assign语句，更高效）
+    assign ctrl_cp.ctrl_rdata = (
+        (ctrl_cp.ctrl_addr[15:0] == REG_MMU_PAGETABLE_LO) ? {32'h0, mmu_pagetable_addr[31:0]} :
+        (ctrl_cp.ctrl_addr[15:0] == REG_MMU_PAGETABLE_HI) ? {32'h0, mmu_pagetable_addr[63:32]} :
+        (ctrl_cp.ctrl_addr[15:0] == REG_COMMAND_PACKET_LO) ? {32'h0, command_packet_addr[31:0]} :
+        (ctrl_cp.ctrl_addr[15:0] == REG_COMMAND_PACKET_HI) ? {32'h0, command_packet_addr[63:32]} :
+        (ctrl_cp.ctrl_addr[15:0] == REG_CONTROL) ? {32'h0, control_reg.irq_en, control_reg.reset, control_reg.start} :
+        (ctrl_cp.ctrl_addr[15:0] == REG_STATUS) ? {32'h0, status_reg.mmu_ready, status_reg.error, status_reg.complete, status_reg.idle} :
+        64'h0
+    );
     
     //=============================================================================
-    // 寄存器写入逻辑
+    // 寄存器初始化和写入逻辑
     //=============================================================================
     
-    always_ff @(posedge clk) begin
+    always_ff @(posedge clk) begin : register_logic
         if (!rst_n) begin
+            // 初始化寄存器
             mmu_pagetable_addr <= 64'h0;
             command_packet_addr <= 64'h0;
             control_reg <= '{default: 1'b0};
         end else begin
-            // 处理寄存器写入
-            if (ctrl_if.req_valid && ctrl_if.req_we) begin
-                case (ctrl_if.req_addr[15:0])
-                    REG_MMU_PAGETABLE_LO: begin
-                        if (ctrl_if.req_strb[3:0] != 4'b0000) begin
-                            mmu_pagetable_addr[31:0] <= ctrl_if.req_data[31:0];
-                        end
-                    end
-                    REG_MMU_PAGETABLE_HI: begin
-                        if (ctrl_if.req_strb[3:0] != 4'b0000) begin
-                            mmu_pagetable_addr[63:32] <= ctrl_if.req_data[31:0];
-                        end
-                    end
-                    REG_COMMAND_PACKET_LO: begin
-                        if (ctrl_if.req_strb[3:0] != 4'b0000) begin
-                            command_packet_addr[31:0] <= ctrl_if.req_data[31:0];
-                        end
-                    end
-                    REG_COMMAND_PACKET_HI: begin
-                        if (ctrl_if.req_strb[3:0] != 4'b0000) begin
-                            command_packet_addr[63:32] <= ctrl_if.req_data[31:0];
-                        end
-                    end
+            // 寄存器写入逻辑
+            if (ctrl_cp.ctrl_we) begin
+                case (ctrl_cp.ctrl_addr[15:0])
+                    REG_MMU_PAGETABLE_LO: mmu_pagetable_addr[31:0] <= ctrl_cp.ctrl_wdata[31:0];
+                    REG_MMU_PAGETABLE_HI: mmu_pagetable_addr[63:32] <= ctrl_cp.ctrl_wdata[31:0];
+                    REG_COMMAND_PACKET_LO: command_packet_addr[31:0] <= ctrl_cp.ctrl_wdata[31:0];
+                    REG_COMMAND_PACKET_HI: command_packet_addr[63:32] <= ctrl_cp.ctrl_wdata[31:0];
                     REG_CONTROL: begin
-                        if (ctrl_if.req_strb[0]) begin
-                            control_reg.start <= ctrl_if.req_data[0];
-                            control_reg.reset <= ctrl_if.req_data[1];
-                            control_reg.irq_en <= ctrl_if.req_data[2];
-                        end
+                        control_reg.start <= ctrl_cp.ctrl_wdata[0];
+                        control_reg.reset <= ctrl_cp.ctrl_wdata[1];
+                        control_reg.irq_en <= ctrl_cp.ctrl_wdata[2];
                     end
+                    default: ; // 忽略未知地址
                 endcase
-            end
-            
-            // 自动清除START位（单脉冲）
-            if (cp_jd.complete || cp_jd.error) begin
-                control_reg.start <= 1'b0;
+            end else begin
+                // 自动清除START位（单脉冲）
+                if (cp_jd.complete || cp_jd.error) begin
+                    control_reg.start <= 1'b0;
+                end
             end
         end
     end

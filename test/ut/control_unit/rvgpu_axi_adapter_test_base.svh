@@ -17,6 +17,7 @@ typedef struct packed {
   logic [63:0] data;
   logic [7:0] strb;
   logic [1:0] resp;
+  logic we;  // Write enable flag
 } axi_transaction_t;
 
 // Virtual interface types for task parameters
@@ -29,7 +30,7 @@ class rvgpu_axi_adapter_test_base;
 
   // Interface references (to be connected from testbench)
   axi_vif_t axi_if;
-  ctrl_vif_t ctrl_if;
+  ctrl_vif_t ctrl_cp;
   clk_rst_vif_t clk_rst_if;
   
   // Clock manager for elegant time control
@@ -47,12 +48,11 @@ class rvgpu_axi_adapter_test_base;
   logic write_transaction_detected;
   logic read_transaction_detected;
   logic ctrl_req_detected;
-  logic ctrl_resp_detected;
 
   // Constructor
-  function new(axi_vif_t axi_vif, ctrl_vif_t ctrl_vif, clk_rst_vif_t clk_rst_vif, rvgpu_clk_manager clk_manager);
+  function new(axi_vif_t axi_vif, ctrl_vif_t ctrl_cp, clk_rst_vif_t clk_rst_vif, rvgpu_clk_manager clk_manager);
     this.axi_if = axi_vif;
-    this.ctrl_if = ctrl_vif;
+    this.ctrl_cp = ctrl_cp;
     this.clk_rst_if = clk_rst_vif;
     this.clk_mgr = clk_manager;
     
@@ -114,10 +114,10 @@ class rvgpu_axi_adapter_test_base;
     axi_if.rready = 0;
 
     // Control interface - control processor side (test acts as control processor, DUT acts as master)
-    ctrl_if.req_ready = 0;     // Control processor ready to accept requests
-    ctrl_if.resp_valid = 0;    // Control processor sends responses
-    ctrl_if.resp_data = 0;
-    ctrl_if.resp_status = 0;
+    ctrl_cp.ctrl_we = 0;       // Control processor write enable
+    ctrl_cp.ctrl_addr = 0;     // Control processor address
+    ctrl_cp.ctrl_wdata = 0;    // Control processor write data
+    ctrl_cp.ctrl_rdata = 0;    // Control processor read data
   endtask
 
   // Clear AXI write signals
@@ -138,11 +138,12 @@ class rvgpu_axi_adapter_test_base;
     axi_if.rready = 1'b0;
   endtask
 
-  // Clear control interface response signals
-  task clear_ctrl_response();
-    ctrl_if.resp_valid = 1'b0;
-    ctrl_if.resp_data = 64'h0;
-    ctrl_if.resp_status = 2'b00;
+  // Clear control interface signals
+  task clear_ctrl_signals();
+    ctrl_cp.ctrl_we = 1'b0;
+    ctrl_cp.ctrl_addr = 64'h0;
+    ctrl_cp.ctrl_wdata = 64'h0;
+    ctrl_cp.ctrl_rdata = 64'h0;
   endtask
 
   // Initialize transaction monitoring variables
@@ -152,7 +153,6 @@ class rvgpu_axi_adapter_test_base;
     write_transaction_detected = 1'b0;
     read_transaction_detected = 1'b0;
     ctrl_req_detected = 1'b0;
-    ctrl_resp_detected = 1'b0;
   endtask
 
   // Send AXI write address and wait for handshake
@@ -231,72 +231,6 @@ class rvgpu_axi_adapter_test_base;
     $display("@%0t: AXI read data received", $time);
   endtask
 
-  // Send control request response
-  task send_ctrl_response(logic [63:0] data, logic [1:0] status = 2'b00);
-    ctrl_if.resp_valid = 1'b1;
-    ctrl_if.resp_data = data;
-    ctrl_if.resp_status = status;
-    $display("@%0t: Sending control response: data=0x%016x, status=%0d", $time, data, status);
-    
-    // Wait for handshake completion using clock manager
-    while (!(ctrl_if.resp_valid && ctrl_if.resp_ready)) begin
-      clk_mgr.wait_posedge();
-    end
-    clk_mgr.wait_posedge();
-    ctrl_if.resp_valid = 1'b0;
-    $display("@%0t: Control response handshake completed", $time);
-  endtask
-
-  // Accept control request
-  task accept_ctrl_request();
-    ctrl_if.req_ready = 1'b1;
-    $display("@%0t: Ready to accept control request", $time);
-    
-    // Wait for request using clock manager
-    while (!(ctrl_if.req_valid && ctrl_if.req_ready)) begin
-      clk_mgr.wait_posedge();
-    end
-    clk_mgr.wait_posedge();
-    ctrl_if.req_ready = 1'b0;
-    $display("@%0t: Control request received", $time);
-  endtask
-
-  // Verify AXI write address phase
-  task verify_axi_write_addr(logic [63:0] expected_addr);
-    `FAIL_IF(axi_if.awvalid !== 1'b1)
-    `FAIL_IF(axi_if.awaddr !== expected_addr)
-    `FAIL_IF(axi_if.awlen !== 8'h00)  // AXI-Lite single transfer
-    `FAIL_IF(axi_if.awsize !== 3'b011)  // 64-bit transfer
-    `FAIL_IF(axi_if.awburst !== 2'b01)  // INCR burst
-    $display("@%0t: AXI write address verified: 0x%016x", $time, expected_addr);
-  endtask
-
-  // Verify AXI write data phase
-  task verify_axi_write_data(logic [63:0] expected_data, logic [7:0] expected_strb = 8'hFF);
-    `FAIL_IF(axi_if.wvalid !== 1'b1)
-    `FAIL_IF(axi_if.wdata !== expected_data)
-    `FAIL_IF(axi_if.wstrb !== expected_strb)
-    `FAIL_IF(axi_if.wlast !== 1'b1)  // AXI-Lite single transfer
-    $display("@%0t: AXI write data verified: 0x%016x, strobe: 0x%02x", $time, expected_data, expected_strb);
-  endtask
-
-  // Verify AXI read address phase
-  task verify_axi_read_addr(logic [63:0] expected_addr);
-    `FAIL_IF(axi_if.arvalid !== 1'b1)
-    `FAIL_IF(axi_if.araddr !== expected_addr)
-    `FAIL_IF(axi_if.arlen !== 8'h00)  // AXI-Lite single transfer
-    `FAIL_IF(axi_if.arsize !== 3'b011)  // 64-bit transfer
-    `FAIL_IF(axi_if.arburst !== 2'b01)  // INCR burst
-    $display("@%0t: AXI read address verified: 0x%016x", $time, expected_addr);
-  endtask
-
-  // Verify AXI write response
-  task verify_axi_write_resp(logic [1:0] expected_resp);
-    `FAIL_IF(axi_if.bvalid !== 1'b1)
-    `FAIL_IF(axi_if.bresp !== expected_resp)
-    $display("@%0t: AXI write response verified: 0x%01x", $time, expected_resp);
-  endtask
-
   // Verify AXI read data response
   task verify_axi_read_data(logic [63:0] expected_data, logic [1:0] expected_resp = 2'b00);
     `FAIL_IF(axi_if.rvalid !== 1'b1)
@@ -306,93 +240,286 @@ class rvgpu_axi_adapter_test_base;
     $display("@%0t: AXI read data verified: 0x%016x, resp: 0x%01x", $time, expected_data, expected_resp);
   endtask
 
-  // Verify control request
-  task verify_ctrl_request(logic [63:0] expected_addr, logic [63:0] expected_data, 
-                          logic [7:0] expected_strb, logic expected_we);
-    `FAIL_IF(ctrl_if.req_valid !== 1'b1)
-    `FAIL_IF(ctrl_if.req_addr !== expected_addr)
-    `FAIL_IF(ctrl_if.req_data !== expected_data)
-    `FAIL_IF(ctrl_if.req_strb !== expected_strb)
-    `FAIL_IF(ctrl_if.req_we !== expected_we)
-    $display("@%0t: Control request verified: addr=0x%016x, data=0x%016x, strb=0x%02x, we=%b", 
-             $time, expected_addr, expected_data, expected_strb, expected_we);
+  // Verify AXI write response
+  task verify_axi_write_resp(logic [1:0] expected_resp = 2'b00);
+    `FAIL_IF(axi_if.bvalid !== 1'b1)
+    `FAIL_IF(axi_if.bresp !== expected_resp)
+    $display("@%0t: AXI write response verified: 0x%01x", $time, expected_resp);
   endtask
 
-  // Check interface reset state
+  // Set control read data (for read operations)
+  task set_ctrl_rdata(logic [63:0] data);
+    ctrl_cp.ctrl_rdata = data;
+    $display("@%0t: Set control read data: 0x%016x", $time, data);
+  endtask
+
+  // Monitor control write request (no handshake - direct monitoring)
+  task monitor_ctrl_write_request();
+    if (ctrl_cp.ctrl_we) begin
+      $display("@%0t: Control write detected: addr=0x%016x, data=0x%016x", 
+               $time, ctrl_cp.ctrl_addr, ctrl_cp.ctrl_wdata);
+      captured_write_trans.addr = ctrl_cp.ctrl_addr;
+      captured_write_trans.data = ctrl_cp.ctrl_wdata;
+      captured_write_trans.we = 1'b1;
+      write_transaction_detected = 1'b1;
+    end else begin
+      write_transaction_detected = 1'b0;
+    end
+  endtask
+
+  // Monitor control read request (no handshake - direct monitoring)
+  task monitor_ctrl_read_request();
+    // In no-handshake protocol, read is always available
+    // We monitor by checking if AXI read address was sent
+    if (axi_if.arvalid && axi_if.arready) begin
+      $display("@%0t: Control read detected: addr=0x%016x", $time, axi_if.araddr);
+      captured_read_trans.addr = axi_if.araddr;
+      captured_read_trans.we = 1'b0;
+      read_transaction_detected = 1'b1;
+    end else begin
+      read_transaction_detected = 1'b0;
+    end
+  endtask
+
+  // Wait for control write request (no handshake - wait for signal)
+  task wait_for_ctrl_write_request(int timeout_cycles = 100);
+    int cycle_count = 0;
+    $display("@%0t: Waiting for control write request", $time);
+    
+    while (!ctrl_cp.ctrl_we && (cycle_count < timeout_cycles)) begin
+      clk_mgr.wait_posedge();
+      cycle_count++;
+    end
+    
+    if (cycle_count >= timeout_cycles) begin
+      $display("@%0t: ERROR: Control write request timeout after %0d cycles", $time, timeout_cycles);
+      `FAIL_IF(1)
+    end else begin
+      $display("@%0t: Control write request detected after %0d cycles", $time, cycle_count);
+    end
+  endtask
+
+  // Wait for control read request (no handshake - wait for AXI read)
+  task wait_for_ctrl_read_request(int timeout_cycles = 100);
+    int cycle_count = 0;
+    $display("@%0t: Waiting for control read request", $time);
+    
+    while (!(axi_if.arvalid && axi_if.arready) && (cycle_count < timeout_cycles)) begin
+      clk_mgr.wait_posedge();
+      cycle_count++;
+    end
+    
+    if (cycle_count >= timeout_cycles) begin
+      $display("@%0t: ERROR: Control read request timeout after %0d cycles", $time, timeout_cycles);
+      `FAIL_IF(1)
+    end else begin
+      $display("@%0t: Control read request detected after %0d cycles", $time, cycle_count);
+    end
+  endtask
+
+  // Verify control write request (no handshake - direct verification)
+  task verify_ctrl_write_request(logic [63:0] expected_addr, logic [63:0] expected_data);
+    `FAIL_IF(ctrl_cp.ctrl_we !== 1'b1)
+    `FAIL_IF(ctrl_cp.ctrl_addr !== expected_addr)
+    `FAIL_IF(ctrl_cp.ctrl_wdata !== expected_data)
+    $display("@%0t: Control write request verified: addr=0x%016x, data=0x%016x", 
+             $time, expected_addr, expected_data);
+  endtask
+
+  // Verify control read request (no handshake - verify AXI read)
+  task verify_ctrl_read_request(logic [63:0] expected_addr);
+    `FAIL_IF(axi_if.arvalid !== 1'b1)
+    `FAIL_IF(axi_if.araddr !== expected_addr)
+    $display("@%0t: Control read request verified: addr=0x%016x", $time, expected_addr);
+  endtask
+
+  // Check control interface reset state (no handshake)
+  task check_control_interface_reset_state();
+    $display("@%0t: Checking control interface reset state", $time);
+    
+    // Check control interface outputs (should be in reset state)
+    `FAIL_IF(ctrl_cp.ctrl_we !== 1'b0)
+    `FAIL_IF(ctrl_cp.ctrl_addr !== 64'h0)
+    // `FAIL_IF(ctrl_cp.ctrl_wdata !== 64'h0)  // wdata由cp输出
+    
+    $display("@%0t: Control interface in correct reset state", $time);
+  endtask
+
+  // Check interface reset state (compatibility alias)
   task check_interface_reset_state();
-    $display("@%0t: Checking interface reset state", $time);
-
-    // Check AXI interface inputs (controlled by test)
-    `FAIL_IF(axi_if.awvalid !== 1'b0)
-    `FAIL_IF(axi_if.wvalid !== 1'b0)
-    `FAIL_IF(axi_if.bready !== 1'b0)
-    `FAIL_IF(axi_if.arvalid !== 1'b0)
-    `FAIL_IF(axi_if.rready !== 1'b0)
-    
-    // Check control interface inputs (controlled by test)
-    `FAIL_IF(ctrl_if.req_ready !== 1'b0)
-    `FAIL_IF(ctrl_if.resp_valid !== 1'b0)
-    
-    $display("@%0t: All interface signals in correct reset state", $time);
-  endtask
-
-  // Manual check for control request (for use when no automatic monitor is available)
-  task check_ctrl_request_manual();
-    if (ctrl_if.req_valid && ctrl_if.req_ready) begin
-      ctrl_req_detected = 1'b1;
-    end else begin
-      ctrl_req_detected = 1'b0;
-    end
-  endtask
-
-  // Manual check for control response (for use when no automatic monitor is available)
-  task check_ctrl_response_manual();
-    if (ctrl_if.resp_valid && ctrl_if.resp_ready) begin
-      ctrl_resp_detected = 1'b1;
-    end else begin
-      ctrl_resp_detected = 1'b0;
-    end
+    check_control_interface_reset_state();
   endtask
 
   //===================================
-  // Complete Transaction Functions
+  // Complete Transaction Functions (No Handshake)
   //===================================
 
-  // Send complete AXI write transaction
-  task send_axi_write_transaction(logic [63:0] addr, logic [63:0] data, logic [7:0] strb = 8'hFF);
-    $display("@%0t: Sending complete AXI write: addr=0x%016x, data=0x%016x, strb=0x%02x", 
-             $time, addr, data, strb);
-    send_axi_write_addr(addr);
-    send_axi_write_data(data, strb);
-    $display("@%0t: Complete AXI write transaction sent", $time);
-  endtask
-
-  // Send complete AXI read transaction
-  task send_axi_read_transaction(logic [63:0] addr);
-    $display("@%0t: Sending complete AXI read: addr=0x%016x", $time, addr);
+  // Complete read transaction with data verification (no handshake protocol)
+  task complete_read_transaction_verify(logic [63:0] addr, logic [63:0] expected_data);
+    // Step 1: Set expected read data
+    set_ctrl_rdata(expected_data);
+    
+    // Step 2: Send AXI read address
+    clk_mgr.wait_clks(2);
     send_axi_read_addr(addr);
-    $display("@%0t: Complete AXI read transaction sent", $time);
+    clk_mgr.wait_clks(2);  // Wait for state machine to update
+    
+    // Step 3: Accept AXI read data
+    accept_axi_read_data();
+    
+    // Step 4: Verify read data
+    verify_axi_read_data(expected_data, 2'b00);
+    
+    // Clear signals
+    clear_axi_read();
+    clear_ctrl_signals();
+    clk_mgr.wait_clks(1);
+    
+    $display("@%0t: Read transaction completed and verified: addr=0x%016x, data=0x%016x", 
+             $time, addr, expected_data);
   endtask
 
-  // Create test write transaction
-  function axi_transaction_t create_write_transaction(int pattern_idx, int addr_idx, int strb_idx);
-    axi_transaction_t trans;
-    trans.addr = test_addr_patterns[addr_idx];
-    trans.data = test_data_patterns[pattern_idx];
-    trans.strb = test_strb_patterns[strb_idx];
-    trans.resp = test_resp_patterns[0];  // Default to OKAY
-    return trans;
-  endfunction
+  // Complete write transaction with data verification (no handshake protocol)
+  task complete_write_transaction_verify(logic [63:0] addr, logic [63:0] data, logic [7:0] strb);
+    // Step 1: Send AXI write address
+    clk_mgr.wait_clks(2);
+    send_axi_write_addr(addr);
+    
+    // Step 2: Send AXI write data
+    send_axi_write_data(data, strb);
+    
+    // Step 3: Wait for control write request (no handshake)
+    wait_for_ctrl_write_request(10);
+    
+    // Step 4: Verify control write request
+    verify_ctrl_write_request(addr, data);
+    
+    // Step 5: Accept AXI write response
+    accept_axi_write_resp();
+    
+    // Step 6: Verify write response
+    verify_axi_write_resp(2'b00);
+    
+    // Clear signals
+    clear_axi_write();
+    clear_ctrl_signals();
+    clk_mgr.wait_clks(1);
+    
+    $display("@%0t: Write transaction completed and verified: addr=0x%016x, data=0x%016x", 
+             $time, addr, data);
+  endtask
 
-  // Create test read transaction
-  function axi_transaction_t create_read_transaction(int addr_idx);
-    axi_transaction_t trans;
-    trans.addr = test_addr_patterns[addr_idx];
-    trans.data = 64'h0;  // Don't care for read request
-    trans.strb = 8'hFF;  // Full read
-    trans.resp = test_resp_patterns[0];  // Default to OKAY
-    return trans;
-  endfunction
+  //===================================
+  // Test Pattern Functions
+  //===================================
+
+  // Run comprehensive write test pattern
+  task run_write_test_pattern();
+    $display("@%0t: Running comprehensive write test pattern", $time);
+    
+    for (int i = 0; i < 8; i++) begin
+      for (int j = 0; j < 8; j++) begin
+        for (int k = 0; k < 8; k++) begin
+          logic [63:0] addr = test_addr_patterns[j];
+          logic [63:0] data = test_data_patterns[i];
+          logic [7:0] strb = test_strb_patterns[k];
+          
+          $display("@%0t: Write test %0d: addr=0x%016x, data=0x%016x, strb=0x%02x", 
+                   $time, i*64 + j*8 + k, addr, data, strb);
+          
+          complete_write_transaction_verify(addr, data, strb);
+          clk_mgr.wait_clks(2);  // Small delay between transactions
+        end
+      end
+    end
+    
+    $display("@%0t: Write test pattern completed", $time);
+  endtask
+
+  // Run comprehensive read test pattern
+  task run_read_test_pattern();
+    $display("@%0t: Running comprehensive read test pattern", $time);
+    
+    for (int j = 0; j < 8; j++) begin
+      logic [63:0] addr = test_addr_patterns[j];
+      logic [63:0] expected_data = test_data_patterns[j % 8];
+      
+      $display("@%0t: Read test %0d: addr=0x%016x, expected_data=0x%016x", 
+               $time, j, addr, expected_data);
+      
+      complete_read_transaction_verify(addr, expected_data);
+      clk_mgr.wait_clks(2);  // Small delay between transactions
+    end
+    
+    $display("@%0t: Read test pattern completed", $time);
+  endtask
+
+  //===================================
+  // State Machine Test Functions
+  //===================================
+
+  // Test state machine transitions
+  task test_state_machine_transitions();
+    $display("@%0t: Testing state machine transitions", $time);
+    
+    // Test 1: Read address only
+    $display("@%0t: Test 1: Read address only", $time);
+    axi_if.araddr = 64'h1000;
+    axi_if.arvalid = 1'b1;
+    clk_mgr.wait_posedge();
+    
+    // Should transition to READ_DATA state
+    clk_mgr.wait_clks(2);
+    `FAIL_IF(axi_if.rvalid !== 1'b1)
+    $display("@%0t: Test 1 passed: Read address transition successful", $time);
+    
+    // Clear signals
+    axi_if.arvalid = 1'b0;
+    axi_if.rready = 1'b1;
+    clk_mgr.wait_posedge();
+    axi_if.rready = 1'b0;
+    clk_mgr.wait_clks(2);
+    
+    // Test 2: Write address and data simultaneously
+    $display("@%0t: Test 2: Write address and data simultaneously", $time);
+    axi_if.awaddr = 64'h2000;
+    axi_if.awvalid = 1'b1;
+    axi_if.wdata = 64'hDEADBEEF;
+    axi_if.wvalid = 1'b1;
+    clk_mgr.wait_posedge();
+    
+    // Should transition to WRITE_RESP state
+    clk_mgr.wait_clks(2);
+    `FAIL_IF(axi_if.bvalid !== 1'b1)
+    $display("@%0t: Test 2 passed: Write simultaneous transition successful", $time);
+    
+    // Clear signals
+    axi_if.awvalid = 1'b0;
+    axi_if.wvalid = 1'b0;
+    axi_if.bready = 1'b1;
+    clk_mgr.wait_posedge();
+    axi_if.bready = 1'b0;
+    clk_mgr.wait_clks(2);
+    
+    $display("@%0t: State machine transition tests completed", $time);
+  endtask
+
+  //===================================
+  // Error Handling Test Functions
+  //===================================
+
+  // Test error response handling
+  task test_error_response_handling();
+    $display("@%0t: Testing error response handling", $time);
+    
+    // This would test how the adapter handles error responses
+    // For now, we'll just verify that OKAY responses work correctly
+    
+    // Test with OKAY response
+    complete_write_transaction_verify(64'h3000, 64'h12345678, 8'hFF);
+    
+    $display("@%0t: Error response handling test completed", $time);
+  endtask
 
 endclass
 

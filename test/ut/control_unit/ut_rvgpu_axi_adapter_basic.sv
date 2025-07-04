@@ -37,7 +37,7 @@ module ut_rvgpu_axi_adapter_basic_unit_test;
   //===================================
   
   host_if #(.DATA_WIDTH(64), .ADDR_WIDTH(64)) axi_if();
-  control_if #(.ADDR_WIDTH(64), .DATA_WIDTH(64)) ctrl_if();
+  control_if #(.ADDR_WIDTH(64), .DATA_WIDTH(64)) ctrl_cp();
 
   // DUT instance
   rvgpu_axi_adapter #(
@@ -47,7 +47,7 @@ module ut_rvgpu_axi_adapter_basic_unit_test;
     .clk(clk),
     .rst_n(rst_n),
     .axi_if(axi_if.slave),
-    .ctrl_if(ctrl_if.axiadapter_port)
+    .ctrl_cp(ctrl_cp.axiadapter_port)
   );
 
   // Test base class instance
@@ -79,7 +79,7 @@ module ut_rvgpu_axi_adapter_basic_unit_test;
     clk_mgr.initialize(clk_rst_if);
     
     // Create test base with clock manager
-    test_base = new(axi_if, ctrl_if, clk_rst_if, clk_mgr);
+    test_base = new(axi_if, ctrl_cp, clk_rst_if, clk_mgr);
     
     
     $display("@%0t: Build completed", $time);
@@ -112,7 +112,7 @@ module ut_rvgpu_axi_adapter_basic_unit_test;
     // Clear all signals
     test_base.clear_axi_write();
     test_base.clear_axi_read();
-    test_base.clear_ctrl_response();
+    test_base.clear_ctrl_signals();
     
     $display("@%0t: Teardown completed", $time);
   endtask
@@ -172,31 +172,8 @@ module ut_rvgpu_axi_adapter_basic_unit_test;
      test_addr = 64'h1000;
      test_data = 64'hDEADBEEFCAFEBABE;
      
-     // Step 1: Send AXI write address
-     clk_mgr.wait_clks(2);
-     $display("@%0t: DUT write state before address: %0d", $time, dut.write_state_q);
-     test_base.send_axi_write_addr(test_addr);
-     $display("@%0t: DUT write state after address: %0d", $time, dut.write_state_q);
-     
-     // Step 2: Send AXI write data
-     test_base.send_axi_write_data(test_data);
-     clk_mgr.wait_clks(1);  // Wait for state machine to update
-     $display("@%0t: DUT write state after data: %0d", $time, dut.write_state_q);
-     
-     // Step 3: Accept control request (DUT should send this after receiving write data)
-     test_base.accept_ctrl_request();
-     $display("@%0t: DUT write state after control request: %0d", $time, dut.write_state_q);
-     
-     // Step 4: Send control response (this should trigger AXI write response)
-     clk_mgr.wait_clks(1);
-     $display("@%0t: DUT write state before control response: %0d", $time, dut.write_state_q);
-     $display("@%0t: ctrl_if.resp_ready before sending response: %b", $time, ctrl_if.resp_ready);
-     $display("@%0t: ctrl_req_is_write: %b", $time, dut.ctrl_req_is_write);
-     $display("@%0t: write_ctrl_req: %b", $time, dut.write_ctrl_req);
-     test_base.send_ctrl_response(test_data);
-     
-     // Step 5: Accept AXI write response
-     test_base.accept_axi_write_resp();
+     // Use the new complete write transaction function
+     test_base.complete_write_transaction_verify(test_addr, test_data, 8'hFF);
      
      $display("@%0t: Basic AXI write test completed", $time);
    `SVTEST_END
@@ -208,22 +185,8 @@ module ut_rvgpu_axi_adapter_basic_unit_test;
      test_addr = 64'h2000;
      test_data = 64'h123456789ABCDEF0;
      
-     // Fork concurrent processes
-     fork
-       begin
-         // Host side: Send AXI read transaction
-         clk_mgr.wait_clks(2);
-         test_base.send_axi_read_addr(test_addr);
-         test_base.accept_axi_read_data();
-       end
-       
-       begin
-         // Control processor side: Handle the request
-         test_base.accept_ctrl_request();
-         clk_mgr.wait_clks(1);
-         test_base.send_ctrl_response(test_data);
-       end
-     join
+     // Use the new complete read transaction function
+     test_base.complete_read_transaction_verify(test_addr, test_data);
      
      $display("@%0t: Basic AXI read test completed", $time);
    `SVTEST_END

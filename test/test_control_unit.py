@@ -81,3 +81,22 @@ def test_control_unit_rvgpu_axi_adapter_data_tests(datafiles, simulator):
     """
     run_testcase(datafiles, simulator, 'ut_rvgpu_axi_adapter_data_tests.sv')
 
+@all_files_in_dir('ut/control_unit')
+@all_available_simulators()
+def test_control_unit_rvgpu_command_processor_basic(datafiles, simulator):
+    """
+    Basic functionality test for RVGPU Command Processor.
+    Tests fundamental command processing logic, register access,
+    Job Dispatcher interface, and basic state management.
+    
+    Test Coverage:
+    - Reset state verification
+    - Register read/write operations (MMU pagetable, Command packet, Control, Status)
+    - CP-JD handshake protocol (enable, reset, address passing)
+    - Error handling and interrupt generation
+    - State machine transitions (IDLE → RUNNING → IDLE)
+    - Automatic control signal management (start bit auto-clear)
+    - Status register updates based on JD feedback
+    """
+    run_testcase(datafiles, simulator, 'ut_rvgpu_command_processor_basic.sv')
+

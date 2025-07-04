@@ -18,6 +18,7 @@
 
 `include "rvgpu_control_unit_pkg.svh"
 `include "rvgpu_control_unit_if.svh"
+`include "rvgpu_internal_noc_if.svh"
 
 `ifndef RVGPU_CONTROL_UNIT_PKG_IMPORTED
 `define RVGPU_CONTROL_UNIT_PKG_IMPORTED
@@ -261,8 +262,8 @@ module rvgpu_job_dispatcher #(
         end else begin
             if (current_state == DISP_PAYLOAD_FETCH) begin
                 if (noc_state == NOC_PROC_RESP && noc_if.m_resp_valid && noc_if.m_resp_last) begin
-                    // 存储Payload数据
-                    current_payload <= noc_if.m_resp_data[CONTROL_UNIT_CONFIG.max_payload_size*8-1:0];
+                    // 存储Payload数据（限制在NOC数据宽度内）
+                    current_payload <= noc_if.m_resp_data[255:0];
                     payload_fetch_done <= 1'b1;
                 end
             end else begin

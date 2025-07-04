@@ -24,46 +24,36 @@
 //=============================================================================
 
 //=============================================================================
-// Control Interface - AXI Adapter ↔ Command Processor
+// Control Interface - AXI Adapter <-> Command Processor
 // 用于AXI Adapter与Command Processor之间的寄存器访问
 //=============================================================================
 interface control_if #(
     parameter int ADDR_WIDTH = 64,
     parameter int DATA_WIDTH = 64
 );
-    // Request Channel
-    logic                    req_valid;
-    logic [ADDR_WIDTH-1:0]   req_addr;
-    logic [DATA_WIDTH-1:0]   req_data;
-    logic [7:0]              req_strb;
-    logic                    req_we;
-    logic                    req_ready;
+    // Write Control Signals (AXI Adapter → Command Processor)
+    logic                    ctrl_we;                   // 写使能
+    logic [ADDR_WIDTH-1:0]   ctrl_addr;                 // 地址
+    logic [DATA_WIDTH-1:0]   ctrl_wdata;                // 写数据
     
-    // Response Channel
-    logic                    resp_valid;
-    logic [DATA_WIDTH-1:0]   resp_data;
-    logic [1:0]              resp_status;
-    logic                    resp_ready;
+    // Read Data Signal (Command Processor → AXI Adapter)
+    logic [DATA_WIDTH-1:0]   ctrl_rdata;                // 读数据
     
     // AXI Adapter port (initiates transactions)
     modport axiadapter_port (
-        output req_valid, req_addr, req_data, req_strb, req_we,
-        input  req_ready,
-        input  resp_valid, resp_data, resp_status,
-        output resp_ready
+        output ctrl_we, ctrl_addr, ctrl_wdata,
+        input  ctrl_rdata
     );
     
     // Command Processor port (responds to transactions)
     modport cp_port (
-        input  req_valid, req_addr, req_data, req_strb, req_we,
-        output req_ready,
-        output resp_valid, resp_data, resp_status,
-        input  resp_ready
+        input  ctrl_we, ctrl_addr, ctrl_wdata,
+        output ctrl_rdata
     );
 endinterface : control_if
 
 //=============================================================================
-// Job Dispatcher Interface - Command Processor ↔ Job Dispatcher
+// Job Dispatcher Interface - Command Processor <-> Job Dispatcher
 // 用于Command Processor与Job Dispatcher之间的控制通信
 //=============================================================================
 interface job_dispatcher_if;

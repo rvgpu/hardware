@@ -26,7 +26,6 @@ import rvgpu_control_unit_pkg::*;
 
 //=============================================================================
 // RVGPU AXI-Lite to Control Interface Adapter
-// 实现标准AXI4-Lite协议到内部control_if的转换
 //=============================================================================
 module rvgpu_axi_adapter #(
     parameter int ADDR_WIDTH = 64,
@@ -40,358 +39,255 @@ module rvgpu_axi_adapter #(
     host_if.slave axi_if,
     
     // Control Interface to Command Processor
-    control_if.axiadapter_port ctrl_if
+    control_if.axiadapter_port ctrl_cp
 );
 
     //=============================================================================
     // Local Parameters and Types
     //=============================================================================
     
-    // AXI4-Lite写通道状态机
-    typedef enum logic [2:0] {
-        W_IDLE      = 3'b000,   // 空闲状态
-        W_ADDR      = 3'b001,   // 接收写地址
-        W_DATA      = 3'b010,   // 接收写数据
-        W_CTRL_REQ  = 3'b011,   // 发送控制请求
-        W_CTRL_RESP = 3'b100,   // 等待控制响应
-        W_BRESP     = 3'b101    // 发送写响应
-    } write_state_t;
-    
-    // AXI4-Lite读通道状态机
-    typedef enum logic [2:0] {
-        R_IDLE      = 3'b000,   // 空闲状态
-        R_ADDR      = 3'b001,   // 接收读地址
-        R_CTRL_REQ  = 3'b010,   // 发送控制请求
-        R_CTRL_RESP = 3'b011,   // 等待控制响应
-        R_DATA      = 3'b100    // 发送读数据
-    } read_state_t;
-    
+    // 状态位编码 - 状态值直接对应AXI信号输出
+    // 例如：STATE_EXPECT_RD=5'b10000 表示 axi_if.arready=1, 其他信号=0
+    localparam STATE_BITS       = 5;
+    localparam STATE_EXPECT_RD  = 5'b10000;  // 等待读地址 (arready=1)
+    localparam STATE_READ_DATA  = 5'b00000;  // 读数据阶段 (所有信号=0)
+    localparam STATE_READ_RESP  = 5'b00010;  // 读响应阶段 (rvalid=1)
+    localparam STATE_EXPECT_WR  = 5'b01100;  // 等待写地址和数据 (awready=1, wready=1)
+    localparam STATE_EXPECT_AW  = 5'b01000;  // 等待写地址 (awready=1)
+    localparam STATE_EXPECT_W   = 5'b00100;  // 等待写数据 (wready=1)
+    localparam STATE_WRITE_RESP = 5'b00001;  // 写响应阶段 (bvalid=1)
+
+    // 状态位定义 - 每个位对应一个AXI信号
+    localparam STATE_BIT_AR = 4;  // 读地址就绪 (axi_if.arready)
+    localparam STATE_BIT_AW = 3;  // 写地址就绪 (axi_if.awready)
+    localparam STATE_BIT_W  = 2;  // 写数据就绪 (axi_if.wready)
+    localparam STATE_BIT_R  = 1;  // 读数据有效 (axi_if.rvalid)
+    localparam STATE_BIT_B  = 0;  // 写响应有效 (axi_if.bvalid)
+
     //=============================================================================
     // Internal Signals and Registers
     //=============================================================================
     
     // 状态机寄存器
-    write_state_t write_state_q, write_state_d;
-    read_state_t  read_state_q,  read_state_d;
+    logic [STATE_BITS-1:0]  state_r, state_nxt;
+    logic                   state_clken;
     
-    // 写事务寄存器
-    logic [ADDR_WIDTH-1:0]      write_addr_q, write_addr_d;
-    logic [DATA_WIDTH-1:0]      write_data_q, write_data_d;
-    logic [DATA_WIDTH/8-1:0]    write_strb_q, write_strb_d;
+    // 地址和数据寄存器
+    reg [ADDR_WIDTH-1:0]    addr_r, addr_nxt;
+    reg [DATA_WIDTH-1:0]    data_r, data_nxt;
+    reg [DATA_WIDTH/8-1:0]  strb_r, strb_nxt;
+    reg [1:0]               resp_r, resp_nxt;
     
-    // 读事务寄存器
-    logic [ADDR_WIDTH-1:0]      read_addr_q, read_addr_d;
-    logic [DATA_WIDTH-1:0]      read_data_q, read_data_d;
-    logic [1:0]                 read_resp_q, read_resp_d;
-    
-    // 控制接口仲裁信号
-    logic write_ctrl_req, read_ctrl_req;
-    logic ctrl_req_is_write;
-    logic current_op_is_write;  // 记住当前操作是写还是读
+    // 控制信号
+    reg                     addr_clken;
+    reg                     data_clken;
+    reg                     resp_clken;
+    reg                     ctrl_we_r, ctrl_we_nxt;
+    reg                     ctrl_re;
     
     //=============================================================================
-    // 1. 时序逻辑 - 状态寄存器更新
+    // 握手信号定义
     //=============================================================================
     
+    wire aw_accept = axi_if.awvalid && axi_if.awready;
+    wire w_accept  = axi_if.wvalid  && axi_if.wready;
+    wire b_accept  = axi_if.bvalid  && axi_if.bready;
+    wire ar_accept = axi_if.arvalid && axi_if.arready;
+    wire r_accept  = axi_if.rvalid  && axi_if.rready;
+
+    //=============================================================================
+    // 组合逻辑 - 状态机和输出控制
+    //=============================================================================
+    
+    always_comb begin : comb_logic
+        // 默认值
+        state_nxt = state_r;
+        state_clken = 1'b0;
+        addr_clken = 1'b0;
+        data_clken = 1'b0;
+        resp_clken = 1'b0;
+        ctrl_we_nxt = 1'b0;
+        ctrl_re = 1'b0;
+        
+        // AXI接口输出（基于状态位）
+        axi_if.arready = state_r[STATE_BIT_AR];
+        axi_if.awready = state_r[STATE_BIT_AW];
+        axi_if.wready  = state_r[STATE_BIT_W ];
+        axi_if.rvalid  = state_r[STATE_BIT_R ];
+        axi_if.bvalid  = state_r[STATE_BIT_B ];
+        
+        // 读数据输出
+        axi_if.rdata = data_r;
+        axi_if.rresp = resp_r;
+        axi_if.rlast = 1'b1;  // AXI-Lite总是单次传输
+        
+        // 写响应输出
+        axi_if.bresp = resp_r;
+        
+        // 控制接口输出
+        ctrl_cp.ctrl_we = ctrl_we_r;
+        ctrl_cp.ctrl_addr = addr_r;
+        ctrl_cp.ctrl_wdata = data_r;
+
+        case (state_r)
+            STATE_EXPECT_RD: begin
+                // 等待读地址或写请求
+                if (ar_accept) begin
+                    state_nxt = STATE_READ_DATA;
+                    state_clken = 1'b1;
+                    addr_clken = 1'b1;
+                    resp_clken = 1'b1;
+                end else if (axi_if.arvalid) begin
+                    // 有读请求但未握手，保持状态
+                    state_nxt = STATE_EXPECT_RD;
+                end else if (axi_if.awvalid || axi_if.wvalid) begin
+                    state_nxt = STATE_EXPECT_WR;
+                    state_clken = 1'b1;
+                end
+            end
+
+            STATE_READ_DATA: begin
+                // 读数据阶段：直接获取CP数据并转到响应状态
+                ctrl_re = 1'b1;
+                data_clken = 1'b1;
+                state_nxt = STATE_READ_RESP;
+                state_clken = 1'b1;
+            end
+
+            STATE_READ_RESP: begin
+                // 读响应阶段：等待主机接收数据
+                if (r_accept) begin
+                    state_nxt = STATE_EXPECT_RD;
+                    state_clken = 1'b1;
+                end
+            end
+
+            STATE_EXPECT_WR: begin
+                // 等待写地址和数据
+                if (aw_accept && w_accept) begin
+                    // 同时收到地址和数据，直接发送给CP
+                    state_nxt = STATE_WRITE_RESP;
+                    state_clken = 1'b1;
+                    addr_clken = 1'b1;
+                    data_clken = 1'b1;
+                    resp_clken = 1'b1;
+                    ctrl_we_nxt = 1'b1;
+                end else if (aw_accept) begin
+                    // 只收到地址
+                    state_nxt = STATE_EXPECT_W;
+                    state_clken = 1'b1;
+                    addr_clken = 1'b1;
+                    resp_clken = 1'b1;
+                end else if (w_accept) begin
+                    // 只收到数据
+                    state_nxt = STATE_EXPECT_AW;
+                    state_clken = 1'b1;
+                    data_clken = 1'b1;
+                end else if (axi_if.awvalid || axi_if.wvalid) begin
+                    // 有写请求但未握手，保持状态
+                    state_nxt = STATE_EXPECT_WR;
+                end else if (axi_if.arvalid) begin
+                    // 切换到读状态
+                    state_nxt = STATE_EXPECT_RD;
+                    state_clken = 1'b1;
+                end
+            end
+
+            STATE_EXPECT_AW: begin
+                // 等待写地址
+                if (aw_accept) begin
+                    state_nxt = STATE_WRITE_RESP;
+                    state_clken = 1'b1;
+                    addr_clken = 1'b1;
+                    resp_clken = 1'b1;
+                    ctrl_we_nxt = 1'b1;
+                end
+            end
+
+            STATE_EXPECT_W: begin
+                // 等待写数据
+                if (w_accept) begin
+                    state_nxt = STATE_WRITE_RESP;
+                    state_clken = 1'b1;
+                    data_clken = 1'b1;
+                    ctrl_we_nxt = 1'b1;
+                end
+            end
+
+            STATE_WRITE_RESP: begin
+                // 写响应阶段：等待主机接收响应
+                if (b_accept) begin
+                    state_nxt = STATE_EXPECT_RD;
+                    state_clken = 1'b1;
+                end else begin
+                    // 保持写请求有效直到响应完成
+                    ctrl_we_nxt = 1'b1;
+                end
+            end
+
+            default: begin
+                state_nxt = STATE_EXPECT_RD;
+                state_clken = 1'b1;
+            end
+        endcase
+
+        // 地址更新逻辑
+        if (aw_accept) begin
+            addr_nxt = axi_if.awaddr;
+        end else if (ar_accept) begin
+            addr_nxt = axi_if.araddr;
+        end else begin
+            addr_nxt = addr_r;
+        end
+
+        // 数据更新逻辑
+        if (w_accept) begin
+            data_nxt = axi_if.wdata;
+            strb_nxt = axi_if.wstrb;
+        end else if (ctrl_re) begin
+            data_nxt = ctrl_cp.ctrl_rdata;  // 直接从CP获取读数据
+            strb_nxt = {(DATA_WIDTH/8){1'b1}};
+        end else begin
+            data_nxt = data_r;
+            strb_nxt = strb_r;
+        end
+
+        // 响应更新逻辑
+        if (aw_accept || ar_accept) begin
+            resp_nxt = 2'b00;  // OKAY
+        end else begin
+            resp_nxt = resp_r;
+        end
+    end
+
+    //=============================================================================
+    // 时序逻辑 - 寄存器更新
+    //=============================================================================
+    
+    // 复位逻辑 - 同步复位
     always_ff @(posedge clk) begin
         if (!rst_n) begin
-            // 复位所有状态寄存器
-            write_state_q <= W_IDLE;
-            read_state_q  <= R_IDLE;
-            
-            write_addr_q <= '0;
-            write_data_q <= '0;
-            write_strb_q <= '0;
-            
-            read_addr_q <= '0;
-            read_data_q <= '0;
-            read_resp_q <= 2'b00;
-            
-            current_op_is_write <= 1'b0;  // 初始化操作类型
+            state_r <= STATE_EXPECT_RD;
+            ctrl_we_r <= 1'b0;
+            addr_r <= {ADDR_WIDTH{1'b0}};
         end else begin
-            // 更新状态寄存器
-            write_state_q <= write_state_d;
-            read_state_q  <= read_state_d;
-            
-            write_addr_q <= write_addr_d;
-            write_data_q <= write_data_d;
-            write_strb_q <= write_strb_d;
-            
-            read_addr_q <= read_addr_d;
-            read_data_q <= read_data_d;
-            read_resp_q <= read_resp_d;
-            
-            // 更新操作类型
-            if (write_ctrl_req) begin
-                current_op_is_write <= 1'b1;
-            end else if (read_ctrl_req) begin
-                current_op_is_write <= 1'b0;
+            if (state_clken) begin
+                state_r <= state_nxt;
+            end
+            ctrl_we_r <= ctrl_we_nxt;
+            if (addr_clken) begin
+                addr_r <= addr_nxt;
             end
         end
     end
-    
-    //=============================================================================
-    // 2.组合逻辑 - 写通道状态转换
-    //=============================================================================
-    
-    always_comb begin
-        // 默认保持当前状态和寄存器值
-        write_state_d = write_state_q;
-        write_addr_d  = write_addr_q;
-        write_data_d  = write_data_q;
-        write_strb_d  = write_strb_q;
-        
-        write_ctrl_req = 1'b0;
-        
-        case (write_state_q)
-            W_IDLE: begin
-                if (axi_if.awvalid) begin
-                    // 接收到写地址请求
-                    write_state_d = W_ADDR;
-                end
-            end
-            
-            W_ADDR: begin
-                if (axi_if.awvalid && axi_if.awready) begin
-                    // 地址握手完成，保存地址信息
-                    write_addr_d = axi_if.awaddr;
-                    
-                    // AXI-Lite: 直接转到数据状态
-                    write_state_d = W_DATA;
-                end
-            end
-            
-            W_DATA: begin
-                if (axi_if.wvalid && axi_if.wready) begin
-                    // 数据握手完成，保存数据信息
-                    write_data_d = axi_if.wdata;
-                    write_strb_d = axi_if.wstrb;
-                    write_state_d = W_CTRL_REQ;
-                end
-            end
-            
-            W_CTRL_REQ: begin
-                write_ctrl_req = 1'b1;
-                if (ctrl_if.req_valid && ctrl_if.req_ready) begin
-                    // 控制请求发送成功
-                    write_state_d = W_CTRL_RESP;
-                end
-            end
-            
-            W_CTRL_RESP: begin
-                if (ctrl_if.resp_valid && ctrl_if.resp_ready) begin
-                    // 控制响应收到
-                    write_state_d = W_BRESP;
-                end
-            end
-            
-            W_BRESP: begin
-                if (axi_if.bvalid && axi_if.bready) begin
-                    // 写响应握手完成
-                    write_state_d = W_IDLE;
-                end
-            end
-            
-            default: begin
-                write_state_d = W_IDLE;
-            end
-        endcase
-    end
-    
-    //=============================================================================
-    // 2. 组合逻辑 - 读通道状态转换
-    //=============================================================================
-    
-    always_comb begin
-        // 默认保持当前状态和寄存器值
-        read_state_d = read_state_q;
-        read_addr_d  = read_addr_q;
-        read_data_d  = read_data_q;
-        read_resp_d  = read_resp_q;
-        
-        read_ctrl_req = 1'b0;
-        
-        case (read_state_q)
-            R_IDLE: begin
-                if (axi_if.arvalid) begin
-                    // 接收到读地址请求
-                    read_state_d = R_ADDR;
-                end
-            end
-            
-            R_ADDR: begin
-                if (axi_if.arvalid && axi_if.arready) begin
-                    // 地址握手完成，保存地址信息
-                    read_addr_d = axi_if.araddr;
-                    read_state_d = R_CTRL_REQ;
-                end
-            end
-            
-            R_CTRL_REQ: begin
-                read_ctrl_req = 1'b1;
-                if (ctrl_if.req_valid && ctrl_if.req_ready) begin
-                    // 控制请求发送成功
-                    read_state_d = R_CTRL_RESP;
-                end
-            end
-            
-            R_CTRL_RESP: begin
-                if (ctrl_if.resp_valid && ctrl_if.resp_ready) begin
-                    // 控制响应收到，保存响应数据
-                    read_data_d = ctrl_if.resp_data;
-                    read_resp_d = ctrl_if.resp_status;
-                    read_state_d = R_DATA;
-                end
-            end
-            
-            R_DATA: begin
-                if (axi_if.rvalid && axi_if.rready) begin
-                    // 读数据握手完成
-                    read_state_d = R_IDLE;
-                end
-            end
-            
-            default: begin
-                read_state_d = R_IDLE;
-            end
-        endcase
-    end
-    
-    //=============================================================================
-    // 控制接口仲裁逻辑
-    //=============================================================================
-    
-    always_comb begin
-        // 简单的固定优先级仲裁：写优先
-        if (write_ctrl_req) begin
-            ctrl_req_is_write = 1'b1;
-        end else if (read_ctrl_req) begin
-            ctrl_req_is_write = 1'b0;
-        end else begin
-            ctrl_req_is_write = 1'b0;
+
+    always_ff @(posedge clk) begin
+        if (data_clken) begin
+            data_r <= data_nxt;
+            strb_r <= strb_nxt;
         end
-    end
-    
-    //=============================================================================
-    // 3. 组合逻辑 - AXI接口输出
-    //=============================================================================
-    
-    // 写地址通道输出
-    always_comb begin
-        axi_if.awready = 1'b0;
-        
-        case (write_state_q)
-            W_ADDR: begin
-                axi_if.awready = 1'b1;
-            end
-            default: begin
-                axi_if.awready = 1'b0;
-            end
-        endcase
-    end
-    
-    // 写数据通道输出
-    always_comb begin
-        axi_if.wready = 1'b0;
-        
-        case (write_state_q)
-            W_DATA: begin
-                axi_if.wready = 1'b1;
-            end
-            default: begin
-                axi_if.wready = 1'b0;
-            end
-        endcase
-    end
-    
-    // 写响应通道输出
-    always_comb begin
-        axi_if.bvalid = 1'b0;
-        axi_if.bresp  = 2'b00;
-        
-        case (write_state_q)
-            W_BRESP: begin
-                axi_if.bvalid = 1'b1;
-                axi_if.bresp  = ctrl_if.resp_status;
-            end
-            default: begin
-                axi_if.bvalid = 1'b0;
-                axi_if.bresp  = 2'b00;
-            end
-        endcase
-    end
-    
-    // 读地址通道输出
-    always_comb begin
-        axi_if.arready = 1'b0;
-        
-        case (read_state_q)
-            R_ADDR: begin
-                axi_if.arready = 1'b1;
-            end
-            default: begin
-                axi_if.arready = 1'b0;
-            end
-        endcase
-    end
-    
-    // 读数据通道输出
-    always_comb begin
-        axi_if.rvalid = 1'b0;
-        axi_if.rdata  = '0;
-        axi_if.rresp  = 2'b00;
-        axi_if.rlast  = 1'b0;
-        
-        case (read_state_q)
-            R_DATA: begin
-                axi_if.rvalid = 1'b1;
-                axi_if.rdata  = read_data_q;
-                axi_if.rresp  = read_resp_q;
-                axi_if.rlast  = 1'b1;  // AXI-Lite单次传输总是最后一拍
-            end
-            default: begin
-                axi_if.rvalid = 1'b0;
-                axi_if.rdata  = '0;
-                axi_if.rresp  = 2'b00;
-                axi_if.rlast  = 1'b0;
-            end
-        endcase
-    end
-    
-    //=============================================================================
-    // 2. 组合逻辑 - 控制接口输出
-    //=============================================================================
-    
-    always_comb begin
-        ctrl_if.req_valid = 1'b0;
-        ctrl_if.req_addr  = '0;
-        ctrl_if.req_data  = '0;
-        ctrl_if.req_strb  = '0;
-        ctrl_if.req_we    = 1'b0;
-        ctrl_if.resp_ready = 1'b0;
-        
-        if (write_ctrl_req) begin
-            // 写请求
-            ctrl_if.req_valid = 1'b1;
-            ctrl_if.req_addr  = write_addr_q;
-            ctrl_if.req_data  = write_data_q;
-            ctrl_if.req_strb  = write_strb_q;
-            ctrl_if.req_we    = 1'b1;
-            
-        end else if (read_ctrl_req) begin
-            // 读请求
-            ctrl_if.req_valid = 1'b1;
-            ctrl_if.req_addr  = read_addr_q;
-            ctrl_if.req_data  = '0;
-            ctrl_if.req_strb  = {(DATA_WIDTH/8){1'b1}};  // 读操作全选择
-            ctrl_if.req_we    = 1'b0;
-        end
-        
-        // 设置resp_ready基于当前操作类型和状态
-        if (current_op_is_write && write_state_q == W_CTRL_RESP) begin
-            ctrl_if.resp_ready = 1'b1;
-        end else if (!current_op_is_write && read_state_q == R_CTRL_RESP) begin
-            ctrl_if.resp_ready = 1'b1;
+        if (resp_clken) begin
+            resp_r <= resp_nxt;
         end
     end
 

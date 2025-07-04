@@ -23,7 +23,12 @@ import subprocess
 from utils import *
 
 def run_case(testfile):
-    subprocess.check_call(svunit_command('vcs', testfile))  
+    cmd = svunit_command('vcs', testfile)
+    hardware_dir = os.environ.get('RVGPU_HARDWARE')
+    cmd.append("-c")
+    cmd.append("+incdir+" + str(hardware_dir) + "/test/ut/control_unit")
+    print(cmd)
+    subprocess.check_call(cmd)
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:

@@ -122,6 +122,21 @@ class rvgpu_clk_manager;
     #(time_ns);
   endtask
   
+  // Hold time (alias for wait_ns)
+  virtual task automatic hold_time(int time_ns = 1);
+    #(time_ns);
+  endtask
+
+  // Wait for posedge and delay
+  virtual task automatic wait_posedge_and_delay_ns(int delay_ns = 1);
+    wait_posedge();
+    #(delay_ns);
+  endtask
+
+  virtual task automatic delay_ns(int delay_ns = 1);
+    #(delay_ns);
+  endtask
+  
   //===========================================================================
   // Reset Control API
   //===========================================================================

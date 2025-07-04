@@ -56,6 +56,18 @@ endinterface : control_if
 // Job Dispatcher Interface - Command Processor <-> Job Dispatcher
 // 用于Command Processor与Job Dispatcher之间的控制通信
 //=============================================================================
+
+// 错误状态位定义
+// error_status[7:0] 详细错误状态位，支持多种错误类型
+// error_status[0] - MMU页面错误
+// error_status[1] - NOC通信错误  
+// error_status[2] - 非法命令类型
+// error_status[3] - Payload大小超限
+// error_status[4] - 地址未对齐
+// error_status[5] - 阶段错误
+// error_status[6] - 超时错误（预留）
+// error_status[7] - 未知错误（预留）
+
 interface job_dispatcher_if;
     // Control Channel (Command Processor → Job Dispatcher)
     logic                    enable;         // 使能信号
@@ -65,25 +77,26 @@ interface job_dispatcher_if;
     
     // Status Channel (Job Dispatcher → Command Processor)
     logic                    complete;       // 完成信号
-    logic                    error;          // 错误信号
+    logic                    error;          // 错误信号（综合错误状态）
+    logic [7:0]              error_status;   // 详细错误状态位
     logic                    busy;           // 忙碌状态
     
     // Command Processor port (controls Job Dispatcher)
     modport cp_port (
         output enable, reset, package_addr, mmu_addr,
-        input  complete, error, busy
+        input  complete, error, error_status, busy
     );
     
     // Job Dispatcher port (receives control signals)
     modport jd_port (
         input  enable, reset, package_addr, mmu_addr,
-        output complete, error, busy
+        output complete, error, error_status, busy
     );
 endinterface : job_dispatcher_if
 
 //=============================================================================
 // MMU Interface - Command Processor ↔ MMU
-// 用于Command Processor与MMU之间的地址转换请求
+// 用于Command Processor与MMU之间的地址转换请求和配置
 //=============================================================================
 interface mmu_if #(
     parameter int VA_WIDTH = 48,
@@ -103,20 +116,26 @@ interface mmu_if #(
     logic [1:0]              resp_status;
     logic                    resp_ready;
     
-    // Command Processor port (requests address translation)
+    // Configuration Channel (新增)
+    logic                    cfg_en;         // 配置使能
+    logic [PA_WIDTH-1:0]     cfg_base_addr; // 页表基地址
+    
+    // Command Processor port (requests address translation and configures MMU)
     modport cp_port (
         output req_valid, req_vaddr, req_read, req_write,
         input  req_ready,
         input  resp_valid, resp_paddr, resp_hit, resp_status,
-        output resp_ready
+        output resp_ready,
+        output cfg_en, cfg_base_addr
     );
     
-    // MMU port (performs address translation)
+    // MMU port (performs address translation and accepts configuration)
     modport mmu_port (
         input  req_valid, req_vaddr, req_read, req_write,
         output req_ready,
         output resp_valid, resp_paddr, resp_hit, resp_status,
-        input  resp_ready
+        input  resp_ready,
+        input  cfg_en, cfg_base_addr
     );
 endinterface : mmu_if
 

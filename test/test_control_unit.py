@@ -100,3 +100,27 @@ def test_control_unit_rvgpu_command_processor_basic(datafiles, simulator):
     """
     run_testcase(datafiles, simulator, 'ut_rvgpu_command_processor_basic.sv')
 
+@all_files_in_dir('ut/control_unit')
+@all_available_simulators()
+def test_control_unit_rvgpu_job_dispatcher_basic(datafiles, simulator):
+    """
+    Basic functionality test for RVGPU Job Dispatcher (Optimized Version).
+    Tests fundamental job dispatching logic, interface management,
+    state machine transitions, and basic Package processing.
+    
+    Test Coverage:
+    - Reset behavior verification
+    - Enable/disable operations
+    - MMU interface communication (address translation requests/responses)
+    - NOC interface communication (memory read requests/responses)
+    - Complete workflow simulation (Header fetch → Payload fetch → Task dispatch)
+    - Error handling (MMU page faults, NOC errors, retry mechanism)
+    - Multiple operations support
+    - Busy state management
+    - Timeout handling
+    - Interface monitoring and verification
+    - Retry mechanism testing
+    - Performance monitoring validation
+    """
+    run_testcase(datafiles, simulator, 'ut_rvgpu_job_dispatcher_basic.sv')
+

@@ -36,16 +36,15 @@ import rvgpu_control_unit_pkg::*;
 // 用于AXI Adapter与Command Processor之间的寄存器访问
 //=============================================================================
 interface control_if #(
-    parameter int ADDR_WIDTH = 64,
-    parameter int DATA_WIDTH = 64
+    parameter control_unit_config_t CU_CONFIG = DEFAULT_CONTROL_UNIT_CONFIG
 );
     // Write Control Signals (AXI Adapter → Command Processor)
-    logic                    ctrl_we;                   // 写使能
-    logic [ADDR_WIDTH-1:0]   ctrl_addr;                 // 地址
-    logic [DATA_WIDTH-1:0]   ctrl_wdata;                // 写数据
+    logic                                               ctrl_we;    // 写使能
+    logic [CU_CONFIG.cu_parameter.axi_addr_width-1:0]   ctrl_addr;  // 地址
+    logic [CU_CONFIG.cu_parameter.axi_data_width-1:0]   ctrl_wdata; // 写数据
     
     // Read Data Signal (Command Processor → AXI Adapter)
-    logic [DATA_WIDTH-1:0]   ctrl_rdata;                // 读数据
+    logic [CU_CONFIG.cu_parameter.axi_data_width-1:0]   ctrl_rdata; // 读数据
     
     // AXI Adapter port (initiates transactions)
     modport axiadapter_port (
@@ -107,26 +106,25 @@ endinterface : job_dispatcher_if
 // 用于Command Processor与MMU之间的地址转换请求和配置
 //=============================================================================
 interface mmu_if #(
-    parameter int VA_WIDTH = 48,
-    parameter int PA_WIDTH = 48
+    parameter control_unit_config_t CU_CONFIG = DEFAULT_CONTROL_UNIT_CONFIG
 );
     // Request Channel
-    logic                    req_valid;
-    logic [VA_WIDTH-1:0]     req_vaddr;
-    logic                    req_read;
-    logic                    req_write;
-    logic                    req_ready;
+    logic                                               req_valid;
+    logic [CU_CONFIG.mmu_parameter.va_width-1:0]        req_vaddr;
+    logic                                               req_read;
+    logic                                               req_write;
+    logic                                               req_ready;
     
     // Response Channel
-    logic                    resp_valid;
-    logic [PA_WIDTH-1:0]     resp_paddr;
-    logic                    resp_hit;
-    logic [1:0]              resp_status;
-    logic                    resp_ready;
+    logic                                               resp_valid;
+    logic [CU_CONFIG.mmu_parameter.pa_width-1:0]        resp_paddr;
+    logic                                               resp_hit;
+    logic [1:0]                                         resp_status;
+    logic                                               resp_ready;
     
-    // Configuration Channel (新增)
-    logic                    cfg_en;         // 配置使能
-    logic [PA_WIDTH-1:0]     cfg_base_addr; // 页表基地址
+    // Configuration Channel
+    logic                                               cfg_en; // 配置使能
+    logic [CU_CONFIG.mmu_parameter.pa_width-1:0]        cfg_base_addr; // 页表基地址
     
     // Command Processor port (requests address translation and configures MMU)
     modport cp_port (

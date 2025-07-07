@@ -36,8 +36,8 @@ module ut_rvgpu_axi_adapter_basic_unit_test;
   // Interface Instances
   //===================================
   
-  host_if #(.DATA_WIDTH(64), .ADDR_WIDTH(64)) axi_if();
-  control_if #(.ADDR_WIDTH(64), .DATA_WIDTH(64)) ctrl_cp();
+  host_if #(.DATA_WIDTH(`HOST_INTERFACE_DATA_WIDTH), .ADDR_WIDTH(`HOST_INTERFACE_ADDR_WIDTH)) axi_if();
+  control_if #(.CU_CONFIG(DEFAULT_CONTROL_UNIT_CONFIG)) ctrl_cp();
 
   // DUT instance
   rvgpu_axi_adapter #(

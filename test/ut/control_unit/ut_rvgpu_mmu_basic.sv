@@ -32,7 +32,7 @@ module ut_rvgpu_mmu_basic_unit_test;
   //===================================
   // Interface Instances
   //===================================
-  mmu_if #(.VA_WIDTH(48), .PA_WIDTH(48)) mmu_if();
+  mmu_if #(.CU_CONFIG(DEFAULT_CONTROL_UNIT_CONFIG)) mmu_if();
   rvgpu_internal_noc_if noc_if();
 
   // DUT instance - MMU

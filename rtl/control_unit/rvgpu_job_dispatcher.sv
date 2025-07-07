@@ -26,7 +26,7 @@ import rvgpu_control_unit_pkg::*;
 `endif // RVGPU_CONTROL_UNIT_PKG_IMPORTED
 
 module rvgpu_job_dispatcher #(
-    parameter control_unit_config_t CONTROL_UNIT_CONFIG = DEFAULT_CONTROL_UNIT_CONFIG
+    parameter control_unit_config_t CU_CONFIG = DEFAULT_CONTROL_UNIT_CONFIG
 ) (
     // Clock and Reset Interface
     input  logic clk,
@@ -80,7 +80,7 @@ module rvgpu_job_dispatcher #(
     logic [63:0] mmu_base_r, mmu_base_nxt;
     logic [47:0] mmu_paddr_r, mmu_paddr_nxt;
     command_header_t header_r, header_nxt;
-    logic [CONTROL_UNIT_CONFIG.max_payload_size*8-1:0] payload_r, payload_nxt;
+    logic [CU_CONFIG.job_dispatcher_parameter.max_payload_size*8-1:0] payload_r, payload_nxt;
     
 
     
@@ -252,7 +252,7 @@ module rvgpu_job_dispatcher #(
                                               noc_if.m_resp_data[7:0] != 8'h02 && 
                                               noc_if.m_resp_data[7:0] != 8'h03);
         error_status[ERROR_BIT_PAYLOAD_SIZE] = (phase_r == PHASE_HEADER && state_r == STATE_NOC_WAIT) && 
-                                              (noc_if.m_resp_data[31:16] > CONTROL_UNIT_CONFIG.max_payload_size);
+                                              (noc_if.m_resp_data[31:16] > CU_CONFIG.job_dispatcher_parameter.max_payload_size);
         error_status[ERROR_BIT_ADDR_ALIGN] = (phase_r == PHASE_HEADER && state_r == STATE_MMU_REQ) && 
                                             (package_addr_r[2:0] != 3'b000);
         error_status[ERROR_BIT_PHASE_ERROR] = phase_error;

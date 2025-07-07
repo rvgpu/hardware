@@ -285,7 +285,7 @@ module rvgpu_mmu_tlb #(
     //=============================================================================
     
     generate
-    if (DEBUG) begin : gen_debug
+    if (1) begin : gen_debug
         always_ff @(posedge clk) begin
             // SRAM访问调试
             if (sram_if_inst.ce && sram_if_inst.we) begin

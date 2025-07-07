@@ -25,7 +25,7 @@ import rvgpu_control_unit_pkg::*;
 `endif // RVGPU_CONTROL_UNIT_PKG_IMPORTED
 
 module rvgpu_control_unit #(
-    parameter control_unit_config_t CONTROL_UNIT_CONFIG = DEFAULT_CONTROL_UNIT_CONFIG
+    parameter control_unit_config_t CU_CONFIG = DEFAULT_CONTROL_UNIT_CONFIG
 ) (
     // Clock and Reset Interface
     input  logic clk,
@@ -47,15 +47,9 @@ module rvgpu_control_unit #(
     // cp_mmu: Command Processor <-> MMU
     // cp_noc: Command Processor <-> NOC Arbiter
     // mmu_noc: MMU <-> NOC Arbiter
-    control_if #(
-        .ADDR_WIDTH(CONTROL_UNIT_CONFIG.axi_addr_width),
-        .DATA_WIDTH(CONTROL_UNIT_CONFIG.axi_data_width)
-    ) adapter_cp();
+    control_if #(.CU_CONFIG = CU_CONFIG) adapter_cp();
     
-    mmu_if #(
-        .VA_WIDTH(CONTROL_UNIT_CONFIG.va_width),
-        .PA_WIDTH(CONTROL_UNIT_CONFIG.pa_width)
-    ) cp_mmu();
+    mmu_if #(.CU_CONFIG = CU_CONFIG) cp_mmu();
     
     rvgpu_internal_noc_if.device cp_noc();
     
@@ -64,10 +58,7 @@ module rvgpu_control_unit #(
     //=============================================================================
     // AXI Adapter Instance - AXI interface to control interface
     //=============================================================================
-    rvgpu_axi_adapter #(
-        .ADDR_WIDTH(CONTROL_UNIT_CONFIG.axi_addr_width),
-        .DATA_WIDTH(CONTROL_UNIT_CONFIG.axi_data_width)
-    ) u_axi_adapter (
+    rvgpu_axi_adapter #(.CU_CONFIG = CU_CONFIG) u_axi_adapter (
         .clk(clk),
         .rst_n(rst_n),
         .axi_if(host_axi_if),
@@ -77,9 +68,7 @@ module rvgpu_control_unit #(
     //=============================================================================
     // Command Processor Instance
     //=============================================================================
-    rvgpu_command_processor #(
-        .CONTROL_UNIT_CONFIG(CONTROL_UNIT_CONFIG)
-    ) u_command_processor (
+    rvgpu_command_processor #(.CU_CONFIG = CU_CONFIG) u_command_processor (
         .clk(clk),
         .rst_n(rst_n),
         .ctrl_if(adapter_cp.slave),
@@ -92,9 +81,7 @@ module rvgpu_control_unit #(
     // MMU Instance - Memory Management Unit
     //=============================================================================
     
-    rvgpu_mmu #(
-        .CONTROL_UNIT_CONFIG(CONTROL_UNIT_CONFIG)
-    ) u_mmu (
+    rvgpu_mmu #(.CU_CONFIG = CU_CONFIG) u_mmu (
         .clk(clk),
         .rst_n(rst_n),
         .mmu_if(cp_mmu.slave),

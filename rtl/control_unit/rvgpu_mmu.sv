@@ -22,8 +22,7 @@
 `include "rvgpu_mmu_tlb.sv"
 
 module rvgpu_mmu #(
-    parameter control_unit_config_t CONTROL_UNIT_CONFIG = DEFAULT_CONTROL_UNIT_CONFIG,
-    parameter int DEBUG = 1
+    parameter control_unit_config_t CU_CONFIG = DEFAULT_CONTROL_UNIT_CONFIG
 ) (
     // Clock and Reset Interface
     input  logic clk,
@@ -56,17 +55,22 @@ module rvgpu_mmu #(
     //=============================================================================
     
     // 地址位宽参数
-    localparam int VA_WIDTH = CONTROL_UNIT_CONFIG.va_width;
-    localparam int PA_WIDTH = CONTROL_UNIT_CONFIG.pa_width;
-    localparam int TLB_ENTRIES = CONTROL_UNIT_CONFIG.tlb_entries;
-    localparam int TLB_TAG_BITS = `RVGPU_CONST_CU_TLB_TAG_BITS;
-    localparam int PPN_BITS = `RVGPU_CONST_CU_TLB_PPN_BITS;
+    localparam int VA_WIDTH = CU_CONFIG.mmu_parameter.va_width;
+    localparam int PA_WIDTH = CU_CONFIG.mmu_parameter.pa_width;
+    localparam int TLB_ENTRIES = CU_CONFIG.mmu_parameter.tlb_entries;
+    localparam int TLB_INDEX_BITS = CU_CONFIG.mmu_parameter.tlb_index_bits;
+    localparam int PPN_BITS = CU_CONFIG.mmu_parameter.tlb_ppn_bits;
     
     // 页表相关常量
-    localparam int PAGE_OFFSET_BITS = 12;  // 4KB页大小
-    localparam int PAGE_INDEX_BITS = 9;    // 每级页表索引位数
-    localparam int PAGE_ENTRY_SIZE = 8;    // 页表条目大小（字节）
-    localparam int PAGE_ENTRY_SHIFT = 3;   // 页表条目大小对数（8字节 = 2^3）
+    localparam int PAGE_OFFSET_BITS = CU_CONFIG.mmu_parameter.page_offset_bits;
+    localparam int PAGE_INDEX_BITS = CU_CONFIG.mmu_parameter.page_index_bits;
+    localparam int TLB_TAG_BITS = CU_CONFIG.mmu_parameter.tlb_tag_bits;
+    
+    // TLB地址计算常量
+    localparam int TLB_TAG_START_BIT = VA_WIDTH - 1;
+    localparam int TLB_TAG_END_BIT = PAGE_OFFSET_BITS + TLB_INDEX_BITS;
+    localparam int TLB_INDEX_START_BIT = PAGE_OFFSET_BITS + TLB_INDEX_BITS - 1;
+    localparam int TLB_INDEX_END_BIT = PAGE_OFFSET_BITS;
     
     // 页表级别常量
     localparam int MAX_PAGE_LEVELS = 3;    // 最大页表级别
@@ -108,7 +112,7 @@ module rvgpu_mmu #(
     
     // 输出控制寄存器 - 使用寄存器控制输出
     logic tlb_lookup_valid_r, tlb_lookup_valid_nxt;
-    logic [TLB_TAG_BITS + $clog2(TLB_ENTRIES) - 1:0] tlb_lookup_addr_r, tlb_lookup_addr_nxt;
+    logic [TLB_TAG_BITS + TLB_INDEX_BITS - 1:0] tlb_lookup_addr_r, tlb_lookup_addr_nxt;
     logic tlb_update_valid_r, tlb_update_valid_nxt;
     logic [$clog2(TLB_ENTRIES)-1:0] tlb_update_addr_r, tlb_update_addr_nxt;
     tlb_entry_t tlb_update_data_r, tlb_update_data_nxt;
@@ -123,21 +127,16 @@ module rvgpu_mmu #(
     // 4. 辅助函数 - 使用位掩码进行信号验证和过滤
     //=============================================================================
     
-    // TLB地址计算函数 - 优化版本
-    function automatic logic [TLB_TAG_BITS + $clog2(TLB_ENTRIES) - 1:0] calc_tlb_addr(
+    // TLB地址计算函数 - 修复版本
+    function automatic logic [TLB_TAG_BITS + TLB_INDEX_BITS - 1:0] calc_tlb_addr(
         input logic [VA_WIDTH-1:0] vaddr
     );
         // TLB地址格式：{标签, 索引}
         // 标签：虚拟地址的高位（除去页内偏移和索引位）
         // 索引：虚拟地址的中间位（用于SRAM地址）
-        localparam int INDEX_BITS = $clog2(TLB_ENTRIES);
-        localparam int TAG_START = VA_WIDTH - 1;
-        localparam int TAG_END = PAGE_OFFSET_BITS + INDEX_BITS;
-        localparam int INDEX_START = PAGE_OFFSET_BITS + INDEX_BITS - 1;
-        localparam int INDEX_END = PAGE_OFFSET_BITS;
         
-        logic [TLB_TAG_BITS-1:0] tag = {{TLB_TAG_BITS-(TAG_START-TAG_END+1){1'b0}}, vaddr[TAG_START:TAG_END]};
-        logic [INDEX_BITS-1:0] index = vaddr[INDEX_START:INDEX_END];
+        logic [TLB_TAG_BITS-1:0] tag = vaddr[VA_WIDTH-1:PAGE_OFFSET_BITS+TLB_INDEX_BITS];
+        logic [TLB_INDEX_BITS-1:0] index = vaddr[TLB_INDEX_START_BIT:TLB_INDEX_END_BIT];
 
         return {tag, index};
     endfunction
@@ -176,7 +175,7 @@ module rvgpu_mmu #(
         .TLB_ENTRIES(TLB_ENTRIES),
         .TLB_TAG_BITS(TLB_TAG_BITS),
         .PPN_BITS(PPN_BITS),
-        .DEBUG(0)
+        .DEBUG(CU_CONFIG.debug)
     ) u_mmu_tlb (
         .clk(clk),
         .rst_n(rst_n),
@@ -228,7 +227,7 @@ module rvgpu_mmu #(
             MMU_STATE_TLB_LOOKUP: begin
                 // TLB查找 - 设置输出寄存器
                 tlb_lookup_valid_nxt = 1'b1;
-                tlb_lookup_addr_nxt = {vaddr_r[38:19], vaddr_r[18:12]};
+                tlb_lookup_addr_nxt = calc_tlb_addr(vaddr_r);
                 
                 // 等待TLB查找完成（同步查找需要等待一个周期）
                 if (tlb_lookup_valid_r && mmu_tlb.tlb_lookup_ready) begin
@@ -298,7 +297,7 @@ module rvgpu_mmu #(
                                 dirty: 1'b0,
                                 accessed: 1'b1,
                                 permission: 2'b11,  // 读写权限
-                                tag: vaddr_r[VA_WIDTH-1:PAGE_OFFSET_BITS+$clog2(TLB_ENTRIES)],
+                                tag: vaddr_r[VA_WIDTH-1:PAGE_OFFSET_BITS+TLB_INDEX_BITS],
                                 ppn: noc_if.m_resp_data[PA_WIDTH-1:PAGE_OFFSET_BITS]
                             };
                             
@@ -446,7 +445,7 @@ module rvgpu_mmu #(
     //=============================================================================
     
     generate
-    if (DEBUG) begin : gen_debug
+    if (CU_CONFIG.debug) begin : gen_debug
         always_ff @(posedge clk) begin
             // 监控TLB握手
             if (tlb_lookup_valid_r && mmu_tlb.tlb_lookup_ready) begin

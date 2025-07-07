@@ -14,6 +14,9 @@ module ut_rvgpu_mmu_basic_unit_test;
   string name = "ut_rvgpu_mmu_basic_unit_test";
   svunit_testcase svunit_ut;
 
+  localparam PA_WIDTH = DEFAULT_CONTROL_UNIT_CONFIG.mmu_parameter.pa_width;
+  localparam VA_WIDTH = DEFAULT_CONTROL_UNIT_CONFIG.mmu_parameter.va_width;
+
   //===================================
   // Clock and Reset Infrastructure
   //===================================
@@ -34,7 +37,7 @@ module ut_rvgpu_mmu_basic_unit_test;
 
   // DUT instance - MMU
   rvgpu_mmu #(
-    .CONTROL_UNIT_CONFIG(DEFAULT_CONTROL_UNIT_CONFIG)
+    .CU_CONFIG(DEFAULT_CONTROL_UNIT_CONFIG)
   ) dut (
     .clk(clk_rst_if.clk),
     .rst_n(clk_rst_if.rst_n),
@@ -48,10 +51,11 @@ module ut_rvgpu_mmu_basic_unit_test;
   //===================================
   // Test Variables
   //===================================
-  logic [47:0] vaddr, paddr;
+  logic [PA_WIDTH-1:0] paddr;
+  logic [VA_WIDTH-1:0] vaddr;
   logic hit;
   logic [1:0] status;
-  logic [47:0] page_table_base;
+  logic [PA_WIDTH-1:0] page_table_base;
   logic [63:0] noc_addr;
   logic [15:0] noc_size;
 
@@ -116,7 +120,7 @@ module ut_rvgpu_mmu_basic_unit_test;
     $display("@%0t: Testing MMU configuration", $time);
     
     // 测试MMU页表基地址配置
-    page_table_base = 48'h100000000000;
+    page_table_base = 39'h10000000;
     test_base.configure_mmu_page_table(page_table_base);
     
     clk_mgr.wait_clks(2);
@@ -135,7 +139,7 @@ module ut_rvgpu_mmu_basic_unit_test;
     clk_mgr.wait_clks(2);
     
     // 发送翻译请求
-    vaddr = 48'h000000001000;
+    vaddr = 39'h000001000;
     test_base.send_mmu_request(vaddr, 1'b1, 1'b0);
     
     // 启动线程等待MMU响应（在后台运行）
@@ -160,7 +164,7 @@ module ut_rvgpu_mmu_basic_unit_test;
     
     // 验证响应
     `FAIL_IF(status !== 2'b00)  // 应该没有错误
-    `FAIL_IF(paddr !== 48'h40000000)  // 验证物理地址
+    `FAIL_IF(paddr !== 39'h40000000)  // 验证物理地址
     
     $display("@%0t: Basic translation request test completed", $time);
   `SVTEST_END
@@ -173,7 +177,7 @@ module ut_rvgpu_mmu_basic_unit_test;
     clk_mgr.wait_clks(2);
     
     // 第一次访问（TLB miss，会更新TLB）
-    vaddr = 48'h000000002000;
+    vaddr = 39'h000002000;
     test_base.send_mmu_request(vaddr, 1'b1, 1'b0);
     
     // 启动线程等待MMU响应（在后台运行）
@@ -222,7 +226,7 @@ module ut_rvgpu_mmu_basic_unit_test;
     clk_mgr.wait_clks(2);
     
     // 测试读请求
-    vaddr = 48'h000000003000;
+    vaddr = 39'h00003000;
     test_base.send_mmu_request(vaddr, 1'b1, 1'b0);
     
     // 启动线程等待MMU响应（在后台运行）
@@ -250,7 +254,7 @@ module ut_rvgpu_mmu_basic_unit_test;
     `FAIL_IF(paddr !== 39'h40000000)
     
     // 测试写请求
-    vaddr = 48'h000000004000;
+    vaddr = 39'h000004000;
     test_base.send_mmu_request(vaddr, 1'b0, 1'b1);
     
     // 启动线程等待MMU响应（在后台运行）
@@ -289,7 +293,7 @@ module ut_rvgpu_mmu_basic_unit_test;
     
     // 发送多个请求
     for (int i = 0; i < 4; i++) begin
-      vaddr = 39'h000000010000 + (i * 39'h1000);
+      vaddr = 39'h000010000 + (i * 39'h1000);
       test_base.send_mmu_request(vaddr, 1'b1, 1'b0);
       
       // 启动线程等待MMU响应（在后台运行）
@@ -328,7 +332,7 @@ module ut_rvgpu_mmu_basic_unit_test;
     clk_mgr.wait_clks(2);
     
     // 发送请求
-    vaddr = 48'h000000005000;
+    vaddr = 39'h000005000;
     test_base.send_mmu_request(vaddr, 1'b1, 1'b0);
     
     // 等待NOC请求

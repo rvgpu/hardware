@@ -31,10 +31,7 @@
 //=============================================================================
 
 module rvgpu_mmu_tlb #(
-    parameter int TLB_ENTRIES = 128,
-    parameter int TLB_TAG_BITS = 46,  // 优化：64-7-12+1=46位 (7位索引，12位偏移)
-    parameter int PPN_BITS = 52,       // 优化：64-12=52位 (支持完整64位物理地址)
-    parameter int DEBUG = 1
+    parameter control_unit_config_t CU_CONFIG = DEFAULT_CONTROL_UNIT_CONFIG
 ) (
     // Clock and Reset Interface
     input  logic clk,
@@ -52,6 +49,10 @@ module rvgpu_mmu_tlb #(
     localparam int TLB_ENTRY_WIDTH = $bits(tlb_if.tlb_lookup_data);
     localparam int TLB_ADDR_WIDTH = $clog2(TLB_ENTRIES);
     localparam int TLB_DATA_WIDTH = 103;  // TLB条目实际宽度：52+46+2+1+1+1=103位
+
+    localparam int TLB_ENTRIES = CU_CONFIG.mmu_parameter.tlb_entries;
+    localparam int TLB_TAG_BITS = CU_CONFIG.mmu_parameter.tlb_tag_bits;
+    localparam int PPN_BITS = CU_CONFIG.mmu_parameter.tlb_ppn_bits;
     
     // TLB条目位域定义 - 与struct packed定义保持一致
     // struct packed: {ppn, tag, permission, accessed, dirty, valid}

@@ -172,10 +172,7 @@ module rvgpu_mmu #(
     //=============================================================================
     
     rvgpu_mmu_tlb #(
-        .TLB_ENTRIES(TLB_ENTRIES),
-        .TLB_TAG_BITS(TLB_TAG_BITS),
-        .PPN_BITS(PPN_BITS),
-        .DEBUG(CU_CONFIG.debug)
+        .CU_CONFIG(CU_CONFIG)
     ) u_mmu_tlb (
         .clk(clk),
         .rst_n(rst_n),

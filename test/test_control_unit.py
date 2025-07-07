@@ -124,3 +124,23 @@ def test_control_unit_rvgpu_job_dispatcher_basic(datafiles, simulator):
     """
     run_testcase(datafiles, simulator, 'ut_rvgpu_job_dispatcher_basic.sv')
 
+@all_files_in_dir('ut/control_unit')
+@all_available_simulators()
+def test_control_unit_rvgpu_mmu_basic(datafiles, simulator):
+    """
+    Basic functionality test for RVGPU MMU.
+    Tests MMU address translation, TLB hit/miss, NOC interface, and error handling.
+    
+    Test Coverage:
+    - Reset and initialization
+    - MMU configuration (page table base)
+    - Basic translation request
+    - TLB hit/miss scenarios
+    - Read/write requests
+    - Multiple requests
+    - Error handling (NOC error response)
+    - Interface monitoring
+    - Performance monitoring
+    """
+    run_testcase(datafiles, simulator, 'ut_rvgpu_mmu_basic.sv')
+

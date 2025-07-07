@@ -16,6 +16,14 @@
 `ifndef RVGPU_CONTROL_UNIT_IF_SVH
 `define RVGPU_CONTROL_UNIT_IF_SVH
 
+`include "rvgpu_sram_if.svh"
+`include "rvgpu_control_unit_pkg.svh"
+
+`ifndef RVGPU_CONTROL_UNIT_PKG_IMPORTED
+`define RVGPU_CONTROL_UNIT_PKG_IMPORTED
+import rvgpu_control_unit_pkg::*;
+`endif // RVGPU_CONTROL_UNIT_PKG_IMPORTED
+
 //=============================================================================
 // Control Unit Internal Interfaces
 // 
@@ -138,5 +146,54 @@ interface mmu_if #(
         input  cfg_en, cfg_base_addr
     );
 endinterface : mmu_if
+
+//=============================================================================
+// TLB Interface - MMU <-> TLB SRAM
+// 用于MMU与TLB SRAM之间的查找和更新操作
+//=============================================================================
+interface tlb_if #(
+    parameter int TLB_ENTRIES = 128,
+    parameter int TLB_TAG_BITS = 29,
+    parameter int PPN_BITS = 36
+);
+    // tlb_entry_t 类型现在在 rvgpu_control_unit_pkg 中定义
+    
+    // TLB专用控制信号
+    logic                               tlb_lookup_valid;
+    logic [TLB_TAG_BITS+$clog2(TLB_ENTRIES)-1:0] tlb_lookup_addr;  // {标签, 索引}
+    tlb_entry_t                         tlb_lookup_data;
+    logic                               tlb_lookup_hit;
+    logic                               tlb_lookup_ready;
+    
+    logic                               tlb_update_valid;
+    logic [TLB_TAG_BITS+$clog2(TLB_ENTRIES)-1:0] tlb_update_addr;  // {标签, 索引}
+    tlb_entry_t                         tlb_update_data;
+    logic                               tlb_update_ready;
+    
+    // Master modport (MMU控制器)
+    modport mmu_port (
+        output tlb_lookup_valid, tlb_lookup_addr,
+        input  tlb_lookup_data, tlb_lookup_hit, tlb_lookup_ready,
+        output tlb_update_valid, tlb_update_addr, tlb_update_data,
+        input  tlb_update_ready
+    );
+    
+    // Slave modport (TLB SRAM)
+    modport tlb_port (
+        input  tlb_lookup_valid, tlb_lookup_addr,
+        output tlb_lookup_data, tlb_lookup_hit, tlb_lookup_ready,
+        input  tlb_update_valid, tlb_update_addr, tlb_update_data,
+        output tlb_update_ready
+    );
+    
+    // 时钟绑定
+    modport clk_mp (
+        input  tlb_lookup_valid, tlb_lookup_addr,
+        output tlb_lookup_data, tlb_lookup_hit, tlb_lookup_ready,
+        input  tlb_update_valid, tlb_update_addr, tlb_update_data,
+        output tlb_update_ready
+    );
+    
+endinterface : tlb_if
 
 `endif // RVGPU_CONTROL_UNIT_IF_SVH 

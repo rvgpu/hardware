@@ -39,10 +39,10 @@ package rvgpu_control_unit_pkg;
     // 默认配置参数
     localparam control_unit_config_t DEFAULT_CONTROL_UNIT_CONFIG = '{
         max_payload_size: `RVGPU_CONST_CONTROL_UNIT_CONFIG_MAX_PAYLOAD_SIZE,
-        page_size: `RVGPU_CONST_CONTROL_UNIT_CONFIG_PAGE_SIZE,
-        tlb_entries: `RVGPU_CONST_CONTROL_UNIT_CONFIG_TLB_ENTRIES,
-        va_width: `RVGPU_CONST_CONTROL_UNIT_CONFIG_VA_WIDTH,
-        pa_width: `RVGPU_CONST_CONTROL_UNIT_CONFIG_PA_WIDTH,
+        page_size: `RVGPU_CONST_CU_PAGE_SIZE,
+        tlb_entries: `RVGPU_CONST_CU_TLB_ENTRIES,
+        va_width: `RVGPU_CONST_CU_VA_WIDTH,
+        pa_width: `RVGPU_CONST_CU_PA_WIDTH,
         axi_addr_width: `RVGPU_CONST_CONTROL_UNIT_CONFIG_AXI_ADDR_WIDTH,
         axi_data_width: `RVGPU_CONST_CONTROL_UNIT_CONFIG_AXI_DATA_WIDTH
     };
@@ -56,6 +56,18 @@ package rvgpu_control_unit_pkg;
     // Register Space: Define the register space which host can access
     //=============================================================================
     `include "rvgpu_register_space.svh"
+
+    //=============================================================================
+    // TLB Data Structures: Define TLB-related data structures
+    //=============================================================================
+    typedef struct packed {
+        logic [`RVGPU_CONST_CU_TLB_PPN_BITS-1:0] ppn;        // [69:34] PPN 36-bits (最高位)
+        logic [`RVGPU_CONST_CU_TLB_TAG_BITS-1:0] tag;        // [33:5] Tag 29-bits
+        logic [1:0]                     permission;          // [4:3] 权限位 (00:无, 01:读, 10:写, 11:读写)
+        logic                           accessed;            // [2] 访问位
+        logic                           dirty;               // [1] 脏位
+        logic                           valid;               // [0] 有效位 (最低位)
+    } tlb_entry_t;
 
 endpackage : rvgpu_control_unit_pkg
 

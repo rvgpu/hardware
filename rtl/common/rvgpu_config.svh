@@ -17,13 +17,13 @@
 `define RVGPU_CONFIG_SVH
 
 //=============================================================================
-// Host Interface Configuration
+// Host Interface Configuration (AXI-Lite Slave)
 //=============================================================================
 `define HOST_INTERFACE_ADDR_WIDTH           64
 `define HOST_INTERFACE_DATA_WIDTH           64
 
 //=============================================================================
-// Memory Interface Configuration
+// Memory Interface Configuration (AXI Master)
 //=============================================================================
 `define MEMORY_INTERFACE_ADDR_WIDTH         64
 `define MEMORY_INTERFACE_DATA_WIDTH         128

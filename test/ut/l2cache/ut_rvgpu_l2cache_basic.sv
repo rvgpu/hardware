@@ -37,60 +37,30 @@
 
 // SVUnit中模块名必须以_unit_test结尾
 module ut_rvgpu_l2cache_basic_unit_test;
-  import svunit_pkg::svunit_testcase;
+    import svunit_pkg::svunit_testcase;
 
-  string name = "ut_rvgpu_l2cache_basic_unit_test";
-  svunit_testcase svunit_ut;
+    string name = "ut_rvgpu_l2cache_basic_unit_test";
+    svunit_testcase svunit_ut = new(name);
 
-  //===================================
-  // Clock and Reset Infrastructure
-  //===================================
+    //===================================
+    // Clock and Reset Infrastructure
+    //===================================
   
-  // Clock interface and generator
-  clk_rst_if clk_rst_if();
-  rvgpu_clk_rst_gen #(
-    .CLK_PERIOD_NS(10.0), 
-    .RST_CYCLES(10)
-  ) clk_rst_gen (
-    .clk_rst_if(clk_rst_if.master)
-  );
+    // Clock interface and generator
+    clk_rst_if clk_rst_if();
+    rvgpu_clk_rst_gen #(
+        .CLK_PERIOD_NS(10.0), 
+        .RST_CYCLES(10)
+    ) clk_rst_gen (
+        .clk_rst_if(clk_rst_if.master)
+    );
   
-  // Clock manager (elegant API)
-  rvgpu_clk_manager clk_mgr;
+    // Clock manager (elegant API)
+    rvgpu_clk_manager clk_mgr;
   
-  // Convenient signals for DUT connection
-  wire clk = clk_rst_if.clk;
-  wire rst_n = clk_rst_if.rst_n;
-
-    //=============================================================================
-    // DUT Instance
-    //=============================================================================
-    
-    //=============================================================================
-    // Test Configuration
-    //=============================================================================
-    
-    // 测试配置
-    localparam l2cache_config_t TEST_CONFIG = '{
-        cache_size: 512*1024,           // 512KB
-        slice_number: 1,                 // 1个slice
-        line_size: 64,                   // 64字节缓存行
-        ways: 8,                         // 8路组相联
-        sets: 1024,                      // 1024个组
-        tag_bits: 32,                    // 32位Tag
-        index_bits: 10,                  // 10位索引
-        offset_bits: 6,                  // 6位偏移
-        lru_bits: 8,                     // 8位LRU（对应8路组相联）
-        axi_data_width: 64,              // 64位数据
-        axi_addr_width: 64,              // 64位地址
-        noc_data_width: 256,             // 256位NOC数据
-        noc_header_width: 32,            // 32位NOC头部
-        debug_enable: 1                  // 调试使能
-    };
-    
-    //=============================================================================
-    // Interface Instances
-    //=============================================================================
+    // Convenient signals for DUT connection
+    wire clk = clk_rst_if.clk;
+    wire rst_n = clk_rst_if.rst_n;
     
     // NOC接口
     rvgpu_internal_noc_if noc_if();
@@ -104,17 +74,13 @@ module ut_rvgpu_l2cache_basic_unit_test;
     
     // L2 Cache实例
     rvgpu_l2cache #(
-        .L2CACHE_CONFIG(TEST_CONFIG)
+        .L2CACHE_CONFIG(DEFAULT_L2CACHE_CONFIG)
     ) dut (
         .clk(clk),
         .rst_n(rst_n),
         .noc_if(noc_if.device),
         .mem_if(mem_if.master)
     );
-    
-    //=============================================================================
-    // Test Base Instance
-    //=============================================================================
     
     // 测试基础类实例
     rvgpu_l2cache_test_base test_base;
@@ -141,8 +107,8 @@ module ut_rvgpu_l2cache_basic_unit_test;
         
         // 发送读请求
         test_addr = 64'h1000_0000;
-        test_data = 256'hDEAD_BEEF_CAFE_BABE_1234_5678_9ABC_DEF0_DEAD_BEEF_CAFE_BABE_1234_5678_9ABC_DEF0;
-        test_size = 8'd64;
+        test_data = 128'hDEAD_BEEF_CAFE_BABE_1234_5678_9ABC_DEF0;
+        test_size = 8'd128;
         
         fork
             begin
@@ -381,6 +347,8 @@ module ut_rvgpu_l2cache_basic_unit_test;
     // Setup for running the Unit Tests
     //===================================
     task setup();
+        $vcdpluson();
+
         svunit_ut.setup();
         
         // Initialize all signals

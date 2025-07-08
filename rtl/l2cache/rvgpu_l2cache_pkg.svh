@@ -49,19 +49,19 @@ package rvgpu_l2cache_pkg;
     
     // 默认配置参数
     localparam l2cache_config_t DEFAULT_L2CACHE_CONFIG = '{
-        cache_size: `L2CACHE_SIZE,
-        slice_number: `L2CACHE_SLICE_NUMBER,
-        line_size: 64,
-        ways: 8,
-        sets: 1024,
-        tag_bits: 32,
-        index_bits: 10,
-        offset_bits: 6,
-        lru_bits: 8,                      // 8位LRU（对应8路组相联）
-        axi_data_width: `MEMORY_INTERFACE_DATA_WIDTH,
-        axi_addr_width: `MEMORY_INTERFACE_ADDR_WIDTH,
-        noc_data_width: 256,
-        noc_header_width: 32,
+        cache_size: `RVGPU_CONST_L2CACHE_SIZE,
+        slice_number: `RVGPU_CONST_L2CACHE_SLICE_NUMBER,
+        line_size: `RVGPU_CONST_L2CACHE_LINE_SIZE,
+        ways: `RVGPU_CONST_L2CACHE_WAYS,
+        sets: `RVGPU_CONST_L2CACHE_SETS,
+        tag_bits: `RVGPU_CONST_L2CACHE_TAG_BITS,
+        index_bits: `RVGPU_CONST_L2CACHE_INDEX_BITS,
+        offset_bits: `RVGPU_CONST_L2CACHE_OFFSET_BITS,
+        lru_bits: `RVGPU_CONST_L2CACHE_LRU_BITS,
+        axi_data_width: `RVGPU_CONST_L2CACHE_AXI_DATA_WIDTH,
+        axi_addr_width: `RVGPU_CONST_L2CACHE_AXI_ADDR_WIDTH,
+        noc_data_width: `RVGPU_CONST_NOC_DATA_WIDTH,
+        noc_header_width: `RVGPU_CONST_NOC_HEADER_WIDTH,
         debug_enable: 1'b1
     };
     

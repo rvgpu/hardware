@@ -469,7 +469,6 @@ class rvgpu_l2cache_test_base;
     // 检查接口复位状态
     task check_interface_reset_state();
         $display("@%0t: [TEST_BASE] Checking interface reset state", $time);
-        
         // 检查NOC接口输出（应该在复位状态）
         `FAIL_IF(noc_if.s_req_valid !== 1'b0)
         `FAIL_IF(noc_if.s_req_header !== '0)
@@ -478,16 +477,15 @@ class rvgpu_l2cache_test_base;
         `FAIL_IF(noc_if.s_req_last !== 1'b0)
         `FAIL_IF(noc_if.s_resp_ready !== 1'b0)
         
-        // 检查内存接口输出（应该在复位状态）
-        // 在slave modport中，我们可以检查*ready信号，其他信号是输入
-        // 在复位状态下，DUT应该不驱动任何输出信号
-        // 我们只检查我们可以控制的*ready信号
-        `FAIL_IF(mem_if.arready !== 1'b1)  // 我们设置为1'b1
-        `FAIL_IF(mem_if.awready !== 1'b1)  // 我们设置为1'b1
-        `FAIL_IF(mem_if.wready !== 1'b1)   // 我们设置为1'b1
-        `FAIL_IF(mem_if.bready !== 1'b1)   // 我们设置为1'b1
-        `FAIL_IF(mem_if.rready !== 1'b1)   // 我们设置为1'b1
-        
+        // 检查 MEMIF Master 接口
+        // AXI Write
+        `FAIL_IF(mem_if.awvalid !== 1'b0)
+        `FAIL_IF(mem_if.wvalid !== 1'b0)
+        `FAIL_IF(mem_if.bready !== 1'b0)
+
+        // AXI Read
+        `FAIL_IF(mem_if.arvalid !== 1'b0)
+        `FAIL_IF(mem_if.rready !== 1'b0)
         $display("@%0t: [TEST_BASE] Interface reset state check passed", $time);
     endtask
 

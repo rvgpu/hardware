@@ -7,3 +7,4 @@
 +incdir+$RVGPU_HARDWARE/rtl/gpu_top
 +incdir+$RVGPU_HARDWARE/rtl/internal_noc
 +incdir+$RVGPU_HARDWARE/rtl/control_unit
++incdir+$RVGPU_HARDWARE/rtl/l2cache

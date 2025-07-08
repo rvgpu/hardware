@@ -97,13 +97,15 @@ endinterface : host_if
 
 interface memory_if #(
     parameter int unsigned         DATA_WIDTH = 256,
-    parameter int unsigned         ADDR_WIDTH = 48
+    parameter int unsigned         ADDR_WIDTH = 48,
+    parameter int unsigned         ID_WIDTH = 8
 );
     // Write Address Channel
     logic [ADDR_WIDTH-1:0]         awaddr;
     logic [7:0]                    awlen;
     logic [2:0]                    awsize;
     logic [1:0]                    awburst;
+    logic [ID_WIDTH-1:0]           awid;
     logic                          awvalid;
     logic                          awready;
     
@@ -116,6 +118,7 @@ interface memory_if #(
     
     // Write Response Channel
     logic [1:0]                    bresp;
+    logic [ID_WIDTH-1:0]           bid;
     logic                          bvalid;
     logic                          bready;
     
@@ -124,41 +127,43 @@ interface memory_if #(
     logic [7:0]                    arlen;
     logic [2:0]                    arsize;
     logic [1:0]                    arburst;
+    logic [ID_WIDTH-1:0]           arid;
     logic                          arvalid;
     logic                          arready;
     
     // Read Data Channel
     logic [DATA_WIDTH-1:0]         rdata;
     logic [1:0]                    rresp;
+    logic [ID_WIDTH-1:0]           rid;
     logic                          rlast;
     logic                          rvalid;
     logic                          rready;
     
     // Master Port (RVGPU)
     modport master (
-        output awaddr, awlen, awsize, awburst, awvalid,
+        output awaddr, awlen, awsize, awburst, awid, awvalid,
         input  awready,
         output wdata, wstrb, wlast, wvalid,
         input  wready,
-        input  bresp, bvalid,
+        input  bresp, bid, bvalid,
         output bready,
-        output araddr, arlen, arsize, arburst, arvalid,
+        output araddr, arlen, arsize, arburst, arid, arvalid,
         input  arready,
-        input  rdata, rresp, rlast, rvalid,
+        input  rdata, rresp, rid, rlast, rvalid,
         output rready
     );
     
     // Slave Port (Memory)
     modport slave (
-        input  awaddr, awlen, awsize, awburst, awvalid,
+        input  awaddr, awlen, awsize, awburst, awid, awvalid,
         output awready,
         input  wdata, wstrb, wlast, wvalid,
         output wready,
-        output bresp, bvalid,
+        output bresp, bid, bvalid,
         input  bready,
-        input  araddr, arlen, arsize, arburst, arvalid,
+        input  araddr, arlen, arsize, arburst, arid, arvalid,
         output arready,
-        output rdata, rresp, rlast, rvalid,
+        output rdata, rresp, rid, rlast, rvalid,
         input  rready
     );
     

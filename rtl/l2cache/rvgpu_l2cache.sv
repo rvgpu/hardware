@@ -195,25 +195,77 @@ module rvgpu_l2cache #(
     
     generate
     if (L2CACHE_CONFIG.debug_enable) begin : gen_debug_output
+        // 状态监控寄存器
+        l2cache_state_t prev_state;
+        l2cache_perf_counters_t prev_perf_counters;
+        
         always_ff @(posedge clk) begin
-            // 监控缓存状态变化
-            if (controller_debug.current_state != controller_debug.current_state) begin
-                $display("@%0t: [L2CACHE] State transition: %s -> %s", 
-                         $time, 
-                         get_state_name(controller_debug.current_state),
-                         get_state_name(controller_debug.current_state));
-            end
-            
-            // 监控性能计数器
-            if (controller_debug.perf_counters.hit_count != controller_debug.perf_counters.hit_count) begin
-                $display("@%0t: [L2CACHE] Performance - Hits: %0d, Misses: %0d, Hit Rate: %.2f%%", 
-                         $time,
-                         controller_debug.perf_counters.hit_count,
-                         controller_debug.perf_counters.miss_count,
-                         (controller_debug.perf_counters.hit_count * 100.0) / 
-                         (controller_debug.perf_counters.hit_count + controller_debug.perf_counters.miss_count));
+            if (!rst_n) begin
+                prev_state <= L2_STATE_IDLE;
+                prev_perf_counters <= '0;
+            end else begin
+                // 监控缓存状态变化
+                if (controller_debug.current_state != prev_state) begin
+                    $display("@%0t: [L2CACHE] State transition: %s -> %s", 
+                             $time, 
+                             get_state_name(prev_state),
+                             get_state_name(controller_debug.current_state));
+                    prev_state <= controller_debug.current_state;
+                end
+                
+                // 监控性能计数器变化
+                if (controller_debug.perf_counters.hit_count != prev_perf_counters.hit_count ||
+                    controller_debug.perf_counters.miss_count != prev_perf_counters.miss_count) begin
+                    $display("@%0t: [L2CACHE] Performance - Hits: %0d, Misses: %0d, Hit Rate: %.2f%%", 
+                             $time,
+                             controller_debug.perf_counters.hit_count,
+                             controller_debug.perf_counters.miss_count,
+                             (controller_debug.perf_counters.hit_count * 100.0) / 
+                             (controller_debug.perf_counters.hit_count + controller_debug.perf_counters.miss_count));
+                    prev_perf_counters <= controller_debug.perf_counters;
+                end
+                
+                // 监控缓存忙状态
+                if (controller_debug.cache_busy) begin
+                    $display("@%0t: [L2CACHE] Cache busy: addr=0x%h, trans_id=%0d", 
+                             $time, controller_debug.current_addr, controller_debug.current_trans_id);
+                end
+                
+                // 监控读写操作统计
+                if (controller_debug.perf_counters.read_count != prev_perf_counters.read_count) begin
+                    $display("@%0t: [L2CACHE] Read operations: %0d", 
+                             $time, controller_debug.perf_counters.read_count);
+                end
+                
+                if (controller_debug.perf_counters.write_count != prev_perf_counters.write_count) begin
+                    $display("@%0t: [L2CACHE] Write operations: %0d", 
+                             $time, controller_debug.perf_counters.write_count);
+                end
+                
+                // 监控错误计数
+                if (controller_debug.perf_counters.error_count != prev_perf_counters.error_count) begin
+                    $display("@%0t: [L2CACHE] Error count: %0d", 
+                             $time, controller_debug.perf_counters.error_count);
+                end
             end
         end
+        
+        // 状态名称函数
+        function automatic string get_state_name(input l2cache_state_t state);
+            case (state)
+                L2_STATE_IDLE: return "IDLE";
+                L2_STATE_TAG_LOOKUP: return "TAG_LOOKUP";
+                L2_STATE_DATA_ACCESS: return "DATA_ACCESS";
+                L2_STATE_MISS_HANDLE: return "MISS_HANDLE";
+                L2_STATE_MEMORY_ACCESS: return "MEMORY_ACCESS";
+                L2_STATE_WRITE_BACK: return "WRITE_BACK";
+                L2_STATE_EVICT: return "EVICT";
+                L2_STATE_SYNC: return "SYNC";
+                L2_STATE_ERROR: return "ERROR";
+                default: return "UNKNOWN";
+            endcase
+        endfunction
+        
     end
     endgenerate
 

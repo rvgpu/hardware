@@ -117,14 +117,8 @@ module rvgpu_l2cache_controller #(
         logic [31:0] error_count;
     } l2cache_perf_counters_t;
     
-    // NOC头部类型定义
-    typedef struct packed {
-        logic [7:0] msg_type;
-        logic [7:0] trans_id;
-        logic [7:0] src_node;
-        logic [7:0] dest_node;
-        logic [1:0] local_addr;
-    } noc_header_t;
+    // 使用 rvgpu_internal_noc_pkg 中定义的类型
+    // noc_header_t 已在包中定义
     
     // 响应状态
     localparam int RESP_OKAY = 2'b00;
@@ -136,13 +130,8 @@ module rvgpu_l2cache_controller #(
     localparam int MESI_SHARED = 2'b10;
     localparam int MESI_MODIFIED = 2'b11;
     
-    // 消息类型
-    localparam int MSG_MEM_READ_REQ = 8'h01;
-    localparam int MSG_MEM_WRITE_REQ = 8'h02;
-    localparam int MSG_MEM_READ_RESP = 8'h03;
-    localparam int MSG_MEM_WRITE_RESP = 8'h04;
-    localparam int MSG_CACHE_INVALIDATE = 8'h05;
-    localparam int MSG_CACHE_FLUSH = 8'h06;
+    // 使用 rvgpu_internal_noc_pkg 中定义的类型
+    // noc_msg_type_t 已在包中定义
     
     // 从配置中提取的本地参数
     localparam int TAG_BITS = L2CACHE_CONFIG.tag_bits;
@@ -692,10 +681,127 @@ module rvgpu_l2cache_controller #(
     //=============================================================================
     
     assign debug_if.perf_counters = perf_counters_r;
-    assign debug_if.current_state = l2cache_state_t'(state_r);
+    assign debug_if.current_state = l2cache_state_t'(state_r[3:0]);
     assign debug_if.current_addr = debug_addr_r;
     assign debug_if.current_trans_id = debug_trans_id_r;
     assign debug_if.cache_busy = cache_busy_r;
+
+    //=============================================================================
+    // 调试输出 (仅在仿真时)
+    //=============================================================================
+    
+    generate
+    if (L2CACHE_CONFIG.debug_enable) begin : gen_debug
+        // 队列状态跟踪寄存器
+        logic prev_queue_empty;
+        
+        always_ff @(posedge clk) begin
+            if (!rst_n) begin
+                prev_queue_empty <= 1'b1;
+            end else begin
+                prev_queue_empty <= req_queue_empty_r;
+            end
+        end
+        
+        always_ff @(posedge clk) begin
+            // 监控NOC请求
+            if (noc_if.req_valid && noc_if.req_ready) begin
+                $display("@%0t: [L2CACHE_CTRL] NOC Request: addr=0x%h, trans_id=%0d, %s, size=%0d", 
+                         $time, current_req_nxt.addr, current_req_nxt.trans_id,
+                         current_req_nxt.read ? "READ" : "WRITE", current_req_nxt.size);
+            end
+            
+            // 监控NOC响应
+            if (noc_if.resp_valid && noc_if.resp_ready) begin
+                $display("@%0t: [L2CACHE_CTRL] NOC Response: trans_id=%0d, hit=%0d, status=%0d", 
+                         $time, current_resp_r.trans_id, current_resp_r.hit, current_resp_r.status);
+            end
+            
+            // 监控状态变化
+            if (state_r != state_nxt) begin
+                $display("@%0t: [L2CACHE_CTRL] State transition: %s -> %s", 
+                         $time, get_state_name(state_r), get_state_name(state_nxt));
+            end
+            
+            // 监控Tag查找
+            if (tag_if.lookup_valid && tag_if.lookup_ready) begin
+                $display("@%0t: [L2CACHE_CTRL] Tag lookup: index=0x%h, hit=%0d, way=%0d", 
+                         $time, current_index_r, tag_if.lookup_hit, way_to_index(tag_if.hit_way));
+            end
+            
+            // 监控数据访问
+            if (data_if.read_valid && data_if.read_ready) begin
+                $display("@%0t: [L2CACHE_CTRL] Data read: index=0x%h, way=%0d, offset=0x%h", 
+                         $time, current_index_r, way_to_index(hit_way_r), current_offset_r);
+            end
+            
+            if (data_if.write_valid && data_if.write_ready) begin
+                $display("@%0t: [L2CACHE_CTRL] Data write: index=0x%h, way=%0d, offset=0x%h", 
+                         $time, current_index_r, way_to_index(hit_way_r), current_offset_r);
+            end
+            
+            // 监控AXI内存访问
+            if (axi_if.read_req_valid && axi_if.read_req_ready) begin
+                $display("@%0t: [L2CACHE_CTRL] AXI read request: addr=0x%h, size=%0d, id=%0d", 
+                         $time, axi_if.read_req_addr, axi_if.read_req_size, axi_if.read_req_id);
+            end
+            
+            if (axi_if.read_resp_valid && axi_if.read_resp_ready) begin
+                $display("@%0t: [L2CACHE_CTRL] AXI read response: data=0x%h, status=%0d, id=%0d", 
+                         $time, axi_if.read_resp_data, axi_if.read_resp_status, axi_if.read_resp_id);
+            end
+            
+            if (axi_if.write_req_valid && axi_if.write_req_ready) begin
+                $display("@%0t: [L2CACHE_CTRL] AXI write request: addr=0x%h, size=%0d, id=%0d", 
+                         $time, axi_if.write_req_addr, axi_if.write_req_size, axi_if.write_req_id);
+            end
+            
+            if (axi_if.write_data_valid && axi_if.write_data_ready) begin
+                $display("@%0t: [L2CACHE_CTRL] AXI write data: data=0x%h, strb=0x%h, last=%0d", 
+                         $time, axi_if.write_data, axi_if.write_strb, axi_if.write_last);
+            end
+            
+            if (axi_if.write_resp_valid && axi_if.write_resp_ready) begin
+                $display("@%0t: [L2CACHE_CTRL] AXI write response: status=%0d, id=%0d", 
+                         $time, axi_if.write_resp_status, axi_if.write_resp_id);
+            end
+            
+            // 监控队列状态
+            if (req_queue_full_r && noc_if.req_valid && !noc_if.req_ready) begin
+                $display("@%0t: [L2CACHE_CTRL] Warning: Request queue full", $time);
+            end
+            
+            // 只在队列从非空变为空时打印一次
+            if (!prev_queue_empty && req_queue_empty_r && state_r == L2_STATE_IDLE) begin
+                $display("@%0t: [L2CACHE_CTRL] Info: Request queue became empty", $time);
+            end
+            
+            // 监控性能计数器变化
+            if (perf_counters_r.hit_count != perf_counters_nxt.hit_count) begin
+                $display("@%0t: [L2CACHE_CTRL] Cache hit: total=%0d", 
+                         $time, perf_counters_nxt.hit_count);
+            end
+            
+            if (perf_counters_r.miss_count != perf_counters_nxt.miss_count) begin
+                $display("@%0t: [L2CACHE_CTRL] Cache miss: total=%0d", 
+                         $time, perf_counters_nxt.miss_count);
+            end
+        end
+        
+        // 状态名称函数
+        function automatic string get_state_name(input l2cache_state_t state);
+            case (state)
+                L2_STATE_IDLE: return "IDLE";
+                L2_STATE_TAG_LOOKUP: return "TAG_LOOKUP";
+                L2_STATE_DATA_ACCESS: return "DATA_ACCESS";
+                L2_STATE_MISS_HANDLE: return "MISS_HANDLE";
+                L2_STATE_MEMORY_ACCESS: return "MEMORY_ACCESS";
+                default: return "UNKNOWN";
+            endcase
+        endfunction
+        
+    end
+    endgenerate
 
 endmodule : rvgpu_l2cache_controller
 

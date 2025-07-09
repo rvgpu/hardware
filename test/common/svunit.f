@@ -3,3 +3,4 @@
 +incdir+${RVGPU_HARDWARE}/test/common
 
 -f ${RVGPU_HARDWARE}/rtl/filelists/rvgpu_incdir.f
++incdir+${RVGPU_HARDWARE}/test/ut/l2cache

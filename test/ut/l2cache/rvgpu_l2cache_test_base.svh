@@ -187,25 +187,27 @@ class rvgpu_l2cache_test_base;
         data[63:0] = addr;
         data[71:64] = size;
         data[255:72] = '0;
-        
-        // 发送请求
-        @(posedge clk_rst_if.clk);
+
+        $display("@%0t: [TEST_BASE] Send NOC request, header=0x%h, data=0x%h", $time, header, data);
+        clk_mgr.wait_posedge();
+        clk_mgr.delay_ns(1);  // setup time, before clk posedge
+
+        // 因为这是测试用例直接操作noc的slave接口
         noc_if.s_req_valid = 1'b1;
         noc_if.s_req_header = header;
         noc_if.s_req_data = data;
         noc_if.s_req_strb = '1;
         noc_if.s_req_last = 1'b1;
-        
-        // 等待接受
-        @(posedge clk_rst_if.clk);
-        while (!noc_if.s_req_ready) @(posedge clk_rst_if.clk);
+
+        while (!noc_if.s_req_ready) begin
+            clk_mgr.wait_posedge();
+        end
+        clk_mgr.wait_posedge_and_delay_ns(1);  // hold time, after clk posedge
         noc_if.s_req_valid = 1'b0;
-        
-        total_requests++;
-        read_requests++;
-        
-        $display("@%0t: [TEST_BASE] NOC Read Request: addr=0x%h, size=%0d, trans_id=%0d", 
-                 $time, addr, size, trans_id);
+        noc_if.s_req_last = 1'b0;
+
+        noc_if.s_resp_ready = 1'b1;
+        $display("@%0t: [TEST_BASE] NOC read request send successfully", $time);
     endtask
     
     // 发送NOC写请求
@@ -336,13 +338,26 @@ class rvgpu_l2cache_test_base;
         input logic [1:0] status = 2'b00,
         input logic [7:0] trans_id = 8'h00
     );
-        // 等待内存读请求
-        @(posedge clk_rst_if.clk);
-        while (!mem_if.arvalid) @(posedge clk_rst_if.clk);
+        automatic int timeout_counter = 0;
+        localparam int TIMEOUT_CYCLES = 1000; // 1000个时钟周期超时
         
+        // 等待内存读请求
+        clk_mgr.wait_posedge();
+        timeout_counter = 0;
+        while (!mem_if.arvalid && timeout_counter < TIMEOUT_CYCLES) begin
+            clk_mgr.wait_posedge();
+            timeout_counter++;
+        end
+        
+        if (timeout_counter >= TIMEOUT_CYCLES) begin
+            $display("@%0t: [TEST_BASE] ERROR: Timeout waiting for memory read request for addr 0x%h", $time, addr);
+            return;
+        end
+
         // 接受读地址
+        clk_mgr.delay_ns(1); // setup time, before clk posedge
         mem_if.arready = 1'b1;
-        @(posedge clk_rst_if.clk);
+        clk_mgr.wait_posedge_and_delay_ns(1); // hold time, after clk posedge
         mem_if.arready = 1'b0;
         
         // 发送读数据 - 在slave modport中，我们可以驱动这些信号
@@ -352,11 +367,23 @@ class rvgpu_l2cache_test_base;
         mem_if.rlast = 1'b1;
         mem_if.rid = trans_id;
         
-        @(posedge clk_rst_if.clk);
-        while (!mem_if.rready) @(posedge clk_rst_if.clk);
+        timeout_counter = 0;
+        while (!mem_if.rready && timeout_counter < TIMEOUT_CYCLES) begin
+            clk_mgr.wait_posedge();
+            timeout_counter++;
+        end
+        
+        if (timeout_counter >= TIMEOUT_CYCLES) begin
+            $display("@%0t: [TEST_BASE] ERROR: Timeout waiting for memory read ready for addr 0x%h", $time, addr);
+            mem_if.rvalid = 1'b0;
+            return;
+        end
+
+        clk_mgr.wait_posedge_and_delay_ns(1); // hold time, after clk posedge
+        
         mem_if.rvalid = 1'b0;
         
-        $display("@%0t: [TEST_BASE] Memory read response sent for addr 0x%h", $time, addr);
+        $display("@%0t: [TEST_BASE] Memory read response sent for addr0x%h, data=0x%h", $time, addr, data);
     endtask
     
     // 模拟内存写响应
@@ -365,9 +392,21 @@ class rvgpu_l2cache_test_base;
         input logic [1:0] status = 2'b00,
         input logic [7:0] trans_id = 8'h00
     );
+        automatic int timeout_counter = 0;
+        localparam int TIMEOUT_CYCLES = 1000; // 1000个时钟周期超时
+        
         // 等待内存写地址请求
         @(posedge clk_rst_if.clk);
-        while (!mem_if.awvalid) @(posedge clk_rst_if.clk);
+        timeout_counter = 0;
+        while (!mem_if.awvalid && timeout_counter < TIMEOUT_CYCLES) begin
+            @(posedge clk_rst_if.clk);
+            timeout_counter++;
+        end
+        
+        if (timeout_counter >= TIMEOUT_CYCLES) begin
+            $display("@%0t: [TEST_BASE] ERROR: Timeout waiting for memory write address request for addr 0x%h", $time, addr);
+            return;
+        end
         
         // 接受写地址
         mem_if.awready = 1'b1;
@@ -376,7 +415,17 @@ class rvgpu_l2cache_test_base;
         
         // 等待写数据
         @(posedge clk_rst_if.clk);
-        while (!mem_if.wvalid) @(posedge clk_rst_if.clk);
+        timeout_counter = 0;
+        while (!mem_if.wvalid && timeout_counter < TIMEOUT_CYCLES) begin
+            @(posedge clk_rst_if.clk);
+            timeout_counter++;
+        end
+        
+        if (timeout_counter >= TIMEOUT_CYCLES) begin
+            $display("@%0t: [TEST_BASE] ERROR: Timeout waiting for memory write data for addr 0x%h", $time, addr);
+            return;
+        end
+        
         mem_if.wready = 1'b1;
         @(posedge clk_rst_if.clk);
         mem_if.wready = 1'b0;
@@ -387,7 +436,18 @@ class rvgpu_l2cache_test_base;
         mem_if.bid = trans_id;
         
         @(posedge clk_rst_if.clk);
-        while (!mem_if.bready) @(posedge clk_rst_if.clk);
+        timeout_counter = 0;
+        while (!mem_if.bready && timeout_counter < TIMEOUT_CYCLES) begin
+            @(posedge clk_rst_if.clk);
+            timeout_counter++;
+        end
+        
+        if (timeout_counter >= TIMEOUT_CYCLES) begin
+            $display("@%0t: [TEST_BASE] ERROR: Timeout waiting for memory write response ready for addr 0x%h", $time, addr);
+            mem_if.bvalid = 1'b0;
+            return;
+        end
+        
         mem_if.bvalid = 1'b0;
         
         $display("@%0t: [TEST_BASE] Memory write response sent for addr 0x%h", $time, addr);

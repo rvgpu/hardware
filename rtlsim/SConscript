@@ -1,0 +1,56 @@
+Import('env')
+import subprocess
+
+# 使用subprocess检测VCS
+try:
+    result = subprocess.run(['which', 'vcs'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+    vcs_path = result.stdout.strip()
+    vcs_found = result.returncode == 0
+    print(f"VCS检测结果: {'找到' if vcs_found else '未找到'}")
+    if vcs_found:
+        print(f"VCS路径: {vcs_path}")
+except Exception as e:
+    print(f"VCS检测错误: {e}")
+    vcs_found = False
+
+if not vcs_found:
+    print("VCS未找到 - 跳过RTLSim构建")
+    Return([])  # 返回空列表而不是None
+else:
+    vcs_env = env.Clone()
+    vcs_env['VCS'] = 'vcs'
+    vcs_env['VCSFLAGS'] = '-full64 -sverilog -debug_all -timescale=1ns/1ps'
+    vcs_env['VCSLIBS'] = []
+
+    sv_sources = ['rvgpu_dpi.sv']
+    cpp_sources = ['rvgpu_dpi.cpp', 'rvgpu_rtlsim.cpp']
+
+    # 先编译C++源文件为共享库兼容的目标文件
+    cpp_objects = []
+    for cpp_file in cpp_sources:
+        obj = vcs_env.SharedObject(
+            target=f'{cpp_file.replace(".cpp", ".os")}',
+            source=cpp_file,
+            CPPPATH=['../simtop', '../csim'],
+            LIBS=['stdc++'],
+        )
+        cpp_objects.append(obj)
+
+    # 构建共享库
+    lib = vcs_env.SharedLibrary(
+        target='librvgpu_rtlsim',
+        source=cpp_objects,
+        CPPPATH=['../simtop', '../csim'],
+        LIBS=['stdc++'],
+    )
+
+    # 安装库文件
+    env.Install(env['INSTALL_LIB64'], lib)
+
+    print("RTLSim SCons配置:")
+    print(f"  VCS可用: True")
+    print(f"  SV源文件: {sv_sources}")
+    print(f"  C++源文件: {cpp_sources}")
+
+    # 返回库文件供其他模块使用
+    Return('lib') 

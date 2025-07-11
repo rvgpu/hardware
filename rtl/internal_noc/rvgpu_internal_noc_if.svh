@@ -16,7 +16,7 @@
 `ifndef RVGPU_INTERNAL_NOC_IF_SVH
 `define RVGPU_INTERNAL_NOC_IF_SVH
 
-`include "rvgpu_internal_noc_pkg.sv"
+`include "rvgpu_internal_noc_pkg.svh"
 
 `ifndef RVGPU_INTERNAL_NOC_PKG_IMPORTED
 `define RVGPU_INTERNAL_NOC_PKG_IMPORTED

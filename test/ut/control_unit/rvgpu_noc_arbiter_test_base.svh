@@ -1,7 +1,7 @@
 `ifndef RVGPU_NOC_ARBITER_TEST_BASE_SVH
 `define RVGPU_NOC_ARBITER_TEST_BASE_SVH
 
-`include "rvgpu_internal_noc_pkg.sv"
+`include "rvgpu_internal_noc_pkg.svh"
 `include "rvgpu_internal_noc_if.svh"
 
 `ifndef RVGPU_INTERNAL_NOC_PKG_IMPORTED

@@ -18,6 +18,7 @@
 
 `include "rvgpu_config.svh"
 `include "rvgpu_interface_axi.svh"
+`include "rvgpu_internal_noc_pkg.svh"
 
 `ifndef RVGPU_INTERNAL_NOC_PKG_IMPORTED
 `define RVGPU_INTERNAL_NOC_PKG_IMPORTED

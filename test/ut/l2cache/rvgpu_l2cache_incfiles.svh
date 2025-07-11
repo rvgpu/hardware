@@ -28,7 +28,7 @@
 `include "clk_and_reset.svh"
 
 // NOC 相关文件
-`include "rvgpu_internal_noc_pkg.sv"
+`include "rvgpu_internal_noc_pkg.svh"
 `include "rvgpu_internal_noc_if.svh"
 
 // GPU Top 接口文件

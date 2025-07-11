@@ -1,6 +1,6 @@
 `include "svunit_defines.svh"
 `include "clk_and_reset.svh"
-`include "rvgpu_internal_noc_pkg.sv"
+`include "rvgpu_internal_noc_pkg.svh"
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_internal_noc_2sc.sv"
 `include "project.v"

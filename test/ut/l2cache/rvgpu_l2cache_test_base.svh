@@ -17,7 +17,7 @@
 `define RVGPU_L2CACHE_TEST_BASE_SVH
 
 `include "rvgpu_l2cache_pkg.svh"
-`include "rvgpu_internal_noc_pkg.sv"
+`include "rvgpu_internal_noc_pkg.svh"
 `include "rvgpu_interface_axi.svh"
 `include "rvgpu_clk_rst.svh"
 

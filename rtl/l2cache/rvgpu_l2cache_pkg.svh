@@ -17,7 +17,7 @@
 `define RVGPU_L2CACHE_PKG_SV
 
 `include "rvgpu_config.svh"
-`include "rvgpu_internal_noc_pkg.sv"
+`include "rvgpu_internal_noc_pkg.svh"
 
 `ifndef RVGPU_INTERNAL_NOC_PKG_IMPORTED
 `define RVGPU_INTERNAL_NOC_PKG_IMPORTED

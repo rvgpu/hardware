@@ -39,6 +39,9 @@ module rvgpu_toplevel_tb;
     logic clk;
     logic rst_n;
     
+    // GPU中断信号
+    logic gpu_irq;
+    
     // 时钟周期计数
     int unsigned cycle_count;
     
@@ -53,7 +56,8 @@ module rvgpu_toplevel_tb;
         .clk(clk),
         .rst_n(rst_n),
         .host_if(host_if_inst),
-        .mem_if(mem_if)
+        .mem_if(mem_if),
+        .gpu_irq(gpu_irq)
     );
     
     // 时钟生成
@@ -97,7 +101,7 @@ module rvgpu_toplevel_tb;
         // 设置写响应通道
         host_if_inst.bready = 1'b1;
         
-        $display("[%0t] Host AXI写: addr=0x%h, data=0x%h, strb=0x%h", $time, addr, data, strb);
+        $display("@%0t: [TB] Host AXI写: addr=0x%h, data=0x%h, strb=0x%h", $time, addr, data, strb);
         
         // 等待握手完成
         wait (host_if_inst.awready && host_if_inst.wready);
@@ -117,9 +121,9 @@ module rvgpu_toplevel_tb;
         
         // 检查写响应状态
         if (bresp_status != 2'b00) begin
-            $display("[%0t] WARNING: Host AXI写响应错误: bresp=0x%h", $time, bresp_status);
+            $display("@%0t: [TB] WARNING: Host AXI写响应错误: bresp=0x%h", $time, bresp_status);
         end else begin
-            $display("[%0t] Host AXI写完成: addr=0x%h, data=0x%h", $time, addr, data);
+            $display("@%0t: [TB] Host AXI写完成: addr=0x%h, data=0x%h", $time, addr, data);
         end
     endtask
     
@@ -142,7 +146,7 @@ module rvgpu_toplevel_tb;
         // 设置读数据通道
         host_if_inst.rready = 1'b1;
         
-        $display("[%0t] Host AXI读: addr=0x%h", $time, addr);
+        $display("@%0t: [TB] Host AXI读: addr=0x%h", $time, addr);
         
         // 等待握手完成
         wait (host_if_inst.arready);
@@ -159,15 +163,27 @@ module rvgpu_toplevel_tb;
         
         // 检查读响应状态
         if (rresp_status != 2'b00) begin
-            $display("[%0t] WARNING: Host AXI读响应错误: rresp=0x%h", $time, rresp_status);
+            $display("@%0t: [TB] WARNING: Host AXI读响应错误: rresp=0x%h", $time, rresp_status);
         end else begin
-            $display("[%0t] Host AXI读完成: addr=0x%h, data=0x%h", $time, addr, data);
+            $display("@%0t: [TB] Host AXI读完成: addr=0x%h, data=0x%h", $time, addr, data);
         end
     endtask
     
     // DPI导出声明 - 导出给C++使用的host control接口
     export "DPI-C" task cpu_axi_write;
     export "DPI-C" task cpu_axi_read_with_data;
+    export "DPI-C" task wait_gpu_irq;
+    
+    // GPU中断等待任务
+    task wait_gpu_irq();
+        @(posedge gpu_irq);
+        $display("@%0t: [TB] 检测到GPU中断，等待完成", $time);
+    endtask
+    
+    // GPU中断监控
+    always @(posedge gpu_irq) begin
+        $display("@%0t: [TB] GPU中断触发!", $time);
+    end
     
     
     // GPU内存访问监控和处理
@@ -178,18 +194,18 @@ module rvgpu_toplevel_tb;
             always @(posedge clk) begin
                 // 监控GPU写请求
                 if (mem_if[i].awvalid && mem_if[i].awready) begin
-                    $display("[%0t] GPU写请求: slice=%0d, addr=0x%h", $time, i, mem_if[i].awaddr);
+                    $display("@%0t: [TB] GPU写请求: slice=%0d, addr=0x%h", $time, i, mem_if[i].awaddr);
                 end
                 
                 if (mem_if[i].wvalid && mem_if[i].wready) begin
                     // 调用C++接口写入内存
                     gpu_write_mem(mem_if[i].awaddr, mem_if[i].wdata[63:0]);
-                    $display("[%0t] GPU写完成: slice=%0d, addr=0x%h, data=0x%h", $time, i, mem_if[i].awaddr, mem_if[i].wdata[63:0]);
+                    $display("@%0t: [TB] GPU写完成: slice=%0d, addr=0x%h, data=0x%h", $time, i, mem_if[i].awaddr, mem_if[i].wdata[63:0]);
                 end
                 
                 // 监控GPU读请求
                 if (mem_if[i].arvalid && mem_if[i].arready) begin
-                    $display("[%0t] GPU读请求: slice=%0d, addr=0x%h", $time, i, mem_if[i].araddr);
+                    $display("@%0t: [TB] GPU读请求: slice=%0d, addr=0x%h", $time, i, mem_if[i].araddr);
                 end
             end
             
@@ -251,8 +267,7 @@ module rvgpu_toplevel_tb;
     
     // 波形输出
     initial begin
-        $dumpfile("rvgpu_toplevel_tb.vcd");
-        $dumpvars(0, rvgpu_toplevel_tb);
+        $vcdpluson;
     end
     
     // 超时保护

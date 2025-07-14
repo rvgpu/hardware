@@ -47,7 +47,10 @@ module rvgpu_toplevel (
     host_if.slave host_if,
     
     // Memory Interface (AXI Master) - Each L2Cache Slice has one
-    memory_if.master mem_if [`L2CACHE_SLICE_NUMBER]
+    memory_if.master mem_if [`L2CACHE_SLICE_NUMBER],
+    
+    // GPU Interrupt Output
+    output logic gpu_irq
 );
     rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) control_unit_noc_if();
     rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) l2cache_noc_if();
@@ -59,7 +62,7 @@ module rvgpu_toplevel (
         .rst_n(rst_n),
         .host_axi_if(host_if),
         .noc_if(control_unit_noc_if.device),
-        .gpu_irq()  // 暂时不连接，因为顶层模块没有这个端口
+        .gpu_irq(gpu_irq)  // 连接到gpu_irq输出端口
     );
 
     // L2Cache - 使用l2cache_config_t参数

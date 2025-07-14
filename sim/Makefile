@@ -144,7 +144,7 @@ wave-vcs: run-vcs
 clean:
 	@echo "清理输出文件..."
 	rm -rf $(OUT_DIR)
-	rm -f *.vcd *.log *.key *.h5 *.h5.fast *.h5.slow
+	rm -f *.vcd *.vpd *.log *.key *.h5 *.h5.fast *.h5.slow
 	@echo "清理完成"
 
 # 帮助信息

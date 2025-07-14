@@ -51,8 +51,8 @@ void RVGPUSimulator::log(const std::string& message) {
 // 等待GPU完成
 void RVGPUSimulator::wait_gpu_done(int timeout_cycles) {
     log("等待GPU完成...");
-    // 简化实现，实际应该检查GPU状态
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    // 调用DPI函数等待GPU中断信号
+    wait_gpu_irq();
     log("GPU操作完成");
 }
 

@@ -27,6 +27,9 @@ extern "C" {
     void gpu_write_mem(uint64_t addr, uint64_t data);
     uint64_t gpu_read_mem(uint64_t addr);
     
+    // GPU中断等待接口
+    void wait_gpu_irq();
+    
     // 测试控制接口
     void host_init();
     void host_cleanup();

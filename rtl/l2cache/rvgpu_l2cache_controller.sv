@@ -17,6 +17,7 @@
 `define RVGPU_L2CACHE_CONTROLLER_SV
 
 `include "rvgpu_l2cache_pkg.svh"
+`include "rvgpu_debug.svh"
 `include "rvgpu_l2cache_if.svh"
 `include "rvgpu_internal_noc_if.svh"
 
@@ -706,15 +707,15 @@ module rvgpu_l2cache_controller #(
         always_ff @(posedge clk) begin
             // 监控NOC请求
             if (noc_if.req_valid && noc_if.req_ready) begin
-                $display("@%0t: [L2CACHE_CTRL] NOC Request: addr=0x%h, trans_id=%0d, %s, size=%0d", 
-                         $time, current_req_nxt.addr, current_req_nxt.trans_id,
-                         current_req_nxt.read ? "READ" : "WRITE", current_req_nxt.size);
+                `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("NOC Request: addr=0x%h, trans_id=%0d, %s, size=%0d", 
+                         current_req_nxt.addr, current_req_nxt.trans_id,
+                         current_req_nxt.read ? "READ" : "WRITE", current_req_nxt.size));
             end
             
             // 监控NOC响应
             if (noc_if.resp_valid && noc_if.resp_ready) begin
-                $display("@%0t: [L2CACHE_CTRL] NOC Response: trans_id=%0d, hit=%0d, status=%0d", 
-                         $time, current_resp_r.trans_id, current_resp_r.hit, current_resp_r.status);
+                `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("NOC Response: trans_id=%0d, hit=%0d, status=%0d", 
+                         current_resp_r.trans_id, current_resp_r.hit, current_resp_r.status));
             end
             
             // 监控状态变化

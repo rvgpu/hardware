@@ -20,6 +20,7 @@
 `include "rvgpu_control_unit_if.svh"
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_job_dispatcher.sv"
+`include "rvgpu_debug.svh"
 
 module rvgpu_command_processor #(
     parameter control_unit_config_t CONTROL_UNIT_CONFIG = DEFAULT_CONTROL_UNIT_CONFIG
@@ -151,6 +152,7 @@ module rvgpu_command_processor #(
                     end
                     default: ; // 忽略未知地址
                 endcase
+                `DEBUG_PRINT("CP", $sformatf("control_reg: %b", control_reg));
             end else begin
                 // 自动清除START位（单脉冲）
                 if (cp_jd.complete || cp_jd.error) begin

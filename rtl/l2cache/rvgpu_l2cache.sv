@@ -17,6 +17,7 @@
 `define RVGPU_L2CACHE_SV
 
 `include "rvgpu_l2cache_pkg.svh"
+`include "rvgpu_debug.svh"
 `include "rvgpu_l2cache_if.svh"
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_interface_axi.svh"
@@ -206,46 +207,36 @@ module rvgpu_l2cache #(
             end else begin
                 // 监控缓存状态变化
                 if (controller_debug.current_state != prev_state) begin
-                    $display("@%0t: [L2CACHE] State transition: %s -> %s", 
-                             $time, 
-                             get_state_name(prev_state),
-                             get_state_name(controller_debug.current_state));
+                    `DEBUG_PRINT("L2CACHE", $sformatf("State transition: %s -> %s", get_state_name(prev_state), get_state_name(controller_debug.current_state)));
                     prev_state <= controller_debug.current_state;
                 end
                 
                 // 监控性能计数器变化
                 if (controller_debug.perf_counters.hit_count != prev_perf_counters.hit_count ||
                     controller_debug.perf_counters.miss_count != prev_perf_counters.miss_count) begin
-                    $display("@%0t: [L2CACHE] Performance - Hits: %0d, Misses: %0d, Hit Rate: %.2f%%", 
-                             $time,
-                             controller_debug.perf_counters.hit_count,
-                             controller_debug.perf_counters.miss_count,
-                             (controller_debug.perf_counters.hit_count * 100.0) / 
-                             (controller_debug.perf_counters.hit_count + controller_debug.perf_counters.miss_count));
+                    `DEBUG_PRINT("L2CACHE", $sformatf("Performance - Hits: %0d, Misses: %0d, Hit Rate: %.2f%%", controller_debug.perf_counters.hit_count, controller_debug.perf_counters.miss_count, 
+                        (controller_debug.perf_counters.hit_count + controller_debug.perf_counters.miss_count > 0) ? 
+                        (real'(controller_debug.perf_counters.hit_count) * 100.0 / real'(controller_debug.perf_counters.hit_count + controller_debug.perf_counters.miss_count)) : 0.0));
                     prev_perf_counters <= controller_debug.perf_counters;
                 end
                 
                 // 监控缓存忙状态
                 if (controller_debug.cache_busy) begin
-                    $display("@%0t: [L2CACHE] Cache busy: addr=0x%h, trans_id=%0d", 
-                             $time, controller_debug.current_addr, controller_debug.current_trans_id);
+                    `DEBUG_PRINT("L2CACHE", $sformatf("Cache busy: addr=0x%h, trans_id=%0d", controller_debug.current_addr, controller_debug.current_trans_id));
                 end
                 
                 // 监控读写操作统计
                 if (controller_debug.perf_counters.read_count != prev_perf_counters.read_count) begin
-                    $display("@%0t: [L2CACHE] Read operations: %0d", 
-                             $time, controller_debug.perf_counters.read_count);
+                    `DEBUG_PRINT("L2CACHE", $sformatf("Read operations: %0d", controller_debug.perf_counters.read_count));
                 end
                 
                 if (controller_debug.perf_counters.write_count != prev_perf_counters.write_count) begin
-                    $display("@%0t: [L2CACHE] Write operations: %0d", 
-                             $time, controller_debug.perf_counters.write_count);
+                    `DEBUG_PRINT("L2CACHE", $sformatf("Write operations: %0d", controller_debug.perf_counters.write_count));
                 end
                 
                 // 监控错误计数
                 if (controller_debug.perf_counters.error_count != prev_perf_counters.error_count) begin
-                    $display("@%0t: [L2CACHE] Error count: %0d", 
-                             $time, controller_debug.perf_counters.error_count);
+                    `DEBUG_PRINT("L2CACHE", $sformatf("Error count: %0d", controller_debug.perf_counters.error_count));
                 end
             end
         end

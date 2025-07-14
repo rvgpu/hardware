@@ -15,6 +15,7 @@
 
 #include "rvgpu_simulator_test.hpp"
 #include "rvgpu_simulator.hpp"
+#include "rvgpu_register.hpp"
 #include "rvgpu_sim_dpi.hpp"
 
 #include <iostream>
@@ -35,16 +36,16 @@ void RVGPUSimulatorTest::run() {
     log("开始运行RVGPU模拟器测试");
     
     // 写入寄存器测试 - 添加strb参数
-    write_reg(0x0000, 0x12345678, 0xFF);
-    write_reg(0x0004, 0x12345678, 0xFF);
-    write_reg(0x0008, 0x12345678, 0xFF);
-    write_reg(0x000c, 0x12345678, 0xFF);
-    write_reg(0x0010, 0x00000001, 0xFF);
+    write_reg(REG_MMU_PAGETABLE_LO, 0x10000000, 0xFF);
+    write_reg(REG_MMU_PAGETABLE_HI, 0x00000000, 0xFF);  // MMU基地址 0x10000000
+    write_reg(REG_COMMAND_PACKET_LO, 0x34567000, 0xFF);
+    write_reg(REG_COMMAND_PACKET_HI, 0x00000012, 0xFF);  // 命令基地址 0x1234567000
+    write_reg(REG_CONTROL, 0x00000001, 0xFF);  // 启动GPU工作
     
     wait_gpu_done();
     
     // 读取寄存器测试
-    uint64_t data = read_reg(0x0010);
+    uint64_t data = read_reg(REG_CONTROL);
     
     if (data == 0x00000001) {
         log("GPU工作完成");

@@ -20,6 +20,7 @@
 `include "rvgpu_control_unit_if.svh"
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_mmu_tlb.sv"
+`include "rvgpu_debug.svh"
 
 module rvgpu_mmu #(
     parameter control_unit_config_t CU_CONFIG = DEFAULT_CONTROL_UNIT_CONFIG
@@ -446,16 +447,15 @@ module rvgpu_mmu #(
         always_ff @(posedge clk) begin
             // 监控TLB握手
             if (tlb_lookup_valid_r && mmu_tlb.tlb_lookup_ready) begin
-                $display("@%0t: [MMU] TLB lookup handshake detected", $time);
+                `DEBUG_PRINT("MMU", $sformatf("TLB lookup handshake detected"));
             end
             if (tlb_update_valid_r && mmu_tlb.tlb_update_ready) begin
-                $display("@%0t: [MMU] TLB update handshake detected", $time);
+                `DEBUG_PRINT("MMU", $sformatf("TLB update handshake detected"));
             end
             
             // 状态转换调试
             if (state_r != state_nxt) begin
-                $display("@%0t: [MMU] State transition: %s -> %s", $time, 
-                         state_r.name(), state_nxt.name());
+                `DEBUG_PRINT("MMU", $sformatf("State transition: %s -> %s", state_r.name(), state_nxt.name()));
             end
         end
     end

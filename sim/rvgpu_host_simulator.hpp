@@ -52,8 +52,6 @@ public:
     // 等待GPU完成
     void wait_gpu_done(int timeout_cycles = 1000);
     
-    void run_test_case();
-    
     // 单例模式接口
     static RVGPUHostSimulator* getInstance();
     static void destroyInstance();

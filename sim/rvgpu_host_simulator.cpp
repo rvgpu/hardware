@@ -72,32 +72,6 @@ void RVGPUHostSimulator::wait_gpu_done(int timeout_cycles) {
     log("GPU操作完成");
 }
 
-// 运行测试用例
-void RVGPUHostSimulator::run_test_case() {
-    log("开始运行测试用例");
-    
-    // 写入寄存器测试 - 添加strb参数
-    cpu_axi_write(0x0000, 0x12345678, 0xFF);
-    cpu_axi_write(0x0004, 0x12345678, 0xFF);
-    cpu_axi_write(0x0008, 0x12345678, 0xFF);
-    cpu_axi_write(0x000c, 0x12345678, 0xFF);
-    cpu_axi_write(0x0010, 0x00000001, 0xFF);
-    
-    wait_gpu_done();
-    
-    // 读取寄存器测试 - 使用正确的函数名
-    uint64_t data;
-    cpu_axi_read_with_data(0x0010, &data);
-    
-    if (data == 0x00000001) {
-        log("GPU工作完成");
-    } else {
-        log("GPU工作失败，读取值: 0x" + std::to_string(data));
-    }
-    
-    log("测试用例完成");
-}
-
 //=============================================================================
 // 单例模式实现
 //=============================================================================

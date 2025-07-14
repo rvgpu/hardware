@@ -13,44 +13,32 @@
 // limitations under the License.
 //=============================================================================
 
-#include "rvgpu_sim_dpi.hpp"
+#ifndef RVGPU_BASIC_TEST_CASE_HPP
+#define RVGPU_BASIC_TEST_CASE_HPP
+
 #include "rvgpu_host_simulator.hpp"
-#include "rvgpu_basic_test_case.hpp"
 
 //=============================================================================
-// DPI函数实现
+// RVGPUBasicTestCase Class Declaration
 //=============================================================================
 
-extern "C" {
-    void host_init() {
-        RVGPUHostSimulator::getInstance();
-    }
+class RVGPUBasicTestCase {
+public:
+    // 构造函数
+    RVGPUBasicTestCase(RVGPUHostSimulator* host_sim = nullptr);
+    
+    // 析构函数
+    ~RVGPUBasicTestCase();
+    
+    // 运行测试用例
+    void run();
+    
+private:
+    RVGPUHostSimulator* host_simulator;
+    
+    // 禁用拷贝构造和赋值操作
+    RVGPUBasicTestCase(const RVGPUBasicTestCase&) = delete;
+    RVGPUBasicTestCase& operator=(const RVGPUBasicTestCase&) = delete;
+};
 
-    void host_cleanup() {
-        RVGPUHostSimulator::destroyInstance();
-    }
-    
-    void host_run_test_case() {
-        RVGPUHostSimulator* sim = RVGPUHostSimulator::getInstance();
-        if (sim != nullptr) {
-            RVGPUBasicTestCase test_case(sim);
-            test_case.run();
-        }
-    }
-    
-    // GPU直接内存访问DPI函数
-    void gpu_write_mem(uint64_t addr, uint64_t data) {
-        RVGPUHostSimulator* sim = RVGPUHostSimulator::getInstance();
-        if (sim != nullptr) {
-            sim->gpu_write_memory(addr, data);
-        }
-    }
-    
-    uint64_t gpu_read_mem(uint64_t addr) {
-        RVGPUHostSimulator* sim = RVGPUHostSimulator::getInstance();
-        if (sim != nullptr) {
-            return sim->gpu_read_memory(addr);
-        }
-        return 0;
-    }
-} 
+#endif // RVGPU_BASIC_TEST_CASE_HPP 

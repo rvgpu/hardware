@@ -25,10 +25,13 @@ import rvgpu_internal_noc_pkg::*;
 `endif // RVGPU_INTERNAL_NOC_PKG_IMPORTED
 
 // DPI导入声明 - 从C++导入函数
-import "DPI-C" context function void cpu_init();
-import "DPI-C" context function void cpu_run_test_suite();
-import "DPI-C" context function void cpu_test_array_add();
-import "DPI-C" context function void cpu_cleanup();
+import "DPI-C" context function void host_init();
+import "DPI-C" context task host_run_test_case();
+import "DPI-C" context function void host_cleanup();
+
+// DPI导入声明 - 从C++导入GPU内存访问函数
+import "DPI-C" context function void gpu_write_mem(input int slice_id, input longint unsigned addr, input longint unsigned data);
+import "DPI-C" context function longint unsigned gpu_read_mem(input int slice_id, input longint unsigned addr);
 
 module rvgpu_toplevel_tb;
 
@@ -42,20 +45,16 @@ module rvgpu_toplevel_tb;
     // Host接口实例
     host_if host_if_inst();
     
-    // Memory接口实例数组 - 使用数组方式定义
+    // Memory接口实例数组
     memory_if mem_if [`L2CACHE_SLICE_NUMBER]();
     
     // RVGPU顶层模块实例
     rvgpu_toplevel u_rvgpu_toplevel (
         .clk(clk),
         .rst_n(rst_n),
-        .host_if(host_if_inst.slave),
+        .host_if(host_if_inst),
         .mem_if(mem_if)
     );
-    
-    // 简单的内存模拟
-    logic [63:0] memory [1024];
-    logic [63:0] axi_read_data;
     
     // 时钟生成
     initial begin
@@ -75,60 +74,159 @@ module rvgpu_toplevel_tb;
         rst_n = 1;
     end
     
-    // DPI函数实现 - 导出给C++使用
-    export "DPI-C" function cpu_axi_write;
-    export "DPI-C" function cpu_axi_write_done;
-    export "DPI-C" function cpu_axi_read;
-    export "DPI-C" function cpu_axi_read_data;
-    export "DPI-C" function cpu_axi_read_done;
-    export "DPI-C" task cpu_clock_cycle;
-    export "DPI-C" function cpu_log;
-    
-    // AXI写操作
-    function void cpu_axi_write(input logic [63:0] addr, input logic [63:0] data, input logic [7:0] strb);
-        // 直接写入内存
-        if (addr >= 64'h1000) begin
-            memory[addr[15:3]] = data;
-        end
-        $display("[%0t] AXI写: addr=0x%h, data=0x%h", $time, addr, data);
-    endfunction
-    
-    // AXI写完成检查
-    function int cpu_axi_write_done();
-        return 1; // 立即完成
-    endfunction
-    
-    // AXI读操作
-    function void cpu_axi_read(input logic [63:0] addr);
-        // 读取内存
-        if (addr >= 64'h1000) begin
-            axi_read_data = memory[addr[15:3]];
-        end else begin
-            axi_read_data = 64'h0; // 寄存器默认值
-        end
-        $display("[%0t] AXI读: addr=0x%h, data=0x%h", $time, addr, axi_read_data);
-    endfunction
-    
-    // AXI读数据获取
-    function longint unsigned cpu_axi_read_data();
-        return axi_read_data;
-    endfunction
-    
-    // AXI读完成检查
-    function int cpu_axi_read_done();
-        return 1; // 立即完成
-    endfunction
-    
-    // 时钟周期推进
-    task cpu_clock_cycle();
-        // 等待一个时钟周期
+    // Host接口AXI写操作 - 通过host_if与RVGPU通信
+    task cpu_axi_write(input longint unsigned addr, input longint unsigned data, input byte unsigned strb);
+        automatic logic [1:0] bresp_status;
+        
+        // 等待时钟上升沿
         @(posedge clk);
+        
+        // 设置写地址通道
+        host_if_inst.awaddr = addr;
+        host_if_inst.awlen = 0;
+        host_if_inst.awsize = 3; // 64位 = 8字节
+        host_if_inst.awburst = 2'b01; // INCR
+        host_if_inst.awvalid = 1'b1;
+        
+        // 设置写数据通道
+        host_if_inst.wdata = data;
+        host_if_inst.wstrb = strb;
+        host_if_inst.wlast = 1'b1;
+        host_if_inst.wvalid = 1'b1;
+        
+        // 设置写响应通道
+        host_if_inst.bready = 1'b1;
+        
+        $display("[%0t] Host AXI写: addr=0x%h, data=0x%h, strb=0x%h", $time, addr, data, strb);
+        
+        // 等待握手完成
+        wait (host_if_inst.awready && host_if_inst.wready);
+        @(posedge clk);
+        #1;  // Hold Time
+
+        host_if_inst.awvalid = 1'b0;
+        host_if_inst.wvalid = 1'b0;
+        
+        // 等待写响应
+        wait (host_if_inst.bvalid);
+        bresp_status = host_if_inst.bresp;
+        @(posedge clk);
+
+        #1;  // Hold Time
+        host_if_inst.bready = 1'b0;
+        
+        // 检查写响应状态
+        if (bresp_status != 2'b00) begin
+            $display("[%0t] WARNING: Host AXI写响应错误: bresp=0x%h", $time, bresp_status);
+        end else begin
+            $display("[%0t] Host AXI写完成: addr=0x%h, data=0x%h", $time, addr, data);
+        end
     endtask
     
-    // 日志输出
-    function void cpu_log(input string message);
-        $display("[%0t] %s", $time, message);
-    endfunction
+
+    
+    // Host接口AXI读操作 - 通过host_if与RVGPU通信
+    task cpu_axi_read_with_data(input longint unsigned addr, output longint unsigned data);
+        automatic logic [1:0] rresp_status;
+        
+        // 等待时钟上升沿
+        @(posedge clk);
+        
+        // 设置读地址通道
+        host_if_inst.araddr = addr;
+        host_if_inst.arlen = 0;
+        host_if_inst.arsize = 3; // 64位 = 8字节
+        host_if_inst.arburst = 2'b01; // INCR
+        host_if_inst.arvalid = 1'b1;
+        
+        // 设置读数据通道
+        host_if_inst.rready = 1'b1;
+        
+        $display("[%0t] Host AXI读: addr=0x%h", $time, addr);
+        
+        // 等待握手完成
+        wait (host_if_inst.arready);
+        @(posedge clk);
+        #1;  // Hold Time
+        host_if_inst.arvalid = 1'b0;
+        
+        // 等待读数据
+        wait (host_if_inst.rvalid);
+        data = host_if_inst.rdata;
+        rresp_status = host_if_inst.rresp;
+        @(posedge clk);
+        #1;  // Hold Time
+        
+        // 检查读响应状态
+        if (rresp_status != 2'b00) begin
+            $display("[%0t] WARNING: Host AXI读响应错误: rresp=0x%h", $time, rresp_status);
+        end else begin
+            $display("[%0t] Host AXI读完成: addr=0x%h, data=0x%h", $time, addr, data);
+        end
+    endtask
+    
+    // DPI导出声明 - 导出给C++使用的host control接口
+    export "DPI-C" task cpu_axi_write;
+    export "DPI-C" task cpu_axi_read_with_data;
+    
+    
+    // GPU内存访问监控和处理
+    genvar i;
+    generate
+        for (i = 0; i < `L2CACHE_SLICE_NUMBER; i = i + 1) begin : gpu_mem_monitor
+            // GPU内存访问监控 - 简化版本，直接在响应处理中调用DPI
+            always @(posedge clk) begin
+                // 监控GPU写请求
+                if (mem_if[i].awvalid && mem_if[i].awready) begin
+                    $display("[%0t] GPU写请求: slice=%0d, addr=0x%h", $time, i, mem_if[i].awaddr);
+                end
+                
+                if (mem_if[i].wvalid && mem_if[i].wready) begin
+                    // 调用C++接口写入内存
+                    gpu_write_mem(i, mem_if[i].awaddr, mem_if[i].wdata[63:0]);
+                    $display("[%0t] GPU写完成: slice=%0d, addr=0x%h, data=0x%h", $time, i, mem_if[i].awaddr, mem_if[i].wdata[63:0]);
+                end
+                
+                // 监控GPU读请求
+                if (mem_if[i].arvalid && mem_if[i].arready) begin
+                    $display("[%0t] GPU读请求: slice=%0d, addr=0x%h", $time, i, mem_if[i].araddr);
+                end
+            end
+            
+            // AXI接口响应处理
+            always @(posedge clk) begin
+                // 写地址通道
+                mem_if[i].awready = 1'b1;
+                
+                // 写数据通道
+                mem_if[i].wready = 1'b1;
+                
+                // 写响应通道 - 当检测到写请求时立即响应
+                if (mem_if[i].awvalid && mem_if[i].wvalid && mem_if[i].bready) begin
+                    mem_if[i].bresp = 2'b00; // OKAY
+                    mem_if[i].bid = mem_if[i].awid;
+                    mem_if[i].bvalid = 1'b1;
+                end else begin
+                    mem_if[i].bvalid = 1'b0;
+                end
+                
+                // 读地址通道
+                mem_if[i].arready = 1'b1;
+                
+                // 读数据通道 - 当检测到读请求时立即响应
+                if (mem_if[i].arvalid && mem_if[i].rready) begin
+                    // 调用C++接口读取内存并立即返回
+                    mem_if[i].rdata = {192'h0, gpu_read_mem(i, mem_if[i].araddr)};
+                    mem_if[i].rresp = 2'b00; // OKAY
+                    mem_if[i].rid = mem_if[i].arid;
+                    mem_if[i].rlast = 1'b1;
+                    mem_if[i].rvalid = 1'b1;
+                end else begin
+                    mem_if[i].rvalid = 1'b0;
+                end
+            end
+        end
+    endgenerate
     
     // 测试主程序
     initial begin
@@ -139,13 +237,13 @@ module rvgpu_toplevel_tb;
         $display("RVGPU顶层测试开始");
         
         // 初始化CPU模拟器
-        cpu_init();
+        host_init();
         
         // 运行测试套件
-        cpu_run_test_suite();
+        host_run_test_case();
         
         // 清理
-        cpu_cleanup();
+        host_cleanup();
         
         $display("RVGPU顶层测试完成");
         $finish;

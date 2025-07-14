@@ -47,7 +47,8 @@ INCDIR_FILE := $(RTL_DIR)/filelists/rvgpu_incdir.f
 
 # 仿真源文件
 SIM_SOURCES := \
-	$(SIM_DIR)/rvgpu_cpu_simulator.cpp \
+	$(SIM_DIR)/rvgpu_host_simulator.cpp \
+	$(SIM_DIR)/rvgpu_sim_dpi.cpp \
 	$(SIM_DIR)/rvgpu_toplevel_tb.sv
 
 # 默认目标

@@ -16,9 +16,5 @@ ${RVGPU_HARDWARE}/rtl/l2cache/rvgpu_l2cache_tag_array.sv
 ${RVGPU_HARDWARE}/rtl/l2cache/rvgpu_l2cache_axi_adapter.sv
 ${RVGPU_HARDWARE}/rtl/l2cache/rvgpu_l2cache_noc_adapter.sv
 ${RVGPU_HARDWARE}/rtl/internal_noc/rvgpu_internal_noc_2sc.sv
-${RVGPU_HARDWARE}/rtl/core/iu/rcore_iu_top.v
-${RVGPU_HARDWARE}/rtl/core/iu/rcore_iu_alu.v
-${RVGPU_HARDWARE}/rtl/core/ifu/icache/rcore_ifu_icache.v
-${RVGPU_HARDWARE}/rtl/core/ifu/icache/rcore_ifu_icache_data_array.v
-${RVGPU_HARDWARE}/rtl/core/ifu/icache/rcore_ifu_icache_tag_array.v
+${RVGPU_HARDWARE}/rtl/shader_core/shader_core.sv
 ${RVGPU_HARDWARE}/rtl/mem/sram/rvgpu_sram_sp_sim.sv

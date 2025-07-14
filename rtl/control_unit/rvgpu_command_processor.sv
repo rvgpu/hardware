@@ -73,7 +73,7 @@ module rvgpu_command_processor #(
     //=============================================================================
     
     rvgpu_job_dispatcher #(
-        .CONTROL_UNIT_CONFIG(CONTROL_UNIT_CONFIG)
+        .CU_CONFIG(CONTROL_UNIT_CONFIG)
     ) u_job_dispatcher (
         .clk(clk),
         .rst_n(rst_n),

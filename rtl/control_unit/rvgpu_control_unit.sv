@@ -47,33 +47,33 @@ module rvgpu_control_unit #(
     // cp_mmu: Command Processor <-> MMU
     // cp_noc: Command Processor <-> NOC Arbiter
     // mmu_noc: MMU <-> NOC Arbiter
-    control_if #(.CU_CONFIG = CU_CONFIG) adapter_cp();
+    control_if adapter_cp();
     
-    mmu_if #(.CU_CONFIG = CU_CONFIG) cp_mmu();
+    mmu_if cp_mmu();
     
-    rvgpu_internal_noc_if.device cp_noc();
+    rvgpu_internal_noc_if cp_noc();
     
-    rvgpu_internal_noc_if.device mmu_noc();
+    rvgpu_internal_noc_if mmu_noc();
     
     //=============================================================================
     // AXI Adapter Instance - AXI interface to control interface
     //=============================================================================
-    rvgpu_axi_adapter #(.CU_CONFIG = CU_CONFIG) u_axi_adapter (
+    rvgpu_axi_adapter u_axi_adapter (
         .clk(clk),
         .rst_n(rst_n),
         .axi_if(host_axi_if),
-        .ctrl_if(adapter_cp.master)
+        .ctrl_cp(adapter_cp.axiadapter_port)
     );
     
     //=============================================================================
     // Command Processor Instance
     //=============================================================================
-    rvgpu_command_processor #(.CU_CONFIG = CU_CONFIG) u_command_processor (
+    rvgpu_command_processor #(.CONTROL_UNIT_CONFIG(CU_CONFIG)) u_command_processor (
         .clk(clk),
         .rst_n(rst_n),
-        .ctrl_if(adapter_cp.slave),
-        .noc_if(cp_noc),
-        .mmu_if(cp_mmu.master),
+        .ctrl_cp(adapter_cp.cp_port),
+        .noc_if(cp_noc.device),
+        .mmu_if(cp_mmu.cp_port),
         .gpu_irq(gpu_irq)
     );
     
@@ -81,11 +81,11 @@ module rvgpu_control_unit #(
     // MMU Instance - Memory Management Unit
     //=============================================================================
     
-    rvgpu_mmu #(.CU_CONFIG = CU_CONFIG) u_mmu (
+    rvgpu_mmu #(.CU_CONFIG(CU_CONFIG)) u_mmu (
         .clk(clk),
         .rst_n(rst_n),
-        .mmu_if(cp_mmu.slave),
-        .noc_if(mmu_noc)
+        .mmu_if(cp_mmu.mmu_port),
+        .noc_if(mmu_noc.device)
     );
     
     //=============================================================================
@@ -96,11 +96,11 @@ module rvgpu_control_unit #(
         .clk(clk),
         .rst_n(rst_n),
 
-        // Port 0: cp_noc Interface (Command Processor → NOC)
-        .m0_if(cp_noc),
+        // Command Processor Interface
+        .cp_if(cp_noc.noc),
 
-        // Port 1: mmu_noc Interface (MMU → NOC)
-        .m1_if(mmu_noc),
+        // Memory Management Unit Interface
+        .mmu_if(mmu_noc.noc),
 
         // NOC Interface
         .noc_if(noc_if)

@@ -19,16 +19,26 @@
 `include "rvgpu_config.svh"
 `include "rvgpu_interface_axi.svh"
 `include "rvgpu_internal_noc_pkg.svh"
+`include "rvgpu_internal_noc_if.svh"
+`include "rvgpu_control_unit_pkg.svh"
+`include "rvgpu_l2cache_pkg.svh"
 
 `ifndef RVGPU_INTERNAL_NOC_PKG_IMPORTED
 `define RVGPU_INTERNAL_NOC_PKG_IMPORTED
 import rvgpu_internal_noc_pkg::*;
 `endif // RVGPU_INTERNAL_NOC_PKG_IMPORTED
 
-module rvgpu_toplevel #(
-    // Structure Parameter: system_config_t
-    parameter system_config_t SYS_CONFIG = get_default_system_config()
-) (
+`ifndef RVGPU_CONTROL_UNIT_PKG_IMPORTED
+`define RVGPU_CONTROL_UNIT_PKG_IMPORTED
+import rvgpu_control_unit_pkg::*;
+`endif // RVGPU_CONTROL_UNIT_PKG_IMPORTED
+
+`ifndef RVGPU_L2CACHE_PKG_IMPORTED
+`define RVGPU_L2CACHE_PKG_IMPORTED
+import rvgpu_l2cache_pkg::*;
+`endif // RVGPU_L2CACHE_PKG_IMPORTED
+
+module rvgpu_toplevel (
     // Clock and Reset Interface
     input  logic clk,
     input  logic rst_n,
@@ -39,52 +49,46 @@ module rvgpu_toplevel #(
     // Memory Interface (AXI Master) - Each L2Cache Slice has one
     memory_if.master mem_if [`L2CACHE_SLICE_NUMBER]
 );
+    rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) control_unit_noc_if();
+    rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) l2cache_noc_if();
+    rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) shader_core_noc_if [`SHADER_CORE_NUMBER]();
 
-    // 创建NOC配置
-    internal_noc_interface_t noc_config;
-    assign noc_config = get_default_internal_noc_interface();
-
-    rvgpu_internal_noc_if #(.NOC_CONFIG(noc_config)) control_unit_noc_if();
-    rvgpu_internal_noc_if #(.NOC_CONFIG(noc_config)) l2cache_noc_if();
-    rvgpu_internal_noc_if #(.NOC_CONFIG(noc_config)) shader_core_noc_if [`SHADER_CORE_NUMBER];
-
-    // Control Unit
-    rvgpu_control_unit u_control_unit #(.NOC_CONFIG(noc_config)) (
+    // Control Unit - 使用control_unit_config_t参数
+    rvgpu_control_unit u_control_unit (
         .clk(clk),
         .rst_n(rst_n),
-        .host_if(host_if),
-        .noc_if(control_unit_noc_if.device)
+        .host_axi_if(host_if),
+        .noc_if(control_unit_noc_if.device),
+        .gpu_irq()  // 暂时不连接，因为顶层模块没有这个端口
     );
 
-    // L2Cache
-    rvgpu_l2cache u_l2cache #(.NOC_CONFIG(noc_config)) (
+    // L2Cache - 使用l2cache_config_t参数
+    rvgpu_l2cache u_l2cache (
         .clk(clk),
         .rst_n(rst_n),
         .noc_if(l2cache_noc_if.device),
-        .mem_if(mem_if)
+        .mem_if(mem_if[0])  // 只使用第一个接口
     );
 
-    // Shader Core
-    rvgpu_shader_core u_shader_core_0 #(.NOC_CONFIG(noc_config)) (
+    // Shader Core 实例化
+    rvgpu_shader_core #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) u_shader_core_0 (
         .clk(clk),
         .rst_n(rst_n),
-        .noc_if(shader_core_noc_if.device)
+        .noc_if(shader_core_noc_if[0].device)
+    );
+    rvgpu_shader_core #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) u_shader_core_1 (
+        .clk(clk),
+        .rst_n(rst_n),
+        .noc_if(shader_core_noc_if[1].device)
     );
 
-    // Shader Core
-    rvgpu_shader_core u_shader_core_1 #(.NOC_CONFIG(noc_config)) (
+    // NOC - 连接所有模块的网络
+    rvgpu_internal_noc #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) u_internal_noc (
         .clk(clk),
         .rst_n(rst_n),
-        .noc_if(shader_core_noc_if.device)
-    );
-
-    // Noc
-    rvgpu_internal_noc_2sc u_internal_noc_2sc #(.NOC_CONFIG(noc_config)) (
-        .clk(clk),
-        .rst_n(rst_n),
-        .control_unit_noc_if(control_unit_noc_if.noc),
-        .l2cache_noc_if(l2cache_noc_if.noc),
-        .shader_core_noc_if({shader_core_noc_if[1].noc, shader_core_noc_if[0].noc}),
+        .control_unit(control_unit_noc_if.noc),
+        .l2cache(l2cache_noc_if.noc),
+        .shader_core(shader_core_noc_if)
     );
 
 endmodule : rvgpu_toplevel

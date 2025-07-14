@@ -13,8 +13,8 @@
 // limitations under the License.
 //=============================================================================
 
-#ifndef RVGPU_HOST_SIMULATOR_HPP
-#define RVGPU_HOST_SIMULATOR_HPP
+#ifndef RVGPU_SIMULATOR_HPP
+#define RVGPU_SIMULATOR_HPP
 
 #include <iostream>
 #include <cstdint>
@@ -24,33 +24,30 @@
 #include <thread>
 #include "rvgpu_register.hpp"
 #include "rvgpu_memory.hpp"
-#include "rvgpu_basic_test_case.hpp"
 
 //=============================================================================
-// RVGPU Host Simulator Class Declaration
+// RVGPU Simulator Base Class Declaration
 //=============================================================================
 
-class RVGPUHostSimulator {
-private:
+class RVGPUSimulator {
+protected:
     // 内存模拟 - 使用Memory类
     RVGPUMemory* memory;
     bool verbose;
-    // 测试用例
-    RVGPUBasicTestCase* test_case;
     
 public:
     // 单例模式接口
-    static RVGPUHostSimulator* getInstance();
+    static RVGPUSimulator* getInstance();
     static void destroyInstance();
 
     // 构造函数
-    RVGPUHostSimulator(bool verbose_mode = true);
+    RVGPUSimulator(bool verbose_mode = true);
     
     // 析构函数
-    ~RVGPUHostSimulator();
-
-    // 运行测试用例
-    void run();
+    virtual ~RVGPUSimulator();
+    
+    // 纯虚函数 - 子类必须实现
+    virtual void run() = 0;
     
     // 日志输出
     void log(const std::string& message);
@@ -66,13 +63,13 @@ public:
     void write_memory(uint64_t addr, uint64_t data);
     uint64_t read_memory(uint64_t addr);
     
-private:
+protected:
     // 禁用拷贝构造和赋值操作
-    RVGPUHostSimulator(const RVGPUHostSimulator&) = delete;
-    RVGPUHostSimulator& operator=(const RVGPUHostSimulator&) = delete;
+    RVGPUSimulator(const RVGPUSimulator&) = delete;
+    RVGPUSimulator& operator=(const RVGPUSimulator&) = delete;
     
     // 静态实例指针声明
-    static RVGPUHostSimulator* instance;
+    static RVGPUSimulator* instance;
 };
 
-#endif // RVGPU_HOST_SIMULATOR_HPP 
+#endif // RVGPU_SIMULATOR_HPP 

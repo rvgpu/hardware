@@ -48,8 +48,8 @@ INCDIR_FILE := $(RTL_DIR)/filelists/rvgpu_incdir.f
 # 仿真源文件
 SIM_SOURCES := \
 	$(SIM_DIR)/rvgpu_memory.cpp \
-	$(SIM_DIR)/rvgpu_host_simulator.cpp \
-	$(SIM_DIR)/rvgpu_basic_test_case.cpp \
+	$(SIM_DIR)/rvgpu_simulator.cpp \
+	$(SIM_DIR)/rvgpu_simulator_test.cpp \
 	$(SIM_DIR)/rvgpu_sim_dpi.cpp \
 	$(SIM_DIR)/rvgpu_toplevel_tb.sv
 

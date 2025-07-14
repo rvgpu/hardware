@@ -13,54 +13,44 @@
 // limitations under the License.
 //=============================================================================
 
-#include "rvgpu_basic_test_case.hpp"
-#include "rvgpu_host_simulator.hpp"
+#include "rvgpu_simulator_test.hpp"
+#include "rvgpu_simulator.hpp"
 #include "rvgpu_sim_dpi.hpp"
 
 #include <iostream>
 #include <cstdint>
 
 //=============================================================================
-// RVGPUBasicTestCase Class Implementation
+// RVGPUSimulatorTest Class Implementation
 //=============================================================================
 
-RVGPUBasicTestCase::RVGPUBasicTestCase(RVGPUHostSimulator* sim)
-    : sim(sim) {
+RVGPUSimulatorTest::RVGPUSimulatorTest(bool verbose_mode) 
+    : RVGPUSimulator(verbose_mode) {
 }
 
-RVGPUBasicTestCase::~RVGPUBasicTestCase() {
+RVGPUSimulatorTest::~RVGPUSimulatorTest() {
 }
 
-void RVGPUBasicTestCase::run() {
-    if (sim != nullptr) {
-        sim->log("开始运行基本测试用例");
-    }
+void RVGPUSimulatorTest::run() {
+    log("开始运行RVGPU模拟器测试");
     
     // 写入寄存器测试 - 添加strb参数
-    sim->write_reg(0x0000, 0x12345678, 0xFF);
-    sim->write_reg(0x0004, 0x12345678, 0xFF);
-    sim->write_reg(0x0008, 0x12345678, 0xFF);
-    sim->write_reg(0x000c, 0x12345678, 0xFF);
-    sim->write_reg(0x0010, 0x00000001, 0xFF);
+    write_reg(0x0000, 0x12345678, 0xFF);
+    write_reg(0x0004, 0x12345678, 0xFF);
+    write_reg(0x0008, 0x12345678, 0xFF);
+    write_reg(0x000c, 0x12345678, 0xFF);
+    write_reg(0x0010, 0x00000001, 0xFF);
     
-    if (sim != nullptr) {
-        sim->wait_gpu_done();
-    }
+    wait_gpu_done();
     
-    // 读取寄存器测试 - 使用正确的函数名
-    uint64_t data = sim->read_reg(0x0010);
+    // 读取寄存器测试
+    uint64_t data = read_reg(0x0010);
     
     if (data == 0x00000001) {
-        if (sim != nullptr) {
-            sim->log("GPU工作完成");
-        }
+        log("GPU工作完成");
     } else {
-        if (sim != nullptr) {
-            sim->log("GPU工作失败，读取值: 0x" + std::to_string(data));
-        }
+        log("GPU工作失败，读取值: 0x" + std::to_string(data));
     }
     
-    if (sim != nullptr) {
-        sim->log("基本测试用例完成");
-    }
+    log("RVGPU模拟器测试完成");
 } 

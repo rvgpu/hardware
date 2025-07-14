@@ -14,8 +14,8 @@
 //=============================================================================
 
 #include "rvgpu_sim_dpi.hpp"
-#include "rvgpu_host_simulator.hpp"
-#include "rvgpu_basic_test_case.hpp"
+#include "rvgpu_simulator.hpp"
+#include "rvgpu_simulator_test.hpp"
 
 //=============================================================================
 // DPI函数实现
@@ -23,15 +23,15 @@
 
 extern "C" {
     void host_init() {
-        RVGPUHostSimulator::getInstance();
+        RVGPUSimulator::getInstance();
     }
 
     void host_cleanup() {
-        RVGPUHostSimulator::destroyInstance();
+        RVGPUSimulator::destroyInstance();
     }
     
     void host_run_test_case() {
-        RVGPUHostSimulator* sim = RVGPUHostSimulator::getInstance();
+        RVGPUSimulator* sim = RVGPUSimulator::getInstance();
         if (sim != nullptr) {
             sim->run();
         }
@@ -39,14 +39,14 @@ extern "C" {
     
     // GPU直接内存访问DPI函数
     void gpu_write_mem(uint64_t addr, uint64_t data) {
-        RVGPUHostSimulator* sim = RVGPUHostSimulator::getInstance();
+        RVGPUSimulator* sim = RVGPUSimulator::getInstance();
         if (sim != nullptr) {
             sim->write_memory(addr, data);
         }
     }
     
     uint64_t gpu_read_mem(uint64_t addr) {
-        RVGPUHostSimulator* sim = RVGPUHostSimulator::getInstance();
+        RVGPUSimulator* sim = RVGPUSimulator::getInstance();
         if (sim != nullptr) {
             return sim->read_memory(addr);
         }

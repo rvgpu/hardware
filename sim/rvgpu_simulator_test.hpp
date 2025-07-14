@@ -13,33 +13,30 @@
 // limitations under the License.
 //=============================================================================
 
-#ifndef RVGPU_BASIC_TEST_CASE_HPP
-#define RVGPU_BASIC_TEST_CASE_HPP
+#ifndef RVGPU_SIMULATOR_TEST_HPP
+#define RVGPU_SIMULATOR_TEST_HPP
 
-// 前向声明
-class RVGPUHostSimulator;
+#include "rvgpu_simulator.hpp"
 
 //=============================================================================
-// RVGPUBasicTestCase Class Declaration
+// RVGPU Simulator Test Class Declaration
 //=============================================================================
 
-class RVGPUBasicTestCase {
+class RVGPUSimulatorTest : public RVGPUSimulator {
 public:
     // 构造函数
-    RVGPUBasicTestCase(RVGPUHostSimulator* sim = nullptr);
+    RVGPUSimulatorTest(bool verbose_mode = true);
     
     // 析构函数
-    ~RVGPUBasicTestCase();
+    ~RVGPUSimulatorTest();
     
-    // 运行测试用例
-    void run();
+    // 实现纯虚函数
+    void run() override;
     
 private:
-    RVGPUHostSimulator* sim;
-    
     // 禁用拷贝构造和赋值操作
-    RVGPUBasicTestCase(const RVGPUBasicTestCase&) = delete;
-    RVGPUBasicTestCase& operator=(const RVGPUBasicTestCase&) = delete;
+    RVGPUSimulatorTest(const RVGPUSimulatorTest&) = delete;
+    RVGPUSimulatorTest& operator=(const RVGPUSimulatorTest&) = delete;
 };
 
-#endif // RVGPU_BASIC_TEST_CASE_HPP 
+#endif // RVGPU_SIMULATOR_TEST_HPP 

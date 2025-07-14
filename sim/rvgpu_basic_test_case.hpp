@@ -16,7 +16,8 @@
 #ifndef RVGPU_BASIC_TEST_CASE_HPP
 #define RVGPU_BASIC_TEST_CASE_HPP
 
-#include "rvgpu_host_simulator.hpp"
+// 前向声明
+class RVGPUHostSimulator;
 
 //=============================================================================
 // RVGPUBasicTestCase Class Declaration
@@ -25,7 +26,7 @@
 class RVGPUBasicTestCase {
 public:
     // 构造函数
-    RVGPUBasicTestCase(RVGPUHostSimulator* host_sim = nullptr);
+    RVGPUBasicTestCase(RVGPUHostSimulator* sim = nullptr);
     
     // 析构函数
     ~RVGPUBasicTestCase();
@@ -34,7 +35,7 @@ public:
     void run();
     
 private:
-    RVGPUHostSimulator* host_simulator;
+    RVGPUHostSimulator* sim;
     
     // 禁用拷贝构造和赋值操作
     RVGPUBasicTestCase(const RVGPUBasicTestCase&) = delete;

@@ -33,8 +33,7 @@ extern "C" {
     void host_run_test_case() {
         RVGPUHostSimulator* sim = RVGPUHostSimulator::getInstance();
         if (sim != nullptr) {
-            RVGPUBasicTestCase test_case(sim);
-            test_case.run();
+            sim->run();
         }
     }
     
@@ -42,14 +41,14 @@ extern "C" {
     void gpu_write_mem(uint64_t addr, uint64_t data) {
         RVGPUHostSimulator* sim = RVGPUHostSimulator::getInstance();
         if (sim != nullptr) {
-            sim->gpu_write_memory(addr, data);
+            sim->write_memory(addr, data);
         }
     }
     
     uint64_t gpu_read_mem(uint64_t addr) {
         RVGPUHostSimulator* sim = RVGPUHostSimulator::getInstance();
         if (sim != nullptr) {
-            return sim->gpu_read_memory(addr);
+            return sim->read_memory(addr);
         }
         return 0;
     }

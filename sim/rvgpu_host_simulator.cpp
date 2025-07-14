@@ -15,6 +15,7 @@
 
 #include "rvgpu_host_simulator.hpp"
 #include "rvgpu_sim_dpi.hpp"
+#include "rvgpu_basic_test_case.hpp"
 
 #include <iostream>
 #include <cstdint>
@@ -27,12 +28,17 @@
 // RVGPUHostSimulator Class Implementation
 //=============================================================================
 
-RVGPUHostSimulator::RVGPUHostSimulator(bool verbose_mode) : verbose(verbose_mode) {
+RVGPUHostSimulator::RVGPUHostSimulator(bool verbose_mode) : verbose(verbose_mode), test_case(nullptr) {
     memory = new RVGPUMemory(1 * 1024 * 1024 * 1024); // 初始化内存 1GB
+    test_case = new RVGPUBasicTestCase(this); // 创建测试用例
     log("Host模拟器初始化完成");
 }
 
 RVGPUHostSimulator::~RVGPUHostSimulator() {
+    if (test_case != nullptr) {
+        delete test_case;
+        test_case = nullptr;
+    }
     if (memory != nullptr) {
         delete memory;
         memory = nullptr;
@@ -47,29 +53,49 @@ void RVGPUHostSimulator::log(const std::string& message) {
     }
 }
 
-// GPU直接内存访问 - 使用Memory类
-void RVGPUHostSimulator::gpu_write_memory(uint64_t addr, uint64_t data) {
-    if (memory != nullptr) {
-        memory->write(addr, data);
-        log("GPU写内存: addr=0x" + std::to_string(addr) + ", data=0x" + std::to_string(data));
-    }
-}
-
-uint64_t RVGPUHostSimulator::gpu_read_memory(uint64_t addr) {
-    if (memory != nullptr) {
-        uint64_t data = memory->read(addr);
-        log("GPU读内存: addr=0x" + std::to_string(addr) + ", data=0x" + std::to_string(data));
-        return data;
-    }
-    return 0;
-}
-
 // 等待GPU完成
 void RVGPUHostSimulator::wait_gpu_done(int timeout_cycles) {
     log("等待GPU完成...");
     // 简化实现，实际应该检查GPU状态
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     log("GPU操作完成");
+}
+
+// 运行测试用例
+void RVGPUHostSimulator::run() {
+    if (test_case != nullptr) {
+        log("开始运行测试用例");
+        test_case->run();
+        log("测试用例运行完成");
+    } else {
+        log("错误：测试用例未初始化");
+    }
+}
+
+void RVGPUHostSimulator::write_reg(uint64_t addr, uint64_t data, uint8_t strb) {
+    cpu_axi_write(addr, data, strb);
+}
+
+uint64_t RVGPUHostSimulator::read_reg(uint64_t addr) {
+    uint64_t data;
+    cpu_axi_read_with_data(addr, &data);
+    return data;
+}
+
+void RVGPUHostSimulator::write_memory(uint64_t addr, uint64_t data) {
+    if (memory != nullptr) {
+        memory->write(addr, data);
+        log("Host写内存: addr=0x" + std::to_string(addr) + ", data=0x" + std::to_string(data));
+    }
+}
+
+uint64_t RVGPUHostSimulator::read_memory(uint64_t addr) {
+    if (memory != nullptr) {
+        uint64_t data = memory->read(addr);
+        log("Host读内存: addr=0x" + std::to_string(addr) + ", data=0x" + std::to_string(data));
+        return data;
+    }
+    return 0;
 }
 
 //=============================================================================

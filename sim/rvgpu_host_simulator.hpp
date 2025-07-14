@@ -24,6 +24,7 @@
 #include <thread>
 #include "rvgpu_register.hpp"
 #include "rvgpu_memory.hpp"
+#include "rvgpu_basic_test_case.hpp"
 
 //=============================================================================
 // RVGPU Host Simulator Class Declaration
@@ -34,27 +35,36 @@ private:
     // 内存模拟 - 使用Memory类
     RVGPUMemory* memory;
     bool verbose;
+    // 测试用例
+    RVGPUBasicTestCase* test_case;
     
 public:
+    // 单例模式接口
+    static RVGPUHostSimulator* getInstance();
+    static void destroyInstance();
+
     // 构造函数
     RVGPUHostSimulator(bool verbose_mode = true);
     
     // 析构函数
     ~RVGPUHostSimulator();
+
+    // 运行测试用例
+    void run();
     
     // 日志输出
     void log(const std::string& message);
-    
-    // GPU直接内存访问 - 使用Memory类
-    void gpu_write_memory(uint64_t addr, uint64_t data);
-    uint64_t gpu_read_memory(uint64_t addr);
 
     // 等待GPU完成
     void wait_gpu_done(int timeout_cycles = 1000);
+
+    // Host寄存器读写接口
+    void write_reg(uint64_t addr, uint64_t data, uint8_t strb);
+    uint64_t read_reg(uint64_t addr);
     
-    // 单例模式接口
-    static RVGPUHostSimulator* getInstance();
-    static void destroyInstance();
+    // 内存访问接口
+    void write_memory(uint64_t addr, uint64_t data);
+    uint64_t read_memory(uint64_t addr);
     
 private:
     // 禁用拷贝构造和赋值操作

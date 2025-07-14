@@ -14,6 +14,7 @@
 //=============================================================================
 
 #include "rvgpu_basic_test_case.hpp"
+#include "rvgpu_host_simulator.hpp"
 #include "rvgpu_sim_dpi.hpp"
 
 #include <iostream>
@@ -23,44 +24,43 @@
 // RVGPUBasicTestCase Class Implementation
 //=============================================================================
 
-RVGPUBasicTestCase::RVGPUBasicTestCase(RVGPUHostSimulator* host_sim) 
-    : host_simulator(host_sim) {
+RVGPUBasicTestCase::RVGPUBasicTestCase(RVGPUHostSimulator* sim)
+    : sim(sim) {
 }
 
 RVGPUBasicTestCase::~RVGPUBasicTestCase() {
 }
 
 void RVGPUBasicTestCase::run() {
-    if (host_simulator != nullptr) {
-        host_simulator->log("开始运行基本测试用例");
+    if (sim != nullptr) {
+        sim->log("开始运行基本测试用例");
     }
     
     // 写入寄存器测试 - 添加strb参数
-    cpu_axi_write(0x0000, 0x12345678, 0xFF);
-    cpu_axi_write(0x0004, 0x12345678, 0xFF);
-    cpu_axi_write(0x0008, 0x12345678, 0xFF);
-    cpu_axi_write(0x000c, 0x12345678, 0xFF);
-    cpu_axi_write(0x0010, 0x00000001, 0xFF);
+    sim->write_reg(0x0000, 0x12345678, 0xFF);
+    sim->write_reg(0x0004, 0x12345678, 0xFF);
+    sim->write_reg(0x0008, 0x12345678, 0xFF);
+    sim->write_reg(0x000c, 0x12345678, 0xFF);
+    sim->write_reg(0x0010, 0x00000001, 0xFF);
     
-    if (host_simulator != nullptr) {
-        host_simulator->wait_gpu_done();
+    if (sim != nullptr) {
+        sim->wait_gpu_done();
     }
     
     // 读取寄存器测试 - 使用正确的函数名
-    uint64_t data;
-    cpu_axi_read_with_data(0x0010, &data);
+    uint64_t data = sim->read_reg(0x0010);
     
     if (data == 0x00000001) {
-        if (host_simulator != nullptr) {
-            host_simulator->log("GPU工作完成");
+        if (sim != nullptr) {
+            sim->log("GPU工作完成");
         }
     } else {
-        if (host_simulator != nullptr) {
-            host_simulator->log("GPU工作失败，读取值: 0x" + std::to_string(data));
+        if (sim != nullptr) {
+            sim->log("GPU工作失败，读取值: 0x" + std::to_string(data));
         }
     }
     
-    if (host_simulator != nullptr) {
-        host_simulator->log("基本测试用例完成");
+    if (sim != nullptr) {
+        sim->log("基本测试用例完成");
     }
 } 

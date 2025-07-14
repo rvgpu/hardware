@@ -30,8 +30,8 @@ import "DPI-C" context task host_run_test_case();
 import "DPI-C" context function void host_cleanup();
 
 // DPI导入声明 - 从C++导入GPU内存访问函数
-import "DPI-C" context function void gpu_write_mem(input int slice_id, input longint unsigned addr, input longint unsigned data);
-import "DPI-C" context function longint unsigned gpu_read_mem(input int slice_id, input longint unsigned addr);
+import "DPI-C" context function void gpu_write_mem(input longint unsigned addr, input longint unsigned data);
+import "DPI-C" context function longint unsigned gpu_read_mem(input longint unsigned addr);
 
 module rvgpu_toplevel_tb;
 
@@ -183,7 +183,7 @@ module rvgpu_toplevel_tb;
                 
                 if (mem_if[i].wvalid && mem_if[i].wready) begin
                     // 调用C++接口写入内存
-                    gpu_write_mem(i, mem_if[i].awaddr, mem_if[i].wdata[63:0]);
+                    gpu_write_mem(mem_if[i].awaddr, mem_if[i].wdata[63:0]);
                     $display("[%0t] GPU写完成: slice=%0d, addr=0x%h, data=0x%h", $time, i, mem_if[i].awaddr, mem_if[i].wdata[63:0]);
                 end
                 
@@ -216,7 +216,7 @@ module rvgpu_toplevel_tb;
                 // 读数据通道 - 当检测到读请求时立即响应
                 if (mem_if[i].arvalid && mem_if[i].rready) begin
                     // 调用C++接口读取内存并立即返回
-                    mem_if[i].rdata = {192'h0, gpu_read_mem(i, mem_if[i].araddr)};
+                    mem_if[i].rdata = {192'h0, gpu_read_mem(mem_if[i].araddr)};
                     mem_if[i].rresp = 2'b00; // OKAY
                     mem_if[i].rid = mem_if[i].arid;
                     mem_if[i].rlast = 1'b1;

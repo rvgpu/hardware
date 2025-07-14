@@ -13,58 +13,37 @@
 // limitations under the License.
 //=============================================================================
 
-#ifndef RVGPU_HOST_SIMULATOR_HPP
-#define RVGPU_HOST_SIMULATOR_HPP
+#ifndef RVGPU_MEMORY_HPP
+#define RVGPU_MEMORY_HPP
 
-#include <iostream>
 #include <cstdint>
 #include <vector>
 #include <string>
-#include <chrono>
-#include <thread>
-#include "rvgpu_register.hpp"
-#include "rvgpu_memory.hpp"
 
 //=============================================================================
-// RVGPU Host Simulator Class Declaration
+// RVGPU Memory Class Declaration
 //=============================================================================
 
-class RVGPUHostSimulator {
+class RVGPUMemory {
 private:
-    // 内存模拟 - 使用Memory类
-    RVGPUMemory* memory;
-    bool verbose;
+    std::vector<uint64_t> memory;
+    size_t size;
     
 public:
     // 构造函数
-    RVGPUHostSimulator(bool verbose_mode = true);
+    RVGPUMemory(size_t mem_size = 1024 * 1024);
     
     // 析构函数
-    ~RVGPUHostSimulator();
+    ~RVGPUMemory();
     
-    // 日志输出
-    void log(const std::string& message);
-    
-    // GPU直接内存访问 - 使用Memory类
-    void gpu_write_memory(uint64_t addr, uint64_t data);
-    uint64_t gpu_read_memory(uint64_t addr);
-
-    // 等待GPU完成
-    void wait_gpu_done(int timeout_cycles = 1000);
-    
-    void run_test_case();
-    
-    // 单例模式接口
-    static RVGPUHostSimulator* getInstance();
-    static void destroyInstance();
+    // 内存读写接口
+    void write(uint64_t addr, uint64_t data);
+    uint64_t read(uint64_t addr);
     
 private:
     // 禁用拷贝构造和赋值操作
-    RVGPUHostSimulator(const RVGPUHostSimulator&) = delete;
-    RVGPUHostSimulator& operator=(const RVGPUHostSimulator&) = delete;
-    
-    // 静态实例指针声明
-    static RVGPUHostSimulator* instance;
+    RVGPUMemory(const RVGPUMemory&) = delete;
+    RVGPUMemory& operator=(const RVGPUMemory&) = delete;
 };
 
-#endif // RVGPU_HOST_SIMULATOR_HPP 
+#endif // RVGPU_MEMORY_HPP 

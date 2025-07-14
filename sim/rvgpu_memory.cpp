@@ -13,42 +13,35 @@
 // limitations under the License.
 //=============================================================================
 
-#include "rvgpu_sim_dpi.hpp"
-#include "rvgpu_host_simulator.hpp"
+#include "rvgpu_memory.hpp"
+#include <iostream>
+#include <iomanip>
 
 //=============================================================================
-// DPI函数实现
+// RVGPUMemory Class Implementation
 //=============================================================================
 
-extern "C" {
-    void host_init() {
-        RVGPUHostSimulator::getInstance();
-    }
+RVGPUMemory::RVGPUMemory(size_t mem_size) 
+    : size(mem_size) {
+    memory.resize(size, 0); // 初始化内存，所有值设为0
+}
 
-    void host_cleanup() {
-        RVGPUHostSimulator::destroyInstance();
+RVGPUMemory::~RVGPUMemory() {
+}
+
+void RVGPUMemory::write(uint64_t addr, uint64_t data) {
+    uint64_t mem_addr = addr / 8; // 64位对齐
+    if (mem_addr < size) {
+        memory[mem_addr] = data;
     }
-    
-    void host_run_test_case() {
-        RVGPUHostSimulator* sim = RVGPUHostSimulator::getInstance();
-        if (sim != nullptr) {
-            sim->run_test_case();
-        }
+}
+
+uint64_t RVGPUMemory::read(uint64_t addr) {
+    uint64_t mem_addr = addr / 8; // 64位对齐
+    if (mem_addr < size) {
+        return memory[mem_addr];
     }
-    
-    // GPU直接内存访问DPI函数
-    void gpu_write_mem(uint64_t addr, uint64_t data) {
-        RVGPUHostSimulator* sim = RVGPUHostSimulator::getInstance();
-        if (sim != nullptr) {
-            sim->gpu_write_memory(addr, data);
-        }
-    }
-    
-    uint64_t gpu_read_mem(uint64_t addr) {
-        RVGPUHostSimulator* sim = RVGPUHostSimulator::getInstance();
-        if (sim != nullptr) {
-            return sim->gpu_read_memory(addr);
-        }
-        return 0;
-    }
-} 
+    return 0;
+}
+
+ 

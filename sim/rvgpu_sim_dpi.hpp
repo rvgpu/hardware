@@ -24,8 +24,8 @@ extern "C" {
     void cpu_axi_read_with_data(uint64_t addr, uint64_t* data);
     
     // GPU直接内存访问接口
-    void gpu_write_mem(int slice_id, uint64_t addr, uint64_t data);
-    uint64_t gpu_read_mem(int slice_id, uint64_t addr);
+    void gpu_write_mem(uint64_t addr, uint64_t data);
+    uint64_t gpu_read_mem(uint64_t addr);
     
     // 测试控制接口
     void host_init();

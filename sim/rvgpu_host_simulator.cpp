@@ -28,9 +28,16 @@
 //=============================================================================
 
 RVGPUHostSimulator::RVGPUHostSimulator(bool verbose_mode) : verbose(verbose_mode) {
-    memory.resize(1024 * 1024, 0); // 初始化内存 1MB
-    slice_memory.resize(4, std::vector<uint64_t>(1024 * 1024, 0)); // 初始化4个内存切片，每个1MB
+    memory = new RVGPUMemory(1 * 1024 * 1024 * 1024); // 初始化内存 1GB
     log("Host模拟器初始化完成");
+}
+
+RVGPUHostSimulator::~RVGPUHostSimulator() {
+    if (memory != nullptr) {
+        delete memory;
+        memory = nullptr;
+    }
+    log("Host模拟器析构完成");
 }
 
 // 日志输出
@@ -40,27 +47,19 @@ void RVGPUHostSimulator::log(const std::string& message) {
     }
 }
 
-// GPU直接内存访问 - 直接访问C++内存
-void RVGPUHostSimulator::gpu_write_memory(int slice_id, uint64_t addr, uint64_t data) {
-    if (slice_id >= 0 && slice_id < slice_memory.size()) {
-        uint64_t mem_addr = addr / 8; // 64位对齐
-        if (mem_addr < slice_memory[slice_id].size()) {
-            slice_memory[slice_id][mem_addr] = data;
-            log("GPU写内存: slice=" + std::to_string(slice_id) + 
-                ", addr=0x" + std::to_string(addr) + ", data=0x" + std::to_string(data));
-        }
+// GPU直接内存访问 - 使用Memory类
+void RVGPUHostSimulator::gpu_write_memory(uint64_t addr, uint64_t data) {
+    if (memory != nullptr) {
+        memory->write(addr, data);
+        log("GPU写内存: addr=0x" + std::to_string(addr) + ", data=0x" + std::to_string(data));
     }
 }
 
-uint64_t RVGPUHostSimulator::gpu_read_memory(int slice_id, uint64_t addr) {
-    if (slice_id >= 0 && slice_id < slice_memory.size()) {
-        uint64_t mem_addr = addr / 8; // 64位对齐
-        if (mem_addr < slice_memory[slice_id].size()) {
-            uint64_t data = slice_memory[slice_id][mem_addr];
-            log("GPU读内存: slice=" + std::to_string(slice_id) + 
-                ", addr=0x" + std::to_string(addr) + ", data=0x" + std::to_string(data));
-            return data;
-        }
+uint64_t RVGPUHostSimulator::gpu_read_memory(uint64_t addr) {
+    if (memory != nullptr) {
+        uint64_t data = memory->read(addr);
+        log("GPU读内存: addr=0x" + std::to_string(addr) + ", data=0x" + std::to_string(data));
+        return data;
     }
     return 0;
 }

@@ -109,35 +109,6 @@ module rvgpu_mmu_tlb #(
         sram_if_inst.wdata = (state_r == TLB_WRITE) ? update_data_r : '0;
     end
     
-    // TLB条目数据转换函数
-    function automatic logic [TLB_DATA_WIDTH-1:0] tlb_entry_to_raw(
-        input tlb_entry_t entry
-    );
-        return {
-            entry.ppn,        // 位[PPN_START:PPN_END]
-            entry.tag,        // 位[TAG_START:TAG_END]
-            entry.permission, // 位[PERM_START:PERM_END]
-            entry.accessed,   // 位[ACCESSED_BIT]
-            entry.dirty,      // 位[DIRTY_BIT]
-            entry.valid       // 位[VALID_BIT]
-        };
-    endfunction
-    
-    // 原始数据转换为TLB条目函数
-    function automatic tlb_entry_t raw_to_tlb_entry(
-        input logic [TLB_DATA_WIDTH-1:0] raw_data
-    );
-        tlb_entry_t tlb_entry;
-        tlb_entry.valid = raw_data[VALID_BIT];
-        tlb_entry.dirty = raw_data[DIRTY_BIT];
-        tlb_entry.accessed = raw_data[ACCESSED_BIT];
-        tlb_entry.permission = raw_data[PERM_START:PERM_END];
-        tlb_entry.tag = raw_data[TAG_START:TAG_END];
-        tlb_entry.ppn = raw_data[PPN_START:PPN_END];
-
-        return tlb_entry;
-    endfunction
-    
     // 状态机组合逻辑
     always_comb begin
         // 默认值 - 避免锁存器
@@ -160,10 +131,10 @@ module rvgpu_mmu_tlb #(
                 if (tlb_if.tlb_update_valid && tlb_if.tlb_update_ready) begin
                     state_nxt = TLB_WRITE;
                     update_addr_nxt = tlb_if.tlb_update_addr[TLB_ADDR_WIDTH-1:0];
-                    update_data_nxt = tlb_entry_to_raw(tlb_if.tlb_update_data);
+                    update_data_nxt = tlb_if.tlb_update_data;
                     update_pending_nxt = 1'b1;
                     lookup_ready_nxt = 1'b0;
-                    `DEBUG_PRINT("TLB", $sformatf("TLB Update, addr: 0x%h, data: 0x%h", tlb_if.tlb_update_addr, tlb_entry_to_raw(tlb_if.tlb_update_data)));
+                    `DEBUG_PRINT("TLB", $sformatf("TLB Update, addr: 0x%h, data: 0x%h", tlb_if.tlb_update_addr, tlb_if.tlb_update_data));
                 end
                 // 如果有新的查找请求，进入读取状态
                 else if (tlb_if.tlb_lookup_valid && tlb_if.tlb_lookup_ready) begin
@@ -273,7 +244,7 @@ module rvgpu_mmu_tlb #(
             // TLB操作调试
             if (tlb_if.tlb_lookup_valid && tlb_if.tlb_lookup_ready && tlb_if.tlb_lookup_hit) begin
                 $display("@%0t: [TLB] Hit: addr=0x%h, tag=0x%h, ppn=0x%h", 
-                         $time, tlb_if.tlb_lookup_addr, tlb_if.tlb_lookup_data.tag, tlb_if.tlb_lookup_data.ppn);
+                         $time, tlb_if.tlb_lookup_addr, tlb_if.tlb_lookup_data[33:5], tlb_if.tlb_lookup_data[69:34]);
             end else if (tlb_if.tlb_lookup_valid && tlb_if.tlb_lookup_ready && !tlb_if.tlb_lookup_hit) begin
                 $display("@%0t: [TLB] Miss: addr=0x%h", $time, tlb_if.tlb_lookup_addr);
             end

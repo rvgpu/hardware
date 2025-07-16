@@ -101,18 +101,6 @@ package rvgpu_control_unit_pkg;
     //=============================================================================
     `include "rvgpu_register_space.svh"
 
-    //=============================================================================
-    // TLB Data Structures: Define TLB-related data structures
-    //=============================================================================
-    typedef struct packed {
-        logic [`RVGPU_CONST_CU_TLB_PPN_BITS-1:0] ppn;        // [69:34] PPN 36-bits (最高位)
-        logic [`RVGPU_CONST_CU_TLB_TAG_BITS-1:0] tag;        // [33:5] Tag 29-bits
-        logic [1:0]                     permission;          // [4:3] 权限位 (00:无, 01:读, 10:写, 11:读写)
-        logic                           accessed;            // [2] 访问位
-        logic                           dirty;               // [1] 脏位
-        logic                           valid;               // [0] 有效位 (最低位)
-    } tlb_entry_t;
-
 endpackage : rvgpu_control_unit_pkg
 
 `endif // RVGPU_CONTROL_UNIT_PKG_SV

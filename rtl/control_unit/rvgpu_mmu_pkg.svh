@@ -56,15 +56,27 @@ package rvgpu_mmu_pkg;
     // TLB条目位域定义 - 与struct packed定义保持一致
     // struct packed: {ppn, tag, permission, accessed, dirty, valid}
     // 最后声明的字段在最低位，所以valid在最低位
-    localparam int PPN_START = 69;        // ppn位[69:34] (最高位)
-    localparam int PPN_END = 34;
-    localparam int TAG_START = 33;        // tag位[33:5]
+    localparam int PPN_START = 51;        // ppn位[50:24] (最高位)
+    localparam int PPN_END = 25;
+    localparam int TAG_START = 23;        // tag位[23:5]
     localparam int TAG_END = 5;
     localparam int PERM_START = 4;        // permission位[4:3]
     localparam int PERM_END = 3;
     localparam int ACCESSED_BIT = 2;      // accessed位
     localparam int DIRTY_BIT = 1;         // dirty位
     localparam int VALID_BIT = 0;         // valid位 (最低位)
+
+    //=============================================================================
+    // TLB Data Structures: Define TLB-related data structures
+    //=============================================================================
+    typedef struct packed {
+        logic [`RVGPU_CONST_CU_TLB_PPN_BITS-1:0] ppn;        // [51:25] PPN 27-bits (最高位)
+        logic [`RVGPU_CONST_CU_TLB_TAG_BITS-1:0] tag;        // [24:5] Tag 20-bits
+        logic [1:0]                     permission;          // [4:3] 权限位 (00:无, 01:读, 10:写, 11:读写)
+        logic                           accessed;            // [2] 访问位
+        logic                           dirty;               // [1] 脏位
+        logic                           valid;               // [0] 有效位 (最低位)
+    } tlb_entry_t;
 
     //=============================================================================
     // MMU 功能函数
@@ -99,6 +111,34 @@ package rvgpu_mmu_pkg;
         endcase
         // 页表条目是8字节，所以索引需要左移3位
         return base_addr + {page_index, 3'b0};
+    endfunction
+
+        // TLB条目数据转换函数
+    function automatic logic [TLB_DATA_WIDTH-1:0] tlb_entry_to_raw(
+        input tlb_entry_t entry
+    );
+        return {
+            entry.ppn,        // 位[PPN_START:PPN_END]
+            entry.tag,        // 位[TAG_START:TAG_END]
+            entry.permission, // 位[PERM_START:PERM_END]
+            entry.accessed,   // 位[ACCESSED_BIT]
+            entry.dirty,      // 位[DIRTY_BIT]
+            entry.valid       // 位[VALID_BIT]
+        };
+    endfunction
+    
+    // 原始数据转换为TLB条目函数
+    function automatic tlb_entry_t raw_to_tlb_entry(
+        input logic [TLB_DATA_WIDTH-1:0] raw_data
+    );
+        tlb_entry_t tlb_entry;
+        tlb_entry.valid = raw_data[VALID_BIT];
+        tlb_entry.dirty = raw_data[DIRTY_BIT];
+        tlb_entry.accessed = raw_data[ACCESSED_BIT];
+        tlb_entry.permission = raw_data[PERM_START:PERM_END];
+        tlb_entry.tag = raw_data[TAG_START:TAG_END];
+        tlb_entry.ppn = raw_data[PPN_START:PPN_END];
+        return tlb_entry;
     endfunction
 
 endpackage : rvgpu_mmu_pkg

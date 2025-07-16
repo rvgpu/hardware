@@ -159,13 +159,13 @@ interface tlb_if #(
     // TLB专用控制信号
     logic                               tlb_lookup_valid;
     logic [TLB_TAG_BITS+$clog2(TLB_ENTRIES)-1:0] tlb_lookup_addr;  // {标签, 索引}
-    tlb_entry_t                         tlb_lookup_data;
+    logic [69:0]                        tlb_lookup_data;
     logic                               tlb_lookup_hit;
     logic                               tlb_lookup_ready;
     
     logic                               tlb_update_valid;
     logic [TLB_TAG_BITS+$clog2(TLB_ENTRIES)-1:0] tlb_update_addr;  // {标签, 索引}
-    tlb_entry_t                         tlb_update_data;
+    logic [69:0]                        tlb_update_data;
     logic                               tlb_update_ready;
     
     // Master modport (MMU控制器)

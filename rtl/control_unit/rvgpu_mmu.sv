@@ -185,9 +185,10 @@ module rvgpu_mmu #(
                 if (mmu_tlb.tlb_lookup_ready) begin
                     if (mmu_tlb.tlb_lookup_hit) begin
                         // TLB命中
-                        paddr_nxt = {mmu_tlb.tlb_lookup_data.ppn, vaddr_r[PAGE_OFFSET_BITS-1:0]};
+                        paddr_nxt = {mmu_tlb.tlb_lookup_data[51:25], vaddr_r[PAGE_OFFSET_BITS-1:0]};
                         tlb_hit_count_nxt = tlb_hit_count_r + 1;
                         state_nxt = MMU_STATE_RESPONSE;
+                        `DEBUG_PRINT("MMU", $sformatf("TLB Hit, paddr: 0x%h + 0x%h, data: 0x%h", mmu_tlb.tlb_lookup_data[69:34], vaddr_r[PAGE_OFFSET_BITS-1:0], mmu_tlb.tlb_lookup_data));
                     end else begin
                         // TLB未命中，开始页表查找
                         tlb_miss_count_nxt = tlb_miss_count_r + 1;
@@ -235,7 +236,7 @@ module rvgpu_mmu #(
                             // 更新TLB - 设置输出寄存器
                             tlb_update_valid_nxt = 1'b1;
                             tlb_update_addr_nxt = calc_tlb_addr(vaddr_r);
-                            tlb_update_data_nxt = '{
+                            tlb_update_data_nxt = '{ 
                                 valid: 1'b1,
                                 dirty: 1'b0,
                                 accessed: 1'b1,
@@ -243,7 +244,7 @@ module rvgpu_mmu #(
                                 tag: vaddr_r[VA_WIDTH-1:PAGE_OFFSET_BITS+TLB_INDEX_BITS],
                                 ppn: noc_if.m_resp_data[PA_WIDTH-1:PAGE_OFFSET_BITS]
                             };
-                            
+
                             state_nxt = MMU_STATE_TLB_UPDATE;
                             noc_resp_ready_nxt = 1'b0;
                         end
@@ -367,7 +368,7 @@ module rvgpu_mmu #(
     assign mmu_tlb.tlb_lookup_addr = tlb_lookup_addr_r;
     assign mmu_tlb.tlb_update_valid = tlb_update_valid_r;
     assign mmu_tlb.tlb_update_addr = tlb_update_addr_r;
-    assign mmu_tlb.tlb_update_data = tlb_update_data_r;
+    assign mmu_tlb.tlb_update_data = tlb_entry_to_raw(tlb_update_data_r);
     
     // NOC接口连接
     assign noc_if.m_req_valid = noc_req_valid_r;

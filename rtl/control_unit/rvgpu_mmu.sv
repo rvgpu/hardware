@@ -19,8 +19,15 @@
 `include "rvgpu_control_unit_pkg.svh"
 `include "rvgpu_control_unit_if.svh"
 `include "rvgpu_internal_noc_if.svh"
-`include "rvgpu_mmu_tlb.sv"
+`include "rvgpu_mmu_pkg.svh"
 `include "rvgpu_debug.svh"
+
+`include "rvgpu_mmu_tlb.sv"
+
+`ifndef RVGPU_MMU_PKG_IMPORTED
+`define RVGPU_MMU_PKG_IMPORTED
+import rvgpu_mmu_pkg::*;
+`endif // RVGPU_MMU_PKG_IMPORTED
 
 module rvgpu_mmu #(
     parameter control_unit_config_t CU_CONFIG = DEFAULT_CONTROL_UNIT_CONFIG
@@ -52,35 +59,7 @@ module rvgpu_mmu #(
     } mmu_state_t;
     
     //=============================================================================
-    // 2. 参数化设计 - 使用 localparam 定义所有常量
-    //=============================================================================
-    
-    // 地址位宽参数
-    localparam int VA_WIDTH = CU_CONFIG.mmu_parameter.va_width;
-    localparam int PA_WIDTH = CU_CONFIG.mmu_parameter.pa_width;
-    localparam int TLB_ENTRIES = CU_CONFIG.mmu_parameter.tlb_entries;
-    localparam int TLB_INDEX_BITS = CU_CONFIG.mmu_parameter.tlb_index_bits;
-    localparam int PPN_BITS = CU_CONFIG.mmu_parameter.tlb_ppn_bits;
-    
-    // 页表相关常量
-    localparam int PAGE_OFFSET_BITS = CU_CONFIG.mmu_parameter.page_offset_bits;
-    localparam int PAGE_INDEX_BITS = CU_CONFIG.mmu_parameter.page_index_bits;
-    localparam int TLB_TAG_BITS = CU_CONFIG.mmu_parameter.tlb_tag_bits;
-    
-    // TLB地址计算常量
-    localparam int TLB_TAG_START_BIT = VA_WIDTH - 1;
-    localparam int TLB_TAG_END_BIT = PAGE_OFFSET_BITS + TLB_INDEX_BITS;
-    localparam int TLB_INDEX_START_BIT = PAGE_OFFSET_BITS + TLB_INDEX_BITS - 1;
-    localparam int TLB_INDEX_END_BIT = PAGE_OFFSET_BITS;
-    
-    // 页表级别常量
-    localparam int MAX_PAGE_LEVELS = 3;    // 最大页表级别
-    localparam int L1_LEVEL = 2'b00;       // L1页表级别
-    localparam int L2_LEVEL = 2'b01;       // L2页表级别
-    localparam int L3_LEVEL = 2'b10;       // L3页表级别
-    
-    //=============================================================================
-    // 3. 内部信号定义 - 使用清晰的前缀命名规范
+    // 2. 内部信号定义 - 使用清晰的前缀命名规范
     //=============================================================================
     
     // 状态机寄存器
@@ -125,42 +104,7 @@ module rvgpu_mmu #(
     logic noc_resp_ready_r, noc_resp_ready_nxt;
     
     //=============================================================================
-    // 4. 辅助函数 - 使用位掩码进行信号验证和过滤
-    //=============================================================================
-    
-    // TLB地址计算函数 - 修复版本
-    function automatic logic [TLB_TAG_BITS + TLB_INDEX_BITS - 1:0] calc_tlb_addr(
-        input logic [VA_WIDTH-1:0] vaddr
-    );
-        // TLB地址格式：{标签, 索引}
-        // 标签：虚拟地址的高位（除去页内偏移和索引位）
-        // 索引：虚拟地址的中间位（用于SRAM地址）
-        
-        logic [TLB_TAG_BITS-1:0] tag = vaddr[VA_WIDTH-1:PAGE_OFFSET_BITS+TLB_INDEX_BITS];
-        logic [TLB_INDEX_BITS-1:0] index = vaddr[TLB_INDEX_START_BIT:TLB_INDEX_END_BIT];
-
-        return {tag, index};
-    endfunction
-    
-    // 多级页表地址计算函数
-    function automatic logic [PA_WIDTH-1:0] calc_page_table_addr(
-        input logic [VA_WIDTH-1:0] vaddr,
-        input logic [PA_WIDTH-1:0] base_addr,
-        input logic [1:0] level
-    );
-        logic [PAGE_INDEX_BITS-1:0] page_index;
-        case (level)
-            L1_LEVEL: page_index = vaddr[38:30];  // L1索引
-            L2_LEVEL: page_index = vaddr[29:21];  // L2索引
-            L3_LEVEL: page_index = vaddr[20:12];  // L3索引
-            default: page_index = '0;
-        endcase
-        // 页表条目是8字节，所以索引需要左移3位
-        return base_addr + {page_index, 3'b0};
-    endfunction
-    
-    //=============================================================================
-    // 5. 握手信号抽象 - 使用三元运算符进行条件赋值
+    // 4. 握手信号抽象 - 使用三元运算符进行条件赋值
     //=============================================================================
     
     wire req_accept = mmu_if.req_valid && mmu_if.req_ready;
@@ -169,7 +113,7 @@ module rvgpu_mmu #(
     wire noc_resp_accept = noc_if.m_resp_valid && noc_resp_ready_r;
     
     //=============================================================================
-    // 6. TLB实例化
+    // 5. TLB实例化
     //=============================================================================
     
     rvgpu_mmu_tlb #(
@@ -181,7 +125,7 @@ module rvgpu_mmu #(
     );
     
     //=============================================================================
-    // 6. 组合逻辑 - 使用 always_comb 处理组合逻辑
+    // 7. 组合逻辑 - 使用 always_comb 处理组合逻辑
     //=============================================================================
     
     // 状态机组合逻辑
@@ -219,6 +163,7 @@ module rvgpu_mmu #(
                     req_write_nxt = mmu_if.req_write;
                     page_level_nxt = L1_LEVEL;  // 从L1开始
                     current_pt_base_nxt = page_table_base_r;  // 使用配置的页表基地址
+                    `DEBUG_PRINT("MMU", $sformatf("MMU Request, vaddr: 0x%h, req_read: %b, req_write: %b", mmu_if.req_vaddr, req_read_r, req_write_r));
                 end
             end
             
@@ -408,6 +353,7 @@ module rvgpu_mmu #(
         end else begin
             if (mmu_if.cfg_en) begin
                 page_table_base_r <= mmu_if.cfg_base_addr;
+                `DEBUG_PRINT("MMU", $sformatf("MMU cfg_en, page_table_base: 0x%h", mmu_if.cfg_base_addr));
             end
         end
     end

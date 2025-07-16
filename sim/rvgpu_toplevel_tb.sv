@@ -101,8 +101,6 @@ module rvgpu_toplevel_tb;
         // 设置写响应通道
         host_if_inst.bready = 1'b1;
         
-        $display("@%0t: [TB] Host AXI写: addr=0x%h, data=0x%h, strb=0x%h", $time, addr, data, strb);
-        
         // 等待握手完成
         wait (host_if_inst.awready && host_if_inst.wready);
         @(posedge clk);
@@ -122,9 +120,7 @@ module rvgpu_toplevel_tb;
         // 检查写响应状态
         if (bresp_status != 2'b00) begin
             $display("@%0t: [TB] WARNING: Host AXI写响应错误: bresp=0x%h", $time, bresp_status);
-        end else begin
-            $display("@%0t: [TB] Host AXI写完成: addr=0x%h, data=0x%h", $time, addr, data);
-        end
+        end 
     endtask
     
 
@@ -146,8 +142,6 @@ module rvgpu_toplevel_tb;
         // 设置读数据通道
         host_if_inst.rready = 1'b1;
         
-        $display("@%0t: [TB] Host AXI读: addr=0x%h", $time, addr);
-        
         // 等待握手完成
         wait (host_if_inst.arready);
         @(posedge clk);
@@ -164,8 +158,6 @@ module rvgpu_toplevel_tb;
         // 检查读响应状态
         if (rresp_status != 2'b00) begin
             $display("@%0t: [TB] WARNING: Host AXI读响应错误: rresp=0x%h", $time, rresp_status);
-        end else begin
-            $display("@%0t: [TB] Host AXI读完成: addr=0x%h, data=0x%h", $time, addr, data);
         end
     endtask
     

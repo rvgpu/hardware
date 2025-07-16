@@ -193,6 +193,7 @@ module rvgpu_mmu_tlb #(
                     update_data_nxt = tlb_entry_to_raw(tlb_if.tlb_update_data);
                     update_pending_nxt = 1'b1;
                     lookup_ready_nxt = 1'b0;
+                    `DEBUG_PRINT("TLB", $sformatf("TLB Update, addr: 0x%h, data: 0x%h", tlb_if.tlb_update_addr, tlb_entry_to_raw(tlb_if.tlb_update_data)));
                 end
                 // 如果有新的查找请求，进入读取状态
                 else if (tlb_if.tlb_lookup_valid && tlb_if.tlb_lookup_ready) begin
@@ -200,6 +201,7 @@ module rvgpu_mmu_tlb #(
                     lookup_addr_nxt = tlb_if.tlb_lookup_addr[TLB_ADDR_WIDTH-1:0];
                     lookup_tag_nxt = tlb_if.tlb_lookup_addr[TLB_TAG_BITS+TLB_ADDR_WIDTH-1:TLB_ADDR_WIDTH];
                     lookup_ready_nxt = 1'b0;
+                    `DEBUG_PRINT("TLB", $sformatf("TLB Lookup, addr: 0x%h, tag: 0x%h", tlb_if.tlb_lookup_addr, tlb_if.tlb_lookup_addr[TLB_TAG_BITS+TLB_ADDR_WIDTH-1:TLB_ADDR_WIDTH]));
                 end
             end
             

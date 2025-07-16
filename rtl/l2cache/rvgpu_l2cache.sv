@@ -222,7 +222,7 @@ module rvgpu_l2cache #(
                 
                 // 监控缓存忙状态
                 if (controller_debug.cache_busy) begin
-                    `DEBUG_PRINT("L2CACHE", $sformatf("Cache busy: addr=0x%h, trans_id=%0d", controller_debug.current_addr, controller_debug.current_trans_id));
+                    // `DEBUG_PRINT("L2CACHE", $sformatf("Cache busy: addr=0x%h, trans_id=%0d", controller_debug.current_addr, controller_debug.current_trans_id));
                 end
                 
                 // 监控读写操作统计

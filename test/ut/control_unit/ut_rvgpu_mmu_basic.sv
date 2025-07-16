@@ -9,13 +9,10 @@
 // SVUnit中模块名必须以_unit_test结尾
 module ut_rvgpu_mmu_basic_unit_test;
   import svunit_pkg::svunit_testcase;
-  import rvgpu_control_unit_pkg::*;
+  import rvgpu_mmu_pkg::*;
 
   string name = "ut_rvgpu_mmu_basic_unit_test";
   svunit_testcase svunit_ut;
-
-  localparam PA_WIDTH = DEFAULT_CONTROL_UNIT_CONFIG.mmu_parameter.pa_width;
-  localparam VA_WIDTH = DEFAULT_CONTROL_UNIT_CONFIG.mmu_parameter.va_width;
 
   //===================================
   // Clock and Reset Infrastructure

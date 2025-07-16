@@ -152,7 +152,7 @@ module rvgpu_command_processor #(
                     end
                     default: ; // 忽略未知地址
                 endcase
-                `DEBUG_PRINT("CP", $sformatf("control_reg: %b", control_reg));
+                `DEBUG_PRINT("CP", $sformatf("host write [0x%h]: 0x%h", ctrl_cp.ctrl_addr, ctrl_cp.ctrl_wdata));
             end else begin
                 // 自动清除START位（单脉冲）
                 if (cp_jd.complete || cp_jd.error) begin

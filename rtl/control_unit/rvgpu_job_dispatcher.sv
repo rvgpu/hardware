@@ -19,6 +19,7 @@
 `include "rvgpu_control_unit_pkg.svh"
 `include "rvgpu_control_unit_if.svh"
 `include "rvgpu_internal_noc_if.svh"
+`include "rvgpu_debug.svh"
 
 `ifndef RVGPU_CONTROL_UNIT_PKG_IMPORTED
 `define RVGPU_CONTROL_UNIT_PKG_IMPORTED
@@ -168,7 +169,7 @@ module rvgpu_job_dispatcher #(
                     phase_nxt = PHASE_HEADER;
                     package_addr_nxt = jd_if.package_addr;
                     mmu_base_nxt = jd_if.mmu_addr;
-
+                    `DEBUG_PRINT("JD", $sformatf("JD enable, package_addr: 0x%h, mmu_addr: 0x%h", jd_if.package_addr, jd_if.mmu_addr));
                 end
             end
             

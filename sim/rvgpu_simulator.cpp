@@ -70,14 +70,12 @@ uint64_t RVGPUSimulator::read_reg(uint64_t addr) {
 void RVGPUSimulator::write_memory(uint64_t addr, uint64_t data) {
     if (memory != nullptr) {
         memory->write(addr, data);
-        log("写内存: addr=0x" + std::to_string(addr) + ", data=0x" + std::to_string(data));
     }
 }
 
 uint64_t RVGPUSimulator::read_memory(uint64_t addr) {
     if (memory != nullptr) {
         uint64_t data = memory->read(addr);
-        log("读内存: addr=0x" + std::to_string(addr) + ", data=0x" + std::to_string(data));
         return data;
     }
     return 0;

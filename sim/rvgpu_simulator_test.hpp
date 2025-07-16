@@ -34,6 +34,9 @@ public:
     void run() override;
     
 private:
+    // 加载内存数据
+    void load_memory(const std::string& filename);
+    
     // 禁用拷贝构造和赋值操作
     RVGPUSimulatorTest(const RVGPUSimulatorTest&) = delete;
     RVGPUSimulatorTest& operator=(const RVGPUSimulatorTest&) = delete;

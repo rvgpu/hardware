@@ -17,9 +17,12 @@
 #include "rvgpu_simulator.hpp"
 #include "rvgpu_register.hpp"
 #include "rvgpu_sim_dpi.hpp"
+#include "rvgpu_parser.hpp"
 
 #include <iostream>
 #include <cstdint>
+#include <sstream>
+#include <iomanip>
 
 //=============================================================================
 // RVGPUSimulatorTest Class Implementation
@@ -32,26 +35,70 @@ RVGPUSimulatorTest::RVGPUSimulatorTest(bool verbose_mode)
 RVGPUSimulatorTest::~RVGPUSimulatorTest() {
 }
 
-void RVGPUSimulatorTest::run() {
-    log("开始运行RVGPU模拟器测试");
+void RVGPUSimulatorTest::load_memory(const std::string& filename) {
+    std::string full_path = build_tc_path(filename);
     
-    // 写入寄存器测试 - 添加strb参数
-    write_reg(REG_MMU_PAGETABLE_LO, 0x10000000, 0xFF);
-    write_reg(REG_MMU_PAGETABLE_HI, 0x00000000, 0xFF);  // MMU基地址 0x10000000
-    write_reg(REG_COMMAND_PACKET_LO, 0x34567000, 0xFF);
-    write_reg(REG_COMMAND_PACKET_HI, 0x00000012, 0xFF);  // 命令基地址 0x1234567000
-    write_reg(REG_CONTROL, 0x00000001, 0xFF);  // 启动GPU工作
-    
-    wait_gpu_done();
-    
-    // 读取寄存器测试
-    uint64_t data = read_reg(REG_CONTROL);
-    
-    if (data == 0x00000001) {
-        log("GPU工作完成");
-    } else {
-        log("GPU工作失败，读取值: 0x" + std::to_string(data));
+    RVGPUParseHex parser;
+    if (!parser.open(full_path)) {
+        log("Error: Failed to open memory file: " + full_path);
+        return;
     }
     
-    log("RVGPU模拟器测试完成");
+    while (parser.next_line()) {
+        std::vector<uint64_t> memdata = parser.get_memdata();
+        
+        if (memdata.size() == 5) {
+            uint64_t addr = memdata[0];
+            write_memory(addr + 0,  memdata[1]);
+            write_memory(addr + 4,  memdata[2]);
+            write_memory(addr + 8,  memdata[3]);
+            write_memory(addr + 12, memdata[4]);
+        } else {
+            // 如果不是5个元素，跳过这一行
+            continue;
+        }
+    }
+}
+
+void RVGPUSimulatorTest::run() {
+    log("Simulator start");
+
+    RVGPUParseCommand cmd;
+    if (!cmd.parser()) {
+        log("Error: Failed to open command file");
+        return;
+    }
+    
+    while (!cmd.empty()) {
+        sim_command current_command = cmd.get_command();
+        switch(current_command.command) {
+            case RVGPU_COMMAND_WRITE_REG:
+                write_reg(current_command.reg_addr, current_command.data, 0xff);
+                break;
+            case RVGPU_COMMAND_CHECK_REG:
+                if(read_reg(current_command.reg_addr) == current_command.data) {
+                    std::ostringstream oss;
+                    oss << "Check Register [0x" << std::hex << current_command.reg_addr 
+                        << "] = 0x" << std::hex << current_command.data << " Success";
+                    log(oss.str());
+                } else {
+                    std::ostringstream oss;
+                    oss << "Check Register [0x" << std::hex << current_command.reg_addr 
+                        << "] = 0x" << std::hex << current_command.data << " Failed";
+                    log(oss.str());
+                }
+                break;
+            case RVGPU_LOAD_MEMORY:
+                load_memory(current_command.filename);
+                break;
+            case RVGPU_WAIT_GPU_DONE:
+                wait_gpu_done();
+                break;
+            default:
+                log("Unknown Command");
+                break;
+        }
+    }
+
+    log("Simulator end");
 } 

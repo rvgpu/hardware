@@ -51,6 +51,7 @@ SIM_SOURCES := \
 	$(SIM_DIR)/rvgpu_simulator.cpp \
 	$(SIM_DIR)/rvgpu_simulator_test.cpp \
 	$(SIM_DIR)/rvgpu_sim_dpi.cpp \
+	$(SIM_DIR)/rvgpu_parser.cpp \
 	$(SIM_DIR)/rvgpu_toplevel_tb.sv
 
 # 默认目标
@@ -73,6 +74,17 @@ check:
 		exit 1; \
 	fi
 	@echo "✓ RVGPU_HARDWARE环境变量已设置: $(RVGPU_HARDWARE)"
+	@if [ -n "$(TC)" ]; then \
+		echo "✓ TC环境变量已设置: $(TC)"; \
+		echo "  测试用例目录: $(shell pwd)/$(TC)"; \
+		if [ ! -d "$(shell pwd)/$(TC)" ]; then \
+			echo "⚠ 警告: TC目录不存在: $(shell pwd)/$(TC)"; \
+			echo "   请确保测试用例目录存在"; \
+		fi; \
+	else \
+		echo "⚠ TC环境变量未设置，将使用默认文件路径"; \
+		echo "   建议设置TC环境变量指定测试用例，例如: TC=dump_array_mul"; \
+	fi
 	@echo ""
 	
 	@echo "2. 检查仿真工具可用性..."
@@ -153,6 +165,7 @@ help:
 	@echo ""
 	@echo "环境变量要求:"
 	@echo "  RVGPU_HARDWARE  - 必须设置，指向项目根目录"
+	@echo "  TC              - 可选设置，指定测试用例目录"
 	@echo ""
 	@echo "可用目标:"
 	@echo "  all              - 默认目标，使用VCS编译"
@@ -168,6 +181,7 @@ help:
 	@echo "  CXX              - C++编译器 (默认: g++)"
 	@echo "  VCS              - VCS路径 (默认: vcs)"
 	@echo "  RVGPU_HARDWARE  - 项目根目录 (必须设置)"
+	@echo "  TC               - 测试用例目录 (可选设置)"
 	@echo ""
 	@echo "文件列表:"
 	@echo "  RTL_FILELIST     - RTL文件列表: $(RTL_FILELIST)"
@@ -175,9 +189,11 @@ help:
 	@echo ""
 	@echo "示例:"
 	@echo "  export RVGPU_HARDWARE=/path/to/rvgpu/hardware"
+	@echo "  export TC=dump_array_mul"
 	@echo "  make check       - 检查环境配置"
 	@echo "  make vcs         - 使用VCS编译"
 	@echo "  make run-vcs     - 使用VCS运行仿真"
+	@echo "  TC=dump_array_mul make run-vcs  - 指定测试用例运行"
 	@echo "  make clean       - 清理所有输出文件"
 
 # 显示项目信息
@@ -188,6 +204,11 @@ info: check
 	@echo "RTL目录: $(RTL_DIR)"
 	@echo "仿真目录: $(SIM_DIR)"
 	@echo "输出目录: $(OUT_DIR)"
+	@if [ -n "$(TC)" ]; then \
+		echo "测试用例目录: $(shell pwd)/$(TC)"; \
+	else \
+		echo "测试用例目录: 未设置TC环境变量"; \
+	fi
 	@echo ""
 	@echo "文件列表:"
 	@echo "  RTL文件列表: $(RTL_FILELIST)"

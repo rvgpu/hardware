@@ -18,17 +18,14 @@
 
 `include "rvgpu_control_unit_if.svh"
 `include "rvgpu_sram_if.svh"
+`include "rvgpu_mmu_pkg.svh"
+
 `include "rvgpu_sram_sp_sim.sv"
 
-//=============================================================================
-// RVGPU MMU TLB Controller
-// 
-// 主要功能：
-// 1. TLB查找逻辑（3周期流水线）
-// 2. TLB更新逻辑
-// 3. SRAM接口管理
-// 4. TLB命中/未命中判断
-//=============================================================================
+`ifndef RVGPU_MMU_PKG_IMPORTED
+`define RVGPU_MMU_PKG_IMPORTED
+import rvgpu_mmu_pkg::*;
+`endif // RVGPU_MMU_PKG_IMPORTED
 
 module rvgpu_mmu_tlb #(
     parameter control_unit_config_t CU_CONFIG = DEFAULT_CONTROL_UNIT_CONFIG
@@ -39,34 +36,7 @@ module rvgpu_mmu_tlb #(
 
     // TLB接口
     tlb_if.tlb_port tlb_if
-);
-
-    //=============================================================================
-    // 1. 参数化设计 - 使用 localparam 定义所有常量
-    //=============================================================================
-    
-    // TLB条目位宽参数
-    localparam int TLB_ENTRY_WIDTH = $bits(tlb_if.tlb_lookup_data);
-    localparam int TLB_ADDR_WIDTH = $clog2(TLB_ENTRIES);
-    localparam int TLB_DATA_WIDTH = 103;  // TLB条目实际宽度：52+46+2+1+1+1=103位
-
-    localparam int TLB_ENTRIES = CU_CONFIG.mmu_parameter.tlb_entries;
-    localparam int TLB_TAG_BITS = CU_CONFIG.mmu_parameter.tlb_tag_bits;
-    localparam int PPN_BITS = CU_CONFIG.mmu_parameter.tlb_ppn_bits;
-    
-    // TLB条目位域定义 - 与struct packed定义保持一致
-    // struct packed: {ppn, tag, permission, accessed, dirty, valid}
-    // 最后声明的字段在最低位，所以valid在最低位
-    localparam int PPN_START = 69;        // ppn位[69:34] (最高位)
-    localparam int PPN_END = 34;
-    localparam int TAG_START = 33;        // tag位[33:5]
-    localparam int TAG_END = 5;
-    localparam int PERM_START = 4;        // permission位[4:3]
-    localparam int PERM_END = 3;
-    localparam int ACCESSED_BIT = 2;      // accessed位
-    localparam int DIRTY_BIT = 1;         // dirty位
-    localparam int VALID_BIT = 0;         // valid位 (最低位)
-    
+);  
     //=============================================================================
     // 2. 状态机定义 - 明确定义所有状态
     //=============================================================================

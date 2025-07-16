@@ -45,6 +45,28 @@ package rvgpu_mmu_pkg;
     localparam int L3_LEVEL = 2'b10;       // L3页表级别
 
     //=============================================================================
+    // TLB 相关参数和位域定义
+    //=============================================================================
+    
+    // TLB条目位宽参数
+    localparam int TLB_ENTRY_WIDTH = 103;  // TLB条目实际宽度：52+46+2+1+1+1=103位
+    localparam int TLB_ADDR_WIDTH = $clog2(TLB_ENTRIES);
+    localparam int TLB_DATA_WIDTH = TLB_ENTRY_WIDTH;  // TLB条目数据宽度
+    
+    // TLB条目位域定义 - 与struct packed定义保持一致
+    // struct packed: {ppn, tag, permission, accessed, dirty, valid}
+    // 最后声明的字段在最低位，所以valid在最低位
+    localparam int PPN_START = 69;        // ppn位[69:34] (最高位)
+    localparam int PPN_END = 34;
+    localparam int TAG_START = 33;        // tag位[33:5]
+    localparam int TAG_END = 5;
+    localparam int PERM_START = 4;        // permission位[4:3]
+    localparam int PERM_END = 3;
+    localparam int ACCESSED_BIT = 2;      // accessed位
+    localparam int DIRTY_BIT = 1;         // dirty位
+    localparam int VALID_BIT = 0;         // valid位 (最低位)
+
+    //=============================================================================
     // MMU 功能函数
     //=============================================================================
 

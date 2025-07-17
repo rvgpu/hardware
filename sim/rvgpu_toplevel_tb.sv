@@ -18,6 +18,7 @@
 
 `include "rvgpu_config.svh"
 `include "rvgpu_interface_axi.svh"
+`include "rvgpu_host_axi.svh"
 `include "../test/common/rvgpu_clk_rst.svh"
 
 `ifndef RVGPU_INTERNAL_NOC_PKG_IMPORTED
@@ -36,14 +37,14 @@ import "DPI-C" context function longint unsigned gpu_read_mem(input longint unsi
 
 module rvgpu_toplevel_tb;
 
-    // 时钟和复位接口实例
+    // 时钟和复位
     clk_rst_if clk_rst_if_inst();
-    
-    // 时钟管理器实例
     rvgpu_clk_manager clk_mgr;
     
     // GPU中断信号
     logic gpu_irq;
+
+    rvgpu_host_axi host_axi;
     
     // Host接口实例
     host_if host_if_inst();
@@ -74,94 +75,28 @@ module rvgpu_toplevel_tb;
             clk_mgr.start_cycle_counting();
         join_none
     end
-    
-    // 时钟管理器初始化
-    initial begin
+
+    task setup();
         clk_mgr = new("rvgpu_toplevel_tb", 100, 10);
         clk_mgr.initialize(clk_rst_if_inst);
         $display("@%0t: [TB] 时钟管理器初始化完成", $time);
         clk_mgr.display_status();
+
+        host_axi = new(host_if_inst, clk_mgr);
+    endtask
+    
+    initial begin
+        setup();
     end
     
     // Host接口AXI写操作 - 通过host_if与RVGPU通信
     task cpu_axi_write(input longint unsigned addr, input longint unsigned data, input byte unsigned strb);
-        automatic logic [1:0] bresp_status;
-        
-        // 等待时钟上升沿
-        clk_mgr.wait_posedge();
-        
-        // 设置写地址通道
-        host_if_inst.awaddr = addr;
-        host_if_inst.awlen = 0;
-        host_if_inst.awsize = 3; // 64位 = 8字节
-        host_if_inst.awburst = 2'b01; // INCR
-        host_if_inst.awvalid = 1'b1;
-        
-        // 设置写数据通道
-        host_if_inst.wdata = data;
-        host_if_inst.wstrb = strb;
-        host_if_inst.wlast = 1'b1;
-        host_if_inst.wvalid = 1'b1;
-        
-        // 设置写响应通道
-        host_if_inst.bready = 1'b1;
-        
-        // 等待握手完成
-        wait (host_if_inst.awready && host_if_inst.wready);
-        clk_mgr.wait_posedge();
-        clk_mgr.hold_time(1);  // Hold Time
-
-        host_if_inst.awvalid = 1'b0;
-        host_if_inst.wvalid = 1'b0;
-        
-        // 等待写响应
-        wait (host_if_inst.bvalid);
-        bresp_status = host_if_inst.bresp;
-        clk_mgr.wait_posedge();
-
-        clk_mgr.hold_time(1);  // Hold Time
-        host_if_inst.bready = 1'b0;
-        
-        // 检查写响应状态
-        if (bresp_status != 2'b00) begin
-            $display("@%0t: [TB] WARNING: Host AXI写响应错误: bresp=0x%h", $time, bresp_status);
-        end 
+        host_axi.host_write(addr, data, strb);
     endtask
     
     // Host接口AXI读操作 - 通过host_if与RVGPU通信
     task cpu_axi_read_with_data(input longint unsigned addr, output longint unsigned data);
-        automatic logic [1:0] rresp_status;
-        
-        // 等待时钟上升沿
-        clk_mgr.wait_posedge();
-        
-        // 设置读地址通道
-        host_if_inst.araddr = addr;
-        host_if_inst.arlen = 0;
-        host_if_inst.arsize = 3; // 64位 = 8字节
-        host_if_inst.arburst = 2'b01; // INCR
-        host_if_inst.arvalid = 1'b1;
-        
-        // 设置读数据通道
-        host_if_inst.rready = 1'b1;
-        
-        // 等待握手完成
-        wait (host_if_inst.arready);
-        clk_mgr.wait_posedge();
-        clk_mgr.hold_time(1);  // Hold Time
-        host_if_inst.arvalid = 1'b0;
-        
-        // 等待读数据
-        wait (host_if_inst.rvalid);
-        data = host_if_inst.rdata;
-        rresp_status = host_if_inst.rresp;
-        clk_mgr.wait_posedge();
-        clk_mgr.hold_time(1);  // Hold Time
-        
-        // 检查读响应状态
-        if (rresp_status != 2'b00) begin
-            $display("@%0t: [TB] WARNING: Host AXI读响应错误: rresp=0x%h", $time, rresp_status);
-        end
+        host_axi.host_read(addr, data);
     endtask
     
     // DPI导出声明 - 导出给C++使用的host control接口

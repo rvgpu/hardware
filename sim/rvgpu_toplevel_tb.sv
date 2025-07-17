@@ -18,6 +18,7 @@
 
 `include "rvgpu_config.svh"
 `include "rvgpu_interface_axi.svh"
+`include "../test/common/rvgpu_clk_rst.svh"
 
 `ifndef RVGPU_INTERNAL_NOC_PKG_IMPORTED
 `define RVGPU_INTERNAL_NOC_PKG_IMPORTED
@@ -35,15 +36,14 @@ import "DPI-C" context function longint unsigned gpu_read_mem(input longint unsi
 
 module rvgpu_toplevel_tb;
 
-    // 时钟和复位信号
-    logic clk;
-    logic rst_n;
+    // 时钟和复位接口实例
+    clk_rst_if clk_rst_if_inst();
+    
+    // 时钟管理器实例
+    rvgpu_clk_manager clk_mgr;
     
     // GPU中断信号
     logic gpu_irq;
-    
-    // 时钟周期计数
-    int unsigned cycle_count;
     
     // Host接口实例
     host_if host_if_inst();
@@ -51,31 +51,36 @@ module rvgpu_toplevel_tb;
     // Memory接口实例数组
     memory_if mem_if [`L2CACHE_SLICE_NUMBER]();
     
+    // 时钟生成器实例
+    rvgpu_clk_rst_gen #(
+        .CLK_PERIOD_NS(10), // 10ns周期=100MHz
+        .RST_CYCLES(10)
+    ) u_clk_gen (
+        .clk_rst_if(clk_rst_if_inst)
+    );
+    
     // RVGPU顶层模块实例
     rvgpu_toplevel u_rvgpu_toplevel (
-        .clk(clk),
-        .rst_n(rst_n),
+        .clk(clk_rst_if_inst.clk),
+        .rst_n(clk_rst_if_inst.rst_n),
         .host_if(host_if_inst),
         .mem_if(mem_if),
         .gpu_irq(gpu_irq)
     );
     
-    // 时钟生成
+    // 启动时钟周期计数
     initial begin
-        clk = 0;
-        cycle_count = 0;
-        
-        forever begin
-            #5 clk = ~clk;
-            cycle_count++;
-        end
+        fork
+            clk_mgr.start_cycle_counting();
+        join_none
     end
     
-    // 复位生成
+    // 时钟管理器初始化
     initial begin
-        rst_n = 0;
-        #100;
-        rst_n = 1;
+        clk_mgr = new("rvgpu_toplevel_tb", 100, 10);
+        clk_mgr.initialize(clk_rst_if_inst);
+        $display("@%0t: [TB] 时钟管理器初始化完成", $time);
+        clk_mgr.display_status();
     end
     
     // Host接口AXI写操作 - 通过host_if与RVGPU通信
@@ -83,7 +88,7 @@ module rvgpu_toplevel_tb;
         automatic logic [1:0] bresp_status;
         
         // 等待时钟上升沿
-        @(posedge clk);
+        clk_mgr.wait_posedge();
         
         // 设置写地址通道
         host_if_inst.awaddr = addr;
@@ -103,8 +108,8 @@ module rvgpu_toplevel_tb;
         
         // 等待握手完成
         wait (host_if_inst.awready && host_if_inst.wready);
-        @(posedge clk);
-        #1;  // Hold Time
+        clk_mgr.wait_posedge();
+        clk_mgr.hold_time(1);  // Hold Time
 
         host_if_inst.awvalid = 1'b0;
         host_if_inst.wvalid = 1'b0;
@@ -112,9 +117,9 @@ module rvgpu_toplevel_tb;
         // 等待写响应
         wait (host_if_inst.bvalid);
         bresp_status = host_if_inst.bresp;
-        @(posedge clk);
+        clk_mgr.wait_posedge();
 
-        #1;  // Hold Time
+        clk_mgr.hold_time(1);  // Hold Time
         host_if_inst.bready = 1'b0;
         
         // 检查写响应状态
@@ -123,14 +128,12 @@ module rvgpu_toplevel_tb;
         end 
     endtask
     
-
-    
     // Host接口AXI读操作 - 通过host_if与RVGPU通信
     task cpu_axi_read_with_data(input longint unsigned addr, output longint unsigned data);
         automatic logic [1:0] rresp_status;
         
         // 等待时钟上升沿
-        @(posedge clk);
+        clk_mgr.wait_posedge();
         
         // 设置读地址通道
         host_if_inst.araddr = addr;
@@ -144,16 +147,16 @@ module rvgpu_toplevel_tb;
         
         // 等待握手完成
         wait (host_if_inst.arready);
-        @(posedge clk);
-        #1;  // Hold Time
+        clk_mgr.wait_posedge();
+        clk_mgr.hold_time(1);  // Hold Time
         host_if_inst.arvalid = 1'b0;
         
         // 等待读数据
         wait (host_if_inst.rvalid);
         data = host_if_inst.rdata;
         rresp_status = host_if_inst.rresp;
-        @(posedge clk);
-        #1;  // Hold Time
+        clk_mgr.wait_posedge();
+        clk_mgr.hold_time(1);  // Hold Time
         
         // 检查读响应状态
         if (rresp_status != 2'b00) begin
@@ -177,13 +180,12 @@ module rvgpu_toplevel_tb;
         $display("@%0t: [TB] GPU中断触发!", $time);
     end
     
-    
     // GPU内存访问监控和处理
     genvar i;
     generate
         for (i = 0; i < `L2CACHE_SLICE_NUMBER; i = i + 1) begin : gpu_mem_monitor
             // GPU内存访问监控 - 简化版本，直接在响应处理中调用DPI
-            always @(posedge clk) begin
+            always @(posedge clk_rst_if_inst.clk) begin
                 // 监控GPU写请求
                 if (mem_if[i].awvalid && mem_if[i].awready) begin
                     $display("@%0t: [TB] GPU写请求: slice=%0d, addr=0x%h", $time, i, mem_if[i].awaddr);
@@ -202,7 +204,7 @@ module rvgpu_toplevel_tb;
             end
             
             // AXI接口响应处理
-            always @(posedge clk) begin
+            always @(posedge clk_rst_if_inst.clk) begin
                 // 写地址通道
                 mem_if[i].awready = 1'b1;
                 
@@ -238,9 +240,8 @@ module rvgpu_toplevel_tb;
     
     // 测试主程序
     initial begin
-        // 等待复位完成
-        wait (rst_n);
-        #100;
+        // 等待复位完成并确保时钟稳定
+        clk_mgr.wait_clock_stable(5);
         
         $display("RVGPU顶层测试开始");
         

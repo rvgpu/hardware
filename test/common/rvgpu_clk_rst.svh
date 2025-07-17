@@ -82,6 +82,9 @@ class rvgpu_clk_manager;
   // Virtual interface handle
   virtual clk_rst_if clk_rst_vif;
   
+  // Cycle counter
+  local int unsigned cycle_count;
+  
   // Constructor
   function new(string name = "clk_manager", 
                real clk_period_ns = 10.0, 
@@ -89,6 +92,19 @@ class rvgpu_clk_manager;
     this.manager_name = name;
     this.clock_period_ns = clk_period_ns;
     this.reset_cycles = rst_cycles;
+    this.cycle_count = 0;
+  endfunction
+
+  // Cycle counter logic (to be called from testbench initial block)
+  task automatic start_cycle_counting();
+    forever @(posedge clk_rst_vif.clk) begin
+      this.cycle_count++;
+    end
+  endtask
+
+  // Get current cycle count
+  virtual function int unsigned get_cycle_count();
+    return this.cycle_count;
   endfunction
   
   // Initialize with interface

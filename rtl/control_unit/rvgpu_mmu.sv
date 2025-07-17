@@ -200,7 +200,7 @@ module rvgpu_mmu #(
             MMU_STATE_PAGE_WALK: begin
                 // 页表查找请求 - 使用查找表减少if语句
                 noc_req_valid_nxt = 1'b1;
-                noc_req_header_nxt = build_noc_header(MSG_MEM_READ_REQ, 8'h01, NODE_CONTROL, NODE_L2_CACHE, 8'h00);
+                noc_req_header_nxt = build_noc_header_mem_request(8'h01, NODE_CONTROL, NOC_NODE_CONTROL_MMU);
                 noc_req_data_nxt = calc_page_table_addr(vaddr_r, current_pt_base_r, page_level_r);
                 noc_req_last_nxt = 1'b1;
                 

@@ -65,10 +65,14 @@ bool RVGPUParseCommand::open(const std::string& filename) {
     // 构建文件路径
     file_path = build_tc_path(filename, "command.txt");
     
-    file.open(file_path);
-    end_of_file = !file.is_open();
-    
-    return file.is_open();
+    file.open(file_path);    
+    if (!file.is_open()) {
+        end_of_file = true;
+        return false;
+    }
+
+    end_of_file = false;
+    return true;
 }
 
 bool RVGPUParseCommand::empty() const {
@@ -76,25 +80,21 @@ bool RVGPUParseCommand::empty() const {
 }
 
 sim_command RVGPUParseCommand::get_command() {
-    sim_command cmd;
+    sim_command cmd = {RVGPU_COMMAND_ERROR, 0, 0, ""};  // 提供默认初始化
     
-    // 读取下一行
-    if (std::getline(file, current_line)) {
-        // 跳过注释行和空行
-        while (!current_line.empty() && 
-               (current_line[0] == '#' || current_line[0] == ' ' || current_line[0] == '\t')) {
-            if (!std::getline(file, current_line)) {
-                end_of_file = true;
-                return cmd;
-            }
-        }
-        
+    // 循环读取，直到找到有效命令或到达文件末尾
+    while (std::getline(file, current_line)) {
+        // 跳过空行
         if (current_line.empty()) {
-            end_of_file = true;
-            return cmd;
+            continue;  // 继续读取下一行
         }
 
-        // 解析命令
+        // 跳过注释行和只包含空白字符的行
+        if (current_line[0] == '#' || current_line[0] == ' ' || current_line[0] == '\t') {
+            continue;  // 继续读取下一行
+        }
+
+        // 找到有效行，开始解析命令
         std::istringstream iss(current_line);
         std::string command_str;
         iss >> command_str;
@@ -111,10 +111,13 @@ sim_command RVGPUParseCommand::get_command() {
         } else if (command_str == "wait_gpu_done") {
             cmd.command = RVGPU_WAIT_GPU_DONE;
         }
-    } else {
-        end_of_file = true;
+        
+        // 找到有效命令，返回
+        return cmd;
     }
     
+    // 如果到达这里，说明文件已经结束
+    end_of_file = true;
     return cmd;
 }
 

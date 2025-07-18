@@ -72,6 +72,9 @@ void RVGPUSimulatorTest::run() {
     while (!cmd.empty()) {
         sim_command current_command = cmd.get_command();
         switch(current_command.command) {
+            case RVGPU_COMMAND_ERROR:
+                log("Error: Invalid command");
+                break;
             case RVGPU_COMMAND_WRITE_REG:
                 write_reg(current_command.reg_addr, current_command.data, 0xff);
                 break;

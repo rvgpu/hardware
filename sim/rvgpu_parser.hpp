@@ -33,6 +33,7 @@ std::string build_tc_path(const std::string& filename, const std::string& defaul
 //=============================================================================
 
 enum RVGPUCommandType {
+    RVGPU_COMMAND_ERROR = 0,      // 错误状态
     RVGPU_COMMAND_WRITE_REG = 1,
     RVGPU_COMMAND_CHECK_REG = 2,
     RVGPU_LOAD_MEMORY = 3,

@@ -26,7 +26,7 @@
 // Memory Interface Configuration (AXI Master)
 //=============================================================================
 `define MEMORY_INTERFACE_ADDR_WIDTH         64
-`define MEMORY_INTERFACE_DATA_WIDTH         128
+`define MEMORY_INTERFACE_DATA_WIDTH         256
 
 //=============================================================================
 // ShaderCore Configuration

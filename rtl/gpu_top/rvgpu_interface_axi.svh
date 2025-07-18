@@ -96,7 +96,7 @@ endinterface : host_if
 //=============================================================================
 
 interface memory_if #(
-    parameter int unsigned         DATA_WIDTH = 256,
+    parameter int unsigned         DATA_WIDTH = `MEMORY_INTERFACE_DATA_WIDTH,
     parameter int unsigned         ADDR_WIDTH = 48,
     parameter int unsigned         ID_WIDTH = 8
 );

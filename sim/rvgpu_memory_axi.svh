@@ -116,8 +116,8 @@ class rvgpu_memory_axi;
     read_fifo_entry_t rfifo[$];
     
     // 读数据寄存器 - 使用动态大小
-    logic [255:0] rdata_tmp;  // 固定256位，与接口匹配
-    logic [31:0] rdata[8];  // 固定8个32位字
+    logic [`MEMORY_INTERFACE_DATA_WIDTH-1:0] rdata_tmp;  // 使用配置的数据宽度
+    logic [31:0] rdata[`MEMORY_INTERFACE_DATA_WIDTH/32];  // 动态数组大小
 
     // 统计信息
     statistics_t stats;
@@ -152,7 +152,7 @@ class rvgpu_memory_axi;
         mem_if.rresp = 2'b00;
         mem_if.bid = 8'h0;
         mem_if.rid = 8'h0;
-        mem_if.rdata = 256'h0;
+        mem_if.rdata = 128'h0;
         
         // 重置计数器
         number_of_reads = 0;
@@ -445,45 +445,13 @@ class rvgpu_memory_axi;
     endfunction
 
     // 写内存burst操作
-    task write_memory_burst(logic [47:0] addr, logic [31:0] strb, logic [255:0] data);
-        // 使用固定偏移量避免动态范围
-        for (int i = 0; i < 32; i++) begin
+    task write_memory_burst(logic [47:0] addr, logic [`MEMORY_INTERFACE_DATA_WIDTH/8-1:0] strb, logic [`MEMORY_INTERFACE_DATA_WIDTH-1:0] data);
+        // 动态处理字节
+        for (int i = 0; i < `MEMORY_INTERFACE_DATA_WIDTH/8; i++) begin
             if (strb[i]) begin
                 logic [7:0] byte_data;
-                case (i)
-                    0:  byte_data = data[7:0];
-                    1:  byte_data = data[15:8];
-                    2:  byte_data = data[23:16];
-                    3:  byte_data = data[31:24];
-                    4:  byte_data = data[39:32];
-                    5:  byte_data = data[47:40];
-                    6:  byte_data = data[55:48];
-                    7:  byte_data = data[63:56];
-                    8:  byte_data = data[71:64];
-                    9:  byte_data = data[79:72];
-                    10: byte_data = data[87:80];
-                    11: byte_data = data[95:88];
-                    12: byte_data = data[103:96];
-                    13: byte_data = data[111:104];
-                    14: byte_data = data[119:112];
-                    15: byte_data = data[127:120];
-                    16: byte_data = data[135:128];
-                    17: byte_data = data[143:136];
-                    18: byte_data = data[151:144];
-                    19: byte_data = data[159:152];
-                    20: byte_data = data[167:160];
-                    21: byte_data = data[175:168];
-                    22: byte_data = data[183:176];
-                    23: byte_data = data[191:184];
-                    24: byte_data = data[199:192];
-                    25: byte_data = data[207:200];
-                    26: byte_data = data[215:208];
-                    27: byte_data = data[223:216];
-                    28: byte_data = data[231:224];
-                    29: byte_data = data[239:232];
-                    30: byte_data = data[247:240];
-                    31: byte_data = data[255:248];
-                endcase
+                // 小端序处理 - 低位字节对应低地址
+                byte_data = data[i*8 +: 8];
                 gpu_write_mem(addr + i, byte_data);
             end
         end
@@ -491,12 +459,16 @@ class rvgpu_memory_axi;
 
     // 读内存burst操作
     task read_memory_burst(logic [47:0] addr);
-        // 使用for循环简化
-        for (int i = 0; i < 8; i++) begin
+        // 动态读取数据
+        for (int i = 0; i < `MEMORY_INTERFACE_DATA_WIDTH/32; i++) begin
             rdata[i] = gpu_read_mem(addr + i*4);
         end
-        // 使用流操作符组合数据
-        rdata_tmp = {>>{rdata}};
+        // 正确组合数据 - 小端序，低位在前
+        // 动态组合数据，从高位到低位
+        rdata_tmp = 0;
+        for (int i = 0; i < `MEMORY_INTERFACE_DATA_WIDTH/32; i++) begin
+            rdata_tmp[(`MEMORY_INTERFACE_DATA_WIDTH-1)-i*32 -: 32] = rdata[(`MEMORY_INTERFACE_DATA_WIDTH/32)-1-i];
+        end
     endtask
 
     // 获取统计信息

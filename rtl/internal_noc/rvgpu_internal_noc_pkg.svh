@@ -16,6 +16,9 @@
 `ifndef RVGPU_INTERNAL_NOC_PKG_SVH
 `define RVGPU_INTERNAL_NOC_PKG_SVH
 
+`include "rvgpu_config.svh"
+`include "rvgpu_constant.svh"
+
 package rvgpu_internal_noc_pkg;
 
     //=============================================================================
@@ -24,27 +27,17 @@ package rvgpu_internal_noc_pkg;
     typedef struct packed {
         int unsigned data_width;        // 数据位宽
         int unsigned header_width;      // Header位宽
-        int unsigned vc_count;          // 虚拟通道数
-        int unsigned buffer_depth;      // 缓冲区深度
         int unsigned num_shader_cores;  // Shader Core数量：1-8
-        int unsigned max_pending_trans; // 最大未完成事务数
         logic        debug_enable;      // 调试功能使能
     } noc_config_t;
     
-    function automatic noc_config_t get_default_noc_config();
-        noc_config_t conf;
-        conf.data_width = 256;
-        conf.header_width = 32;
-        conf.vc_count = 4;
-        conf.buffer_depth = 16;
-        conf.num_shader_cores = 2;
-        conf.max_pending_trans = 16;
-        conf.debug_enable = 1'b1;
-        return conf;
-    endfunction
-    
     // 默认配置
-    localparam noc_config_t DEFAULT_NOC_CONFIG = get_default_noc_config();
+    localparam noc_config_t DEFAULT_NOC_CONFIG = '{
+        data_width: `MEMORY_INTERFACE_DATA_WIDTH,
+        header_width: `RVGPU_CONST_NOC_HEADER_WIDTH,
+        num_shader_cores: `SHADER_CORE_NUMBER,
+        debug_enable: 1'b1
+    };
 
     `include "rvgpu_noc_message.svh"
 

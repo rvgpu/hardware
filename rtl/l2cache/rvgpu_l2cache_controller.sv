@@ -303,6 +303,7 @@ module rvgpu_l2cache_controller #(
                 tag_if.lookup_index = current_index_r;
                 
                 if (tag_if.lookup_ready) begin
+                    $display("@%0t: [L2CACHE_CTRL] Tag Lookup: %s", $time, tag_if.lookup_hit);
                     // 检查命中
                     cache_hit_nxt = tag_if.lookup_hit;
                     hit_way_nxt = tag_if.hit_way;
@@ -380,10 +381,11 @@ module rvgpu_l2cache_controller #(
                     axi_if.read_req_valid = 1'b1;
                     axi_if.read_req_addr = {current_tag_r, current_index_r, 6'b0}; // 对齐到缓存行
                     axi_if.read_req_len = 0; // 单次传输
-                    axi_if.read_req_size = 3'b110; // 64字节
+                    axi_if.read_req_size = current_req_r.size; 
                     axi_if.read_req_id = current_req_r.trans_id;
                     
                     if (axi_if.read_req_ready) begin
+                        $display("@%0t: [L2CACHE_CTRL] miss handle: req_addr:0x%h, req_size:%d", $time, axi_if.read_req_addr, axi_if.read_req_size);
                         state_nxt = L2_STATE_MEMORY_ACCESS;
                     end
                 end else begin
@@ -391,7 +393,7 @@ module rvgpu_l2cache_controller #(
                     axi_if.write_req_valid = 1'b1;
                     axi_if.write_req_addr = current_req_r.addr;
                     axi_if.write_req_len = 0;
-                    axi_if.write_req_size = current_req_r.size;
+                    axi_if.write_req_size = current_req_r.size[2:0]; // 从请求payload中获取size
                     axi_if.write_req_id = current_req_r.trans_id;
                     
                     if (axi_if.write_req_ready) begin
@@ -517,25 +519,25 @@ module rvgpu_l2cache_controller #(
     //=============================================================================
     // 辅助函数
     //=============================================================================
-    
+
     // 解析NOC请求
     function automatic l2cache_request_t parse_noc_request(
-        input logic [31:0] header,
-        input logic [255:0] data
+        input noc_header_t header,
+        input noc_payload_t payload
     );
         l2cache_request_t req;
         noc_header_t noc_header;
         
         noc_header = noc_header_t'(header);
         
-        req.addr = data[63:0];
-        req.size = data[71:64];
+        req.addr = payload.req_mem_read.addr;
+        req.size = payload.req_mem_read.size;
+        req.strb = 32'hffffffff;
         req.read = (noc_header.msg_type == MSG_MEM_READ_REQ);
         req.write = (noc_header.msg_type == MSG_MEM_WRITE_REQ);
         req.trans_id = noc_header.trans_id;
         req.src_node = noc_header.src_node;
-        req.data = data[255:0];
-        req.strb = data[255:224]; // 修复：使用有效的位范围
+        req.data = payload.payload_256b;
         
         return req;
     endfunction
@@ -707,9 +709,7 @@ module rvgpu_l2cache_controller #(
         always_ff @(posedge clk) begin
             // 监控NOC请求
             if (noc_if.req_valid && noc_if.req_ready) begin
-                `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("NOC Request: addr=0x%h, trans_id=%0d, %s, size=%0d", 
-                         current_req_nxt.addr, current_req_nxt.trans_id,
-                         current_req_nxt.read ? "READ" : "WRITE", current_req_nxt.size));
+                `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("NOC Request: %s", noc_request_mem_read_to_string(noc_if.req_header, noc_if.req_data)));
             end
             
             // 监控NOC响应

@@ -236,7 +236,7 @@ module rvgpu_l2cache #(
                 
                 // 监控错误计数
                 if (controller_debug.perf_counters.error_count != prev_perf_counters.error_count) begin
-                    `DEBUG_PRINT("L2CACHE", $sformatf("Error count: %0d", controller_debug.perf_counters.error_count));
+                    // `DEBUG_PRINT("L2CACHE", $sformatf("Error count: %0d", controller_debug.perf_counters.error_count));
                 end
             end
         end

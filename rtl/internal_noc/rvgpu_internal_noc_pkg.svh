@@ -21,7 +21,6 @@ package rvgpu_internal_noc_pkg;
     //=============================================================================
     // 配置结构体定义
     //=============================================================================
-    
     typedef struct packed {
         int unsigned data_width;        // 数据位宽
         int unsigned header_width;      // Header位宽
@@ -38,7 +37,7 @@ package rvgpu_internal_noc_pkg;
         conf.header_width = 32;
         conf.vc_count = 4;
         conf.buffer_depth = 16;
-        conf.num_shader_cores = 4;
+        conf.num_shader_cores = 2;
         conf.max_pending_trans = 16;
         conf.debug_enable = 1'b1;
         return conf;
@@ -48,6 +47,8 @@ package rvgpu_internal_noc_pkg;
     localparam noc_config_t DEFAULT_NOC_CONFIG = get_default_noc_config();
 
     `include "rvgpu_noc_message.svh"
+
+    `include "rvgpu_noc_debug.svh"
 
 endpackage : rvgpu_internal_noc_pkg
 

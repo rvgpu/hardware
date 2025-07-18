@@ -88,7 +88,7 @@ package rvgpu_control_unit_pkg;
         cu_parameter: DEFAULT_CONTROL_UNIT_PARAMETER,
         mmu_parameter: DEFAULT_MMU_PARAMETER,
         job_dispatcher_parameter: DEFAULT_JOB_DISPATCHER_PARAMETER,
-        debug: 0
+        debug: `RVGPU_CONFIG_DEBUG_ENABLE
     };
 
     //=============================================================================

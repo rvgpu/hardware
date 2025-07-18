@@ -176,6 +176,7 @@ module rvgpu_l2cache_tag_array #(
                     sram_ce_nxt = 1'b1;
                     sram_we_nxt = 1'b0;
                     sram_addr_nxt = tag_if.lookup_index;
+                    `DEBUG_PRINT("L2CACHE_TAG", $sformatf("Lookup: index=0x%h, tag=0x%h", tag_if.lookup_index, lookup_tag_nxt));
                 end else if (tag_if.update_valid) begin
                     // 开始Tag更新
                     state_nxt = STATE_UPDATE;
@@ -211,6 +212,7 @@ module rvgpu_l2cache_tag_array #(
                 
                 // 返回空闲状态
                 state_nxt = STATE_IDLE;
+                `DEBUG_PRINT("L2CACHE_TAG", $sformatf("Lookup done: hit=%0d, way=%0d", lookup_hit_nxt, hit_way_nxt));
             end
             
             STATE_UPDATE: begin

@@ -99,7 +99,7 @@ module rvgpu_mmu #(
     
     logic noc_req_valid_r, noc_req_valid_nxt;
     logic [31:0] noc_req_header_r, noc_req_header_nxt;
-    logic [63:0] noc_req_data_r, noc_req_data_nxt;
+    noc_payload_t noc_req_data_r, noc_req_data_nxt;
     logic noc_req_last_r, noc_req_last_nxt;
     logic noc_resp_ready_r, noc_resp_ready_nxt;
     
@@ -163,7 +163,6 @@ module rvgpu_mmu #(
                     req_write_nxt = mmu_if.req_write;
                     page_level_nxt = L1_LEVEL;  // 从L1开始
                     current_pt_base_nxt = page_table_base_r;  // 使用配置的页表基地址
-                    `DEBUG_PRINT("MMU", $sformatf("MMU Request, vaddr: 0x%h, req_read: %b, req_write: %b", mmu_if.req_vaddr, req_read_r, req_write_r));
                 end
             end
             
@@ -188,7 +187,6 @@ module rvgpu_mmu #(
                         paddr_nxt = {mmu_tlb.tlb_lookup_data[51:25], vaddr_r[PAGE_OFFSET_BITS-1:0]};
                         tlb_hit_count_nxt = tlb_hit_count_r + 1;
                         state_nxt = MMU_STATE_RESPONSE;
-                        `DEBUG_PRINT("MMU", $sformatf("TLB Hit, paddr: 0x%h + 0x%h, data: 0x%h", mmu_tlb.tlb_lookup_data[69:34], vaddr_r[PAGE_OFFSET_BITS-1:0], mmu_tlb.tlb_lookup_data));
                     end else begin
                         // TLB未命中，开始页表查找
                         tlb_miss_count_nxt = tlb_miss_count_r + 1;
@@ -201,7 +199,7 @@ module rvgpu_mmu #(
                 // 页表查找请求 - 使用查找表减少if语句
                 noc_req_valid_nxt = 1'b1;
                 noc_req_header_nxt = build_noc_header_mem_request(8'h01, NODE_CONTROL, NOC_NODE_CONTROL_MMU);
-                noc_req_data_nxt = calc_page_table_addr(vaddr_r, current_pt_base_r, page_level_r);
+                noc_req_data_nxt = build_noc_payload_request_mem_read(calc_page_table_addr(vaddr_r, current_pt_base_r, page_level_r), NOC_SIZE_8B);
                 noc_req_last_nxt = 1'b1;
                 
                 if (noc_req_accept) begin
@@ -388,10 +386,25 @@ module rvgpu_mmu #(
     //=============================================================================
     // 10. 调试输出 - 使用 generate 块进行条件编译
     //=============================================================================
-    
     generate
     if (CU_CONFIG.debug) begin : gen_debug
         always_ff @(posedge clk) begin
+            if (state_r == MMU_STATE_IDLE && req_accept) begin
+                `DEBUG_PRINT("MMU", $sformatf("MMU Request, vaddr: 0x%h, req_read: %b, req_write: %b", mmu_if.req_vaddr, req_read_r, req_write_r));
+            end
+
+            if (state_r == MMU_STATE_PAGE_WALK && noc_req_accept) begin
+                `DEBUG_PRINT("MMU", $sformatf("Page Walk, %s", noc_request_mem_read_to_string(noc_req_header_nxt, noc_req_data_nxt)));
+            end
+
+            if ((state_r == MMU_STATE_TLB_WAIT) && mmu_tlb.tlb_lookup_ready) begin
+                if (mmu_tlb.tlb_lookup_hit) begin
+                    `DEBUG_PRINT("MMU", $sformatf("TLB Hit, paddr: 0x%h + 0x%h, data: 0x%h", mmu_tlb.tlb_lookup_data[69:34], vaddr_r[PAGE_OFFSET_BITS-1:0], mmu_tlb.tlb_lookup_data));
+                end else begin
+                    `DEBUG_PRINT("MMU", $sformatf("TLB Miss, vaddr: 0x%h", vaddr_r));
+                end
+            end
+
             // 监控TLB握手
             if (tlb_lookup_valid_r && mmu_tlb.tlb_lookup_ready) begin
                 `DEBUG_PRINT("MMU", $sformatf("TLB lookup handshake detected"));

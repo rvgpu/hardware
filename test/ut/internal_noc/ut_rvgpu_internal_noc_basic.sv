@@ -15,24 +15,11 @@ module rvgpu_internal_noc_basic_unit_test;
   //===================================
   // 时钟和复位
   //===================================
-  `CLK_RESET_FIXTURE(5, 10)        
-    
-  //===================================
-  // NOC配置和接口
-  //===================================
-  localparam noc_config_t NOC_CONFIG = '{
-    data_width: 256,
-    header_width: 32,
-    vc_count: 4,
-    buffer_depth: 16,
-    num_shader_cores: 2,
-    max_pending_trans: 16,
-    debug_enable: 1'b1
-  };
+  `CLK_RESET_FIXTURE(5, 10)
 
-  rvgpu_internal_noc_if #(.NOC_CONFIG(NOC_CONFIG)) control_unit_if();
-  rvgpu_internal_noc_if #(.NOC_CONFIG(NOC_CONFIG)) shader_core_if[NOC_CONFIG.num_shader_cores]();
-  rvgpu_internal_noc_if #(.NOC_CONFIG(NOC_CONFIG)) l2cache_if();
+  rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) control_unit_if();
+  rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) shader_core_if[DEFAULT_NOC_CONFIG.num_shader_cores]();
+  rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) l2cache_if();
 
   typedef struct packed {
     logic [31:0] header;
@@ -43,11 +30,11 @@ module rvgpu_internal_noc_basic_unit_test;
   package_data_t package_data;
 
   // 定义虚拟接口类型，用于在task中将真实的接口作为参数传递
-  typedef virtual rvgpu_internal_noc_if #(.NOC_CONFIG(NOC_CONFIG)) vif_t;
+  typedef virtual rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) vif_t;
 
   // DUT实例
   rvgpu_internal_noc #(
-    .NOC_CONFIG(NOC_CONFIG)
+    .NOC_CONFIG(DEFAULT_NOC_CONFIG)
   ) x_rvgpu_internal_noc (
     .clk(clk),
     .rst_n(rst_n),
@@ -101,7 +88,7 @@ module rvgpu_internal_noc_basic_unit_test;
 
   // 专门的shader core初始化任务
   task init_shader_cores();
-    if (NOC_CONFIG.num_shader_cores > 0) begin
+    if (DEFAULT_NOC_CONFIG.num_shader_cores > 0) begin
       shader_core_if[0].m_req_valid = 0;
       shader_core_if[0].m_req_header = 0;
       shader_core_if[0].m_req_data = 0;
@@ -115,7 +102,7 @@ module rvgpu_internal_noc_basic_unit_test;
       shader_core_if[0].s_resp_last = 0;
       shader_core_if[0].s_req_ready = 0;
     end
-    if (NOC_CONFIG.num_shader_cores > 1) begin
+    if (DEFAULT_NOC_CONFIG.num_shader_cores > 1) begin
       shader_core_if[1].m_req_valid = 0;
       shader_core_if[1].m_req_header = 0;
       shader_core_if[1].m_req_data = 0;

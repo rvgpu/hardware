@@ -114,8 +114,10 @@ module rvgpu_l2cache_noc_adapter #(
     // 握手信号定义
     //=============================================================================
     
-    wire req_accept = noc_external_if.s_req_valid && noc_external_if.s_req_ready;
-    wire resp_accept = noc_external_if.s_resp_valid && noc_external_if.s_resp_ready;
+    wire external_req_accept = noc_external_if.s_req_valid && noc_external_if.s_req_ready;
+    wire external_resp_accept = noc_external_if.s_resp_valid && noc_external_if.s_resp_ready;
+    wire noc_req_accept = noc_if.req_valid && noc_if.req_ready;
+    wire noc_resp_accept = noc_if.resp_valid && noc_if.resp_ready;
     // wire out_resp_accept = noc_external_if.m_resp_valid && noc_external_if.m_resp_ready;
     
     //=============================================================================
@@ -168,7 +170,7 @@ module rvgpu_l2cache_noc_adapter #(
             noc_external_if.s_resp_status = resp_queue[resp_queue_head_r].status;
             noc_external_if.s_resp_last = resp_queue[resp_queue_head_r].last;
             
-            if (resp_accept) begin
+            if (external_resp_accept) begin
                 // 更新响应队列头部
                 resp_queue_head_nxt = resp_queue_head_r + 1;
                 if (resp_queue_head_nxt == resp_queue_tail_r) begin
@@ -207,8 +209,6 @@ module rvgpu_l2cache_noc_adapter #(
                 
                 if (noc_if.req_ready) begin
                     ctrl_state_nxt = CTRL_STATE_WAIT_RESP;
-                    $display("@%0t: [L2CACHE_NOC] req_header=0x%h, req_data=0x%h, req_strb=0x%h, req_last=%0d", 
-                        $time, noc_if.req_header, noc_if.req_data, noc_if.req_strb, noc_if.req_last);
                 end
             end
             
@@ -315,39 +315,21 @@ module rvgpu_l2cache_noc_adapter #(
         
         always_ff @(posedge clk) begin
             // 监控外部请求
-            if (req_accept) begin
-                noc_header_t req_header_struct;
-                noc_msg_type_t msg_type;
-                noc_node_id_t src_node, dest_node;
-                req_header_struct = noc_header_t'(noc_external_if.s_req_header);
-                msg_type = noc_msg_type_t'(req_header_struct.msg_type);
-                src_node = noc_node_id_t'(req_header_struct.src_node);
-                dest_node = noc_node_id_t'(req_header_struct.dest_node);
-                $display("@%0t: [L2CACHE_NOC] External Request: type=0x%h, src=%0d, dest=%0d, trans_id=%0d", 
-                         $time, req_header_struct.msg_type, src_node, dest_node, req_header_struct.trans_id);
+            if (external_req_accept) begin
+                $display("@%0t: [L2CACHE_NOC] External Request accept: %s", $time, noc_request_mem_read_to_string(noc_external_if.s_req_header, noc_external_if.s_req_data));
             end
             
             // 监控外部响应
-            if (resp_accept) begin
-                noc_header_t resp_header_struct;
-                resp_header_struct = noc_header_t'(resp_queue[resp_queue_head_r].header);
-                $display("@%0t: [L2CACHE_NOC] External Response: type=0x%h, status=%0d, trans_id=%0d", 
-                         $time, resp_header_struct.msg_type, resp_queue[resp_queue_head_r].status, resp_header_struct.trans_id);
+            if (external_resp_accept) begin
+                $display("@%0t: [L2CACHE_NOC] External Response accept: %s", $time, noc_response_mem_read_to_string(noc_external_if.s_resp_header, noc_external_if.s_resp_data));
             end
-            
-            // 监控控制器通信
-            if (noc_if.req_valid && noc_if.req_ready) begin
-                noc_header_t current_header_struct;
-                current_header_struct = noc_header_t'(req_queue[req_queue_head_r].header);
-                $display("@%0t: [L2CACHE_NOC] Controller Request: type=0x%h, addr=0x%h, size=%0d", 
-                         $time, current_header_struct.msg_type, parsed_addr, parsed_size);
+
+            if (noc_req_accept) begin
+                $display("@%0t: [L2CACHE_NOC] Control Request accept: %s", $time, noc_request_mem_read_to_string(noc_if.req_header, noc_if.req_data));
             end
-            
-            if (noc_if.resp_valid && noc_if.resp_ready) begin
-                noc_header_t resp_header_struct;
-                resp_header_struct = noc_header_t'(noc_if.resp_header);
-                $display("@%0t: [L2CACHE_NOC] Controller Response: type=0x%h, status=%0d", 
-                         $time, resp_header_struct.msg_type, noc_if.resp_status);
+
+            if (noc_resp_accept) begin
+                $display("@%0t: [L2CACHE_NOC] Control Response accept: %s", $time, noc_response_mem_read_to_string(noc_if.resp_header, noc_if.resp_data));
             end
             
             // 监控队列状态

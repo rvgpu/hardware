@@ -26,5 +26,5 @@ from utils import *
 
 @all_files_in_dir('ut/internal_noc')
 @all_available_simulators()
-def test_rcore_iu_alu(datafiles, simulator):
+def test_rvgpu_internal_noc_basic(datafiles, simulator):
     run_testcase(datafiles, simulator, 'ut_rvgpu_internal_noc_basic.sv')

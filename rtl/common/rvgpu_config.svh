@@ -42,6 +42,6 @@
 //=============================================================================
 // Debug Configuration
 //=============================================================================
-// `define RVGPU_ON_SIMULATION              1
+`define RVGPU_CONFIG_DEBUG_ENABLE           1
 
 `endif // RVGPU_CONFIG_SVH

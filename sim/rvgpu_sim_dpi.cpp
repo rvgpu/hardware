@@ -41,14 +41,14 @@ extern "C" {
     void gpu_write_mem(uint64_t addr, uint64_t data) {
         RVGPUSimulator* sim = RVGPUSimulator::getInstance();
         if (sim != nullptr) {
-            sim->write_memory(addr, data);
+            sim->write_memory64(addr, data);
         }
     }
     
     uint64_t gpu_read_mem(uint64_t addr) {
         RVGPUSimulator* sim = RVGPUSimulator::getInstance();
         if (sim != nullptr) {
-            return sim->read_memory(addr);
+            return sim->read_memory64(addr);
         }
         return 0;
     }

@@ -31,7 +31,7 @@
 
 class RVGPUSimulator {
 protected:
-    // 内存模拟 - 使用Memory类
+    // 内存模拟 - 使用原始的Memory类
     RVGPUMemory* memory;
     bool verbose;
     
@@ -59,9 +59,22 @@ public:
     void write_reg(uint64_t addr, uint64_t data, uint8_t strb);
     uint64_t read_reg(uint64_t addr);
     
-    // 内存访问接口
-    void write_memory(uint64_t addr, uint64_t data);
-    uint64_t read_memory(uint64_t addr);
+    // 128位内存访问接口
+    void write_memory128(uint64_t addr, uint32_t data0, uint32_t data1, uint32_t data2, uint32_t data3);
+    void read_memory128(uint64_t addr, uint32_t& data0, uint32_t& data1, uint32_t& data2, uint32_t& data3);
+    
+    // 特化的内存访问接口 - 公共接口
+    void write_memory8(uint64_t addr, uint8_t data);
+    void write_memory16(uint64_t addr, uint16_t data);
+    void write_memory32(uint64_t addr, uint32_t data);
+    void write_memory64(uint64_t addr, uint64_t data);
+    
+    uint8_t read_memory8(uint64_t addr);
+    uint16_t read_memory16(uint64_t addr);
+    uint32_t read_memory32(uint64_t addr);
+    uint64_t read_memory64(uint64_t addr);
+    
+
     
 protected:
     // 禁用拷贝构造和赋值操作

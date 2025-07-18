@@ -49,10 +49,7 @@ void RVGPUSimulatorTest::load_memory(const std::string& filename) {
         
         if (memdata.size() == 5) {
             uint64_t addr = memdata[0];
-            write_memory(addr + 0,  memdata[1]);
-            write_memory(addr + 4,  memdata[2]);
-            write_memory(addr + 8,  memdata[3]);
-            write_memory(addr + 12, memdata[4]);
+            write_memory128(addr, memdata[1], memdata[2], memdata[3], memdata[4]);
         } else {
             // 如果不是5个元素，跳过这一行
             continue;

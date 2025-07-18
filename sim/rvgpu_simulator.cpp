@@ -67,19 +67,75 @@ uint64_t RVGPUSimulator::read_reg(uint64_t addr) {
     return data;
 }
 
-void RVGPUSimulator::write_memory(uint64_t addr, uint64_t data) {
+// 128位内存访问接口
+void RVGPUSimulator::write_memory128(uint64_t addr, uint32_t data0, uint32_t data1, uint32_t data2, uint32_t data3) {
     if (memory != nullptr) {
-        memory->write(addr, data);
+        memory->write128(addr, data0, data1, data2, data3);
     }
 }
 
-uint64_t RVGPUSimulator::read_memory(uint64_t addr) {
+void RVGPUSimulator::read_memory128(uint64_t addr, uint32_t& data0, uint32_t& data1, uint32_t& data2, uint32_t& data3) {
     if (memory != nullptr) {
-        uint64_t data = memory->read(addr);
-        return data;
+        memory->read128(addr, data0, data1, data2, data3);
+    } else {
+        data0 = data1 = data2 = data3 = 0;
+    }
+}
+
+// 特化的内存访问接口
+void RVGPUSimulator::write_memory8(uint64_t addr, uint8_t data) {
+    if (memory != nullptr) {
+        memory->write8(addr, data);
+    }
+}
+
+void RVGPUSimulator::write_memory16(uint64_t addr, uint16_t data) {
+    if (memory != nullptr) {
+        memory->write16(addr, data);
+    }
+}
+
+void RVGPUSimulator::write_memory32(uint64_t addr, uint32_t data) {
+    if (memory != nullptr) {
+        memory->write32(addr, data);
+    }
+}
+
+void RVGPUSimulator::write_memory64(uint64_t addr, uint64_t data) {
+    if (memory != nullptr) {
+        memory->write64(addr, data);
+    }
+}
+
+uint8_t RVGPUSimulator::read_memory8(uint64_t addr) {
+    if (memory != nullptr) {
+        return memory->read8(addr);
     }
     return 0;
 }
+
+uint16_t RVGPUSimulator::read_memory16(uint64_t addr) {
+    if (memory != nullptr) {
+        return memory->read16(addr);
+    }
+    return 0;
+}
+
+uint32_t RVGPUSimulator::read_memory32(uint64_t addr) {
+    if (memory != nullptr) {
+        return memory->read32(addr);
+    }
+    return 0;
+}
+
+uint64_t RVGPUSimulator::read_memory64(uint64_t addr) {
+    if (memory != nullptr) {
+        return memory->read64(addr);
+    }
+    return 0;
+}
+
+
 
 //=============================================================================
 // 单例模式实现

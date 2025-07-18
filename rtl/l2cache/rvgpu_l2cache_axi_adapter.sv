@@ -110,6 +110,9 @@ module rvgpu_l2cache_axi_adapter #(
     logic resp_last_r, resp_last_nxt;
     logic [7:0] resp_id_r, resp_id_nxt;
     
+    // 地址有效信号寄存器
+    logic arvalid_r, arvalid_nxt;
+    
     //=============================================================================
     // 握手信号定义
     //=============================================================================
@@ -143,6 +146,7 @@ module rvgpu_l2cache_axi_adapter #(
         resp_status_nxt = resp_status_r;
         resp_last_nxt = resp_last_r;
         resp_id_nxt = resp_id_r;
+        arvalid_nxt = arvalid_r;
         
         // 内存接口输出默认值
         mem_if.arvalid = 1'b0;
@@ -194,7 +198,7 @@ module rvgpu_l2cache_axi_adapter #(
                     current_id_nxt = axi_if.read_req_id;
                     
                     // 发送读地址
-                    mem_if.arvalid = 1'b1;
+                    arvalid_nxt = 1'b1;
                     mem_if.araddr = axi_if.read_req_addr;
                     mem_if.arlen = axi_if.read_req_len;
                     mem_if.arsize = axi_if.read_req_size;
@@ -229,15 +233,19 @@ module rvgpu_l2cache_axi_adapter #(
             
             STATE_READ_ADDR: begin
                 // 读地址状态
-                mem_if.arvalid = 1'b1;
                 mem_if.araddr = current_addr_r;
                 mem_if.arlen = current_len_r;
                 mem_if.arsize = current_size_r;
                 mem_if.arid = current_id_r;
                 
                 if (read_addr_accept) begin
+                    // 握手成功，清除arvalid信号
+                    arvalid_nxt = 1'b0;
                     state_nxt = STATE_READ_DATA;
                     trans_count_nxt = 0;
+                end else begin
+                    // 继续发送地址
+                    arvalid_nxt = 1'b1;
                 end
             end
             
@@ -353,6 +361,9 @@ module rvgpu_l2cache_axi_adapter #(
                 trans_queue_full_nxt = 1'b1;
             end
         end
+        
+        // 设置arvalid信号
+        mem_if.arvalid = arvalid_r;
     end
     
     //=============================================================================
@@ -379,6 +390,7 @@ module rvgpu_l2cache_axi_adapter #(
             resp_status_r <= '0;
             resp_last_r <= 1'b0;
             resp_id_r <= '0;
+            arvalid_r <= 1'b0;
         end else begin
             // 状态更新
             state_r <= state_nxt;
@@ -398,6 +410,7 @@ module rvgpu_l2cache_axi_adapter #(
             resp_status_r <= resp_status_nxt;
             resp_last_r <= resp_last_nxt;
             resp_id_r <= resp_id_nxt;
+            arvalid_r <= arvalid_nxt;
         end
     end
     

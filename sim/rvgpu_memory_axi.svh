@@ -393,9 +393,13 @@ class rvgpu_memory_axi;
             stats.error_count++;
         end
         
-        // 检查AWSIZE是否匹配数据宽度
-        if (mem_if.awsize != $clog2(DATA_WIDTH_BYTES)) begin
-            $display(" * WARNING: 检测到不匹配的AWSIZE(%0d) at time %0t!", mem_if.awsize, $time);
+        // 检查AWSIZE是否在合理范围内 (0到最大支持值)
+        // AWSIZE表示每次传输的字节数 = 2^AWSIZE
+        if (mem_if.awsize > $clog2(DATA_WIDTH_BYTES)) begin
+            $display(" * WARNING: AWSIZE(%0d)超过最大支持值(%0d) at time %0t!", 
+                     mem_if.awsize, $clog2(DATA_WIDTH_BYTES), $time);
+            $display("   支持的AWSIZE范围: 0-%0d (对应1-%0d字节传输)", 
+                     $clog2(DATA_WIDTH_BYTES), DATA_WIDTH_BYTES);
             error = 1'b1;
             stats.error_count++;
         end
@@ -403,6 +407,7 @@ class rvgpu_memory_axi;
         // 检查AWBURST是否为增量模式
         if (mem_if.awburst != 2'b01) begin
             $display(" * WARNING: 检测到非增量AWBURST(%0d) at time %0t!", mem_if.awburst, $time);
+            $display("   支持的AWBURST: 2'b01 (INCR模式)");
             error = 1'b1;
             stats.error_count++;
         end
@@ -421,9 +426,10 @@ class rvgpu_memory_axi;
             stats.error_count++;
         end
         
-        // 检查ARSIZE是否匹配数据宽度
-        if (mem_if.arsize != $clog2(DATA_WIDTH_BYTES)) begin
-            $display(" * WARNING: 检测到不匹配的ARSIZE(%0d) at time %0t!", mem_if.arsize, $time);
+        // 检查ARSIZE是否在合理范围内 (0到最大支持值)
+        if (mem_if.arsize > $clog2(DATA_WIDTH_BYTES)) begin
+            $display(" * WARNING: ARSIZE(%0d)超过最大支持值(%0d) at time %0t!", 
+                     mem_if.arsize, $clog2(DATA_WIDTH_BYTES), $time);
             error = 1'b1;
             stats.error_count++;
         end

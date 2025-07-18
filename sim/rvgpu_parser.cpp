@@ -17,10 +17,40 @@
 #include <fstream>
 #include <sstream>
 #include <iostream>
+#include <algorithm>
+#include <cctype>
 
 //=============================================================================
 // Utility Functions Implementation
 //=============================================================================
+
+// 去除字符串两端的空白字符
+std::string strip(const std::string& str) {
+    size_t start = str.find_first_not_of(" \t\n\r");
+    if (start == std::string::npos) {
+        return ""; // 字符串只包含空白字符
+    }
+    size_t end = str.find_last_not_of(" \t\n\r");
+    return str.substr(start, end - start + 1);
+}
+
+// 去除字符串左端的空白字符
+std::string lstrip(const std::string& str) {
+    size_t start = str.find_first_not_of(" \t\n\r");
+    if (start == std::string::npos) {
+        return ""; // 字符串只包含空白字符
+    }
+    return str.substr(start);
+}
+
+// 去除字符串右端的空白字符
+std::string rstrip(const std::string& str) {
+    size_t end = str.find_last_not_of(" \t\n\r");
+    if (end == std::string::npos) {
+        return ""; // 字符串只包含空白字符
+    }
+    return str.substr(0, end + 1);
+}
 
 std::string build_tc_path(const std::string& filename, const std::string& default_filename) {
     const char* tc_env = std::getenv("TC");
@@ -84,13 +114,16 @@ sim_command RVGPUParseCommand::get_command() {
     
     // 循环读取，直到找到有效命令或到达文件末尾
     while (std::getline(file, current_line)) {
+        // 去除行首行尾的空白字符
+        current_line = strip(current_line);
+        
         // 跳过空行
         if (current_line.empty()) {
             continue;  // 继续读取下一行
         }
 
-        // 跳过注释行和只包含空白字符的行
-        if (current_line[0] == '#' || current_line[0] == ' ' || current_line[0] == '\t') {
+        // 跳过注释行
+        if (current_line[0] == '#') {
             continue;  // 继续读取下一行
         }
 
@@ -149,12 +182,11 @@ bool RVGPUParseHex::open(const std::string& filename) {
 
 bool RVGPUParseHex::next_line() {
     while (std::getline(file, current_line)) {
-        // 跳过注释行、空行和只包含空白字符的行
-        if (!current_line.empty() && 
-            current_line[0] != '#' && 
-            current_line[0] != ' ' && 
-            current_line[0] != '\n' &&
-            current_line[0] != '\t') {
+        // 去除行首行尾的空白字符
+        current_line = strip(current_line);
+        
+        // 跳过空行和注释行
+        if (!current_line.empty() && current_line[0] != '#') {
             return true; // 找到有效行
         }
     }
@@ -171,10 +203,7 @@ std::vector<uint64_t> RVGPUParseHex::get_memdata() {
     }
     
     // 去除行尾的空白字符
-    while (!current_line.empty() && 
-           (current_line.back() == ' ' || current_line.back() == '\t')) {
-        current_line.pop_back();
-    }
+    current_line = rstrip(current_line);
     
     // 如果处理后的行为空，返回空数据
     if (current_line.empty()) {

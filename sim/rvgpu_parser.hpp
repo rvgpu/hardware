@@ -28,6 +28,11 @@
 // 工具函数：构建TC环境变量下的文件路径
 std::string build_tc_path(const std::string& filename, const std::string& default_filename = "");
 
+// 字符串处理工具函数
+std::string strip(const std::string& str);    // 去除两端空白字符
+std::string lstrip(const std::string& str);   // 去除左端空白字符
+std::string rstrip(const std::string& str);   // 去除右端空白字符
+
 //=============================================================================
 // Command Types Enumeration
 //=============================================================================

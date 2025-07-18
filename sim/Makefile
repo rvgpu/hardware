@@ -29,16 +29,14 @@ VCS := vcs
 
 # 编译选项
 CXXFLAGS := -std=c++11 -O2 -Wall -Wextra
-VCS_FLAGS := -full64 -sverilog +v2k -debug_acc+all -debug_region+cell+encrypt \
+VCS_FLAGS := -full64 -sverilog +v2k \
+	-debug_access+all \
+	-debug_region+cell+encrypt \
 	-Mdir=$(OUT_DIR)/csrc \
-	-full64 \
-	+define+RVGPU_HARDWARE=$(RVGPU_HARDWARE) \
 	-o $(OUT_DIR)/rvgpu_tb_vcs \
 	-work $(OUT_DIR)/work \
 	-cm_dir $(OUT_DIR)/cm \
 	-cm_name $(OUT_DIR)/coverage \
-	-debug_access+all \
-	-debug_region+cell+encrypt \
 	+define+RVGPU_HARDWARE=$(RVGPU_HARDWARE)
 
 # 文件列表和包含目录
@@ -144,13 +142,21 @@ vcs: check $(OUT_DIR)
 # 运行VCS仿真
 run-vcs: vcs
 	@echo "运行VCS仿真..."
-	$(OUT_DIR)/rvgpu_tb_vcs
+	$(OUT_DIR)/rvgpu_tb_vcs 
 	@echo "VCS仿真完成"
 
-# 生成波形文件
-wave-vcs: run-vcs
-	@echo "生成VCS波形文件..."
-	# VCS使用-vcd选项生成波形
+# 使用DVE打开波形
+dve:
+	@echo "使用DVE打开波形文件..."
+	@if [ -f "$(SIM_DIR)/vcdplus.vpd" ]; then \
+		echo "找到波形文件: $(SIM_DIR)/vcdplus.vpd"; \
+		dve -vpd $(SIM_DIR)/vcdplus.vpd \
+			-dbdir $(OUT_DIR)/rvgpu_tb_vcs.daidir; \
+	else \
+		echo "错误: 波形文件不存在: $(SIM_DIR)/vcdplus.vpd"; \
+		echo "请先运行 make run-vcs 生成波形文件"; \
+		exit 1; \
+	fi
 
 # 清理
 clean:
@@ -173,6 +179,7 @@ help:
 	@echo "  vcs              - 使用VCS编译"
 	@echo "  run-vcs          - 运行VCS仿真"
 	@echo "  wave-vcs         - 生成VCS波形"
+	@echo "  dve              - 运行仿真并使用DVE打开波形"
 	@echo "  clean            - 清理输出文件"
 	@echo "  help             - 显示此帮助信息"
 	@echo ""
@@ -193,6 +200,7 @@ help:
 	@echo "  make check       - 检查环境配置"
 	@echo "  make vcs         - 使用VCS编译"
 	@echo "  make run-vcs     - 使用VCS运行仿真"
+	@echo "  make dve         - 运行仿真并使用DVE打开波形"
 	@echo "  TC=dump_array_mul make run-vcs  - 指定测试用例运行"
 	@echo "  make clean       - 清理所有输出文件"
 

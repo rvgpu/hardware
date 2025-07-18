@@ -176,7 +176,10 @@ module rvgpu_l2cache_controller #(
     logic [63:0] debug_addr_r, debug_addr_nxt;
     logic [7:0] debug_trans_id_r, debug_trans_id_nxt;
     logic cache_busy_r, cache_busy_nxt;
-    
+    logic write_valid_r, write_valid_nxt;
+    logic read_valid_r, read_valid_nxt; 
+    logic line_read_valid_r, line_read_valid_nxt;
+    logic line_write_valid_r, line_write_valid_nxt;
     //=============================================================================
     // 握手信号定义
     //=============================================================================
@@ -213,8 +216,9 @@ module rvgpu_l2cache_controller #(
         debug_addr_nxt = debug_addr_r;
         debug_trans_id_nxt = debug_trans_id_r;
         cache_busy_nxt = cache_busy_r;
-        
-        // 接口输出默认值
+        write_valid_nxt = write_valid_r;
+        read_valid_nxt = read_valid_r;
+        // 接口输出默认值   
         noc_if.req_ready = 1'b0;
         noc_if.resp_valid = 1'b0;
         noc_if.resp_header = '0;
@@ -263,7 +267,9 @@ module rvgpu_l2cache_controller #(
             L2_STATE_IDLE: begin
                 // 空闲状态：等待新请求
                 cache_busy_nxt = 1'b0;
-                
+                write_valid_nxt = 1'b0;
+                read_valid_nxt = 1'b0;
+
                 if (!req_queue_empty_r) begin
                     // 从队列中取出请求
                     current_req_nxt = req_queue[req_queue_head_r];
@@ -327,13 +333,18 @@ module rvgpu_l2cache_controller #(
                 // 数据访问状态
                 if (current_req_r.read) begin
                     // 读操作
-                    data_if.read_valid = 1'b1;
+                    if(!read_valid_r) begin
+                        read_valid_nxt = 1'b1;
+                    end
+
+                    data_if.read_valid = read_valid_r;
                     data_if.read_index = current_index_r;
                     data_if.read_way = hit_way_r;
                     data_if.read_offset = current_offset_r;
                     data_if.read_size = current_req_r.size;
                     
                     if (data_if.read_ready) begin
+                        read_valid_nxt = 1'b0;
                         // 准备响应
                         current_resp_nxt.data = data_if.read_data;
                         current_resp_nxt.status = RESP_OKAY;
@@ -349,7 +360,11 @@ module rvgpu_l2cache_controller #(
                     end
                 end else begin
                     // 写操作
-                    data_if.write_valid = 1'b1;
+                    if(!write_valid_r) begin
+                        write_valid_nxt = 1'b1;
+                    end
+
+                    data_if.write_valid = write_valid_r;
                     data_if.write_index = current_index_r;
                     data_if.write_way = hit_way_r;
                     data_if.write_offset = current_offset_r;
@@ -358,6 +373,7 @@ module rvgpu_l2cache_controller #(
                     data_if.write_size = current_req_r.size;
                     
                     if (data_if.write_ready) begin
+                        write_valid_nxt = 1'b0;
                         // 准备响应
                         current_resp_nxt.data = '0;
                         current_resp_nxt.status = RESP_OKAY;
@@ -438,13 +454,17 @@ module rvgpu_l2cache_controller #(
                         
                         if (tag_if.update_ready) begin
                             // 更新数据数组
-                            data_if.line_write_valid = 1'b1;
+                            if(!line_write_valid_r) begin
+                                line_write_valid_nxt = 1'b1;
+                            end
+                            data_if.line_write_valid = line_write_valid_r;
                             data_if.line_write_index = current_index_r;
                             data_if.line_write_way = selected_way_r;
                             data_if.line_write_data.data = axi_if.read_resp_data;
                             data_if.line_write_data.strb = '1;
                             
                             if (data_if.line_write_ready) begin
+                                line_write_valid_nxt = 1'b0;
                                 state_nxt = L2_STATE_IDLE;
                                 
                                 // 准备响应
@@ -657,6 +677,10 @@ module rvgpu_l2cache_controller #(
             debug_addr_r <= '0;
             debug_trans_id_r <= '0;
             cache_busy_r <= 1'b0;
+            write_valid_r <= 1'b0;
+            read_valid_r <= 1'b0;
+            line_read_valid_r <= 1'b0;
+            line_write_valid_r <= 1'b0;
         end else begin
             // 状态更新
             state_r <= state_nxt;
@@ -676,6 +700,10 @@ module rvgpu_l2cache_controller #(
             debug_addr_r <= debug_addr_nxt;
             debug_trans_id_r <= debug_trans_id_nxt;
             cache_busy_r <= cache_busy_nxt;
+            write_valid_r <= write_valid_nxt;
+            read_valid_r <= read_valid_nxt;
+            line_read_valid_r <= line_read_valid_nxt;
+            line_write_valid_r <= line_write_valid_nxt;
         end
     end
     

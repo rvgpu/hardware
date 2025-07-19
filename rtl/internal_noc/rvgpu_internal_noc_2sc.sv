@@ -41,23 +41,24 @@ module rvgpu_internal_noc #(
 );
 
     // 内部参数定义
-    localparam int NUM_PORTS = 4; // control_unit + l2cache + 2*shader_core
+    // control_unit + l2cache + 2 x shader_core
+    localparam int NUM_PORTS = NOC_CONFIG.num_shader_cores + 2; 
     
     // 内部信号定义
     typedef struct packed {
-        logic                                   valid;
-        logic [NOC_CONFIG.header_width-1:0]     header;
-        logic [NOC_CONFIG.data_width-1:0]       data;
-        logic [NOC_CONFIG.data_width/8-1:0]     strb;
-        logic                                   last;
+        logic                                           valid;
+        logic [NOC_CONFIG.if_config.header_width-1:0]   header;
+        logic [NOC_CONFIG.if_config.data_width-1:0]     data;
+        logic [NOC_CONFIG.if_config.strb_width-1:0]     strb;
+        logic                                           last;
     } noc_req_t;
     
     typedef struct packed {
-        logic                                   valid;
-        logic [NOC_CONFIG.header_width-1:0]     header;
-        logic [NOC_CONFIG.data_width-1:0]       data;
-        logic [1:0]                             status;
-        logic                                   last;
+        logic                                           valid;
+        logic [NOC_CONFIG.if_config.header_width-1:0]   header;
+        logic [NOC_CONFIG.if_config.data_width-1:0]     data;
+        logic [NOC_CONFIG.if_config.status_width-1:0]   status;
+        logic                                           last;
     } noc_resp_t;
     
     // 请求通道信号

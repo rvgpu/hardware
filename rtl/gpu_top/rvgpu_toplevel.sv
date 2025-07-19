@@ -52,9 +52,9 @@ module rvgpu_toplevel (
     // GPU Interrupt Output
     output logic gpu_irq
 );
-    rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) control_unit_noc_if();
-    rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) l2cache_noc_if();
-    rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) shader_core_noc_if [`SHADER_CORE_NUMBER]();
+    rvgpu_internal_noc_if control_unit_noc_if();
+    rvgpu_internal_noc_if l2cache_noc_if();
+    rvgpu_internal_noc_if shader_core_noc_if [2]();
 
     // Control Unit - 使用control_unit_config_t参数
     rvgpu_control_unit u_control_unit (

@@ -25,16 +25,28 @@ package rvgpu_internal_noc_pkg;
     // 配置结构体定义
     //=============================================================================
     typedef struct packed {
-        int unsigned data_width;        // 数据位宽
         int unsigned header_width;      // Header位宽
+        int unsigned data_width;        // 数据位宽
+        int unsigned strb_width;        // Strb位宽
+        int unsigned status_width;      // Status位宽
+    } noc_if_config_t;
+
+    typedef struct packed {
+        noc_if_config_t if_config;
         int unsigned num_shader_cores;  // Shader Core数量：1-8
         logic        debug_enable;      // 调试功能使能
     } noc_config_t;
     
     // 默认配置
-    localparam noc_config_t DEFAULT_NOC_CONFIG = '{
-        data_width: `MEMORY_INTERFACE_DATA_WIDTH,
+    localparam noc_if_config_t DEFAULT_NOC_IF_CONFIG = '{
         header_width: `RVGPU_CONST_NOC_HEADER_WIDTH,
+        data_width: `RVGPU_CONST_NOC_DATA_WIDTH,
+        strb_width: `RVGPU_CONST_NOC_DATA_WIDTH / 8,
+        status_width: 2
+    };
+
+    localparam noc_config_t DEFAULT_NOC_CONFIG = '{
+        if_config: DEFAULT_NOC_IF_CONFIG,
         num_shader_cores: `SHADER_CORE_NUMBER,
         debug_enable: 1'b1
     };

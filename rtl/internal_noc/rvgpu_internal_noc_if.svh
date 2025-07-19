@@ -27,34 +27,34 @@ interface rvgpu_internal_noc_if #(
     parameter noc_config_t NOC_CONFIG = DEFAULT_NOC_CONFIG
 );
     // Master通道信号 - 设备作为发起者发送请求
-    logic                                   m_req_valid;
-    logic [NOC_CONFIG.header_width-1:0]     m_req_header;
-    logic [NOC_CONFIG.data_width-1:0]       m_req_data;
-    logic [NOC_CONFIG.data_width/8-1:0]     m_req_strb;
-    logic                                   m_req_last;
-    logic                                   m_req_ready;
+    logic                                           m_req_valid;
+    logic [NOC_CONFIG.if_config.header_width-1:0]   m_req_header;
+    logic [NOC_CONFIG.if_config.data_width-1:0]     m_req_data;
+    logic [NOC_CONFIG.if_config.data_width/8-1:0]   m_req_strb;
+    logic                                           m_req_last;
+    logic                                           m_req_ready;
     
-    logic                                   m_resp_valid;
-    logic [NOC_CONFIG.header_width-1:0]     m_resp_header;
-    logic [NOC_CONFIG.data_width-1:0]       m_resp_data;
-    logic [1:0]                             m_resp_status;
-    logic                                   m_resp_last;
-    logic                                   m_resp_ready;
+    logic                                           m_resp_valid;
+    logic [NOC_CONFIG.if_config.header_width-1:0]   m_resp_header;
+    logic [NOC_CONFIG.if_config.data_width-1:0]     m_resp_data;
+    logic [NOC_CONFIG.if_config.status_width-1:0]   m_resp_status;
+    logic                                           m_resp_last;
+    logic                                           m_resp_ready;
     
     // Slave通道信号 - 设备作为接收者接收请求
-    logic                                   s_req_valid;
-    logic [NOC_CONFIG.header_width-1:0]     s_req_header;
-    logic [NOC_CONFIG.data_width-1:0]       s_req_data;
-    logic [NOC_CONFIG.data_width/8-1:0]     s_req_strb;
-    logic                                   s_req_last;
-    logic                                   s_req_ready;
+    logic                                           s_req_valid;
+    logic [NOC_CONFIG.if_config.header_width-1:0]   s_req_header;
+    logic [NOC_CONFIG.if_config.data_width-1:0]     s_req_data;
+    logic [NOC_CONFIG.if_config.data_width/8-1:0]   s_req_strb;
+    logic                                           s_req_last;
+    logic                                           s_req_ready;
     
-    logic                                   s_resp_valid;
-    logic [NOC_CONFIG.header_width-1:0]     s_resp_header;
-    logic [NOC_CONFIG.data_width-1:0]       s_resp_data;
-    logic [1:0]                             s_resp_status;
-    logic                                   s_resp_last;
-    logic                                   s_resp_ready;
+    logic                                           s_resp_valid;
+    logic [NOC_CONFIG.if_config.header_width-1:0]   s_resp_header;
+    logic [NOC_CONFIG.if_config.data_width-1:0]     s_resp_data;
+    logic [NOC_CONFIG.if_config.status_width-1:0]   s_resp_status;
+    logic                                           s_resp_last;
+    logic                                           s_resp_ready;
     
     // 设备端modport - 设备使用这个接口
     modport device (

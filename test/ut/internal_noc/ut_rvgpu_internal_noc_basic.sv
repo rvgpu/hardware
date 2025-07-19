@@ -17,9 +17,9 @@ module rvgpu_internal_noc_basic_unit_test;
   //===================================
   `CLK_RESET_FIXTURE(5, 10)
 
-  rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) control_unit_if();
-  rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) shader_core_if[DEFAULT_NOC_CONFIG.num_shader_cores]();
-  rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) l2cache_if();
+  rvgpu_internal_noc_if control_unit_if();
+  rvgpu_internal_noc_if shader_core_if[DEFAULT_NOC_CONFIG.num_shader_cores]();
+  rvgpu_internal_noc_if l2cache_if();
 
   typedef struct packed {
     logic [31:0] header;
@@ -30,12 +30,10 @@ module rvgpu_internal_noc_basic_unit_test;
   package_data_t package_data;
 
   // 定义虚拟接口类型，用于在task中将真实的接口作为参数传递
-  typedef virtual rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) vif_t;
+  typedef virtual rvgpu_internal_noc_if vif_t;
 
   // DUT实例
-  rvgpu_internal_noc #(
-    .NOC_CONFIG(DEFAULT_NOC_CONFIG)
-  ) x_rvgpu_internal_noc (
+  rvgpu_internal_noc x_rvgpu_internal_noc (
     .clk(clk),
     .rst_n(rst_n),
     .control_unit(control_unit_if.noc),

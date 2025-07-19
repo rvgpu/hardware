@@ -20,7 +20,7 @@
 `include "rvgpu_internal_noc_pkg.svh"
 
 module rvgpu_shader_core #(
-    parameter noc_config_t NOC_CONFIG = '0
+    parameter noc_config_t NOC_CONFIG = DEFAULT_NOC_CONFIG
 ) (
     input  logic clk,
     input  logic rst_n,

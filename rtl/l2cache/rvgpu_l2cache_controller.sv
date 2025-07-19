@@ -508,6 +508,7 @@ module rvgpu_l2cache_controller #(
                         current_resp_nxt.dest_node = current_req_r.src_node;
                         current_resp_nxt.hit = 1'b0;
                         current_resp_nxt.dirty = 1'b0;
+                        `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("Line Write Done, resp_data=0x%h", current_resp_nxt.data));
                     end
                 end
             end

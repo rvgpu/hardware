@@ -429,59 +429,6 @@ module rvgpu_l2cache_data_array #(
             sram_wdata_r <= sram_wdata_nxt;
         end
     end
-    
-    //=============================================================================
-    // 调试输出 (仅在仿真时)
-    //=============================================================================
-    
-    generate
-    if (L2CACHE_CONFIG.debug_enable) begin : gen_debug
-        always_ff @(posedge clk) begin
-            // 监控读操作
-            if (data_if.read_valid && data_if.read_ready) begin
-                $display("@%0t: [L2CACHE_DATA] Read: index=0x%h, way=%0d, offset=0x%h, size=%0d", 
-                         $time, data_if.read_index, data_if.read_way, data_if.read_offset, data_if.read_size);
-            end
-            
-            if (data_if.read_done) begin
-                $display("@%0t: [L2CACHE_DATA] Read Done: data=0x%h", 
-                         $time, data_if.read_data);
-            end
-            
-            // 监控写操作
-            if (data_if.write_valid && data_if.write_ready) begin
-                $display("@%0t: [L2CACHE_DATA] Write: index=0x%h, way=%0d, offset=0x%h, data=0x%h, strb=0x%h", 
-                         $time, data_if.write_index, data_if.write_way, data_if.write_offset, 
-                         data_if.write_data, data_if.write_strb);
-            end
-            
-            if (data_if.write_done) begin
-                $display("@%0t: [L2CACHE_DATA] Write Done", $time);
-            end
-            
-            // 监控缓存行操作
-            if (data_if.line_read_valid && data_if.line_read_ready) begin
-                $display("@%0t: [L2CACHE_DATA] Line Read: index=0x%h, way=%0d", 
-                         $time, data_if.line_read_index, data_if.line_read_way);
-            end
-            
-            if (data_if.line_write_valid && data_if.line_write_ready) begin
-                $display("@%0t: [L2CACHE_DATA] Line Write: index=0x%h, way=%0d", 
-                         $time, data_if.line_write_index, data_if.line_write_way);
-            end
-            
-            // 监控SRAM访问（只监控第一个way作为示例）
-            if (sram_if_inst[0].ce && sram_if_inst[0].we) begin
-                $display("@%0t: [L2CACHE_DATA] SRAM Write: addr=0x%h, data=0x%h", 
-                         $time, sram_if_inst[0].addr, sram_if_inst[0].wdata);
-            end
-            if (sram_if_inst[0].ce && !sram_if_inst[0].we) begin
-                $display("@%0t: [L2CACHE_DATA] SRAM Read: addr=0x%h, data=0x%h", 
-                         $time, sram_if_inst[0].addr, sram_if_inst[0].rdata);
-            end
-        end
-    end
-    endgenerate
 
 endmodule : rvgpu_l2cache_data_array
 

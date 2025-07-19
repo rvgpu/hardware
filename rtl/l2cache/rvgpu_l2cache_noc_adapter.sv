@@ -237,6 +237,8 @@ module rvgpu_l2cache_noc_adapter #(
                     req_queue_full_nxt = 1'b0;
                     
                     ctrl_state_nxt = CTRL_STATE_IDLE;
+
+                    `DEBUG_PRINT("L2CACHE_NOC", $sformatf("L2 Response to Noc %s", noc_response_mem_read_to_string(noc_if.resp_header, noc_if.resp_data)));
                 end
             end
             
@@ -295,54 +297,21 @@ module rvgpu_l2cache_noc_adapter #(
             resp_queue_empty_r <= resp_queue_empty_nxt;
         end
     end
-    
-    //=============================================================================
-    // 调试输出 (仅在仿真时)
-    //=============================================================================
-    
-    generate
-    if (L2CACHE_CONFIG.debug_enable) begin : gen_debug
-        // 队列状态跟踪寄存器
-        logic prev_queue_empty;
-        
-        always_ff @(posedge clk) begin
-            if (!rst_n) begin
-                prev_queue_empty <= 1'b1;
-            end else begin
-                prev_queue_empty <= req_queue_empty_r;
+
+    // Debug Output
+    generate 
+        if (L2CACHE_CONFIG.debug_enable == 1) begin
+            always_ff @(posedge clk) begin
+
+                if (external_req_accept) begin
+                    $display("@%0t: [L2CACHE_NOC] External Request Accepted: %s", $time, noc_request_mem_read_to_string(noc_external_if.s_req_header, noc_external_if.s_req_data));
+                end
+
+                if (external_resp_accept) begin
+                    $display("@%0t: [L2CACHE_NOC] External Response Accepted: %s", $time, noc_response_mem_read_to_string(noc_external_if.s_resp_header, noc_external_if.s_resp_data));
+                end
             end
         end
-        
-        always_ff @(posedge clk) begin
-            // 监控外部请求
-            if (external_req_accept) begin
-                $display("@%0t: [L2CACHE_NOC] External Request accept: %s", $time, noc_request_mem_read_to_string(noc_external_if.s_req_header, noc_external_if.s_req_data));
-            end
-            
-            // 监控外部响应
-            if (external_resp_accept) begin
-                $display("@%0t: [L2CACHE_NOC] External Response accept: %s", $time, noc_response_mem_read_to_string(noc_external_if.s_resp_header, noc_external_if.s_resp_data));
-            end
-
-            if (noc_req_accept) begin
-                $display("@%0t: [L2CACHE_NOC] Control Request accept: %s", $time, noc_request_mem_read_to_string(noc_if.req_header, noc_if.req_data));
-            end
-
-            if (noc_resp_accept) begin
-                $display("@%0t: [L2CACHE_NOC] Control Response accept: %s", $time, noc_response_mem_read_to_string(noc_if.resp_header, noc_if.resp_data));
-            end
-            
-            // 监控队列状态
-            if (req_queue_full_r) begin
-                $display("@%0t: [L2CACHE_NOC] Warning: Request queue full", $time);
-            end
-            
-            // 只在队列从非空变为空时打印一次
-            if (!prev_queue_empty && req_queue_empty_r && !noc_external_if.s_req_valid) begin
-                $display("@%0t: [L2CACHE_NOC] Info: Request queue became empty", $time);
-            end
-        end
-    end
     endgenerate
 
 endmodule : rvgpu_l2cache_noc_adapter

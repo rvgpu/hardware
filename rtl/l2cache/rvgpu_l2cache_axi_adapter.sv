@@ -413,69 +413,6 @@ module rvgpu_l2cache_axi_adapter #(
             arvalid_r <= arvalid_nxt;
         end
     end
-    
-    //=============================================================================
-    // 调试输出 (仅在仿真时)
-    //=============================================================================
-    
-    generate
-    if (L2CACHE_CONFIG.debug_enable) begin : gen_debug
-        always_ff @(posedge clk) begin
-            // 监控读请求
-            if (axi_if.read_req_valid && axi_if.read_req_ready) begin
-                $display("@%0t: [L2CACHE_AXI] Read Request: addr=0x%h, len=%0d, size=%0d, id=%0d", 
-                         $time, axi_if.read_req_addr, axi_if.read_req_len, axi_if.read_req_size, axi_if.read_req_id);
-            end
-            
-            if (axi_if.read_resp_valid && axi_if.read_resp_ready) begin
-                $display("@%0t: [L2CACHE_AXI] Read Response: data=0x%h, status=%0d, last=%0d, id=%0d", 
-                         $time, axi_if.read_resp_data, axi_if.read_resp_status, axi_if.read_resp_last, axi_if.read_resp_id);
-            end
-            
-            // 监控写请求
-            if (axi_if.write_req_valid && axi_if.write_req_ready) begin
-                $display("@%0t: [L2CACHE_AXI] Write Request: addr=0x%h, len=%0d, size=%0d, id=%0d", 
-                         $time, axi_if.write_req_addr, axi_if.write_req_len, axi_if.write_req_size, axi_if.write_req_id);
-            end
-            
-            if (axi_if.write_data_valid && axi_if.write_data_ready) begin
-                $display("@%0t: [L2CACHE_AXI] Write Data: data=0x%h, strb=0x%h, last=%0d", 
-                         $time, axi_if.write_data, axi_if.write_strb, axi_if.write_last);
-            end
-            
-            if (axi_if.write_resp_valid && axi_if.write_resp_ready) begin
-                $display("@%0t: [L2CACHE_AXI] Write Response: status=%0d, id=%0d", 
-                         $time, axi_if.write_resp_status, axi_if.write_resp_id);
-            end
-            
-            // 监控内存接口
-            if (read_addr_accept) begin
-                $display("@%0t: [L2CACHE_AXI] Memory Read Addr: addr=0x%h, len=%0d, id=%0d", 
-                         $time, mem_if.araddr, mem_if.arlen, mem_if.arid);
-            end
-            
-            if (read_data_accept) begin
-                $display("@%0t: [L2CACHE_AXI] Memory Read Data: data=0x%h, resp=%0d, last=%0d, id=%0d", 
-                         $time, mem_if.rdata, mem_if.rresp, mem_if.rlast, mem_if.rid);
-            end
-            
-            if (write_addr_accept) begin
-                $display("@%0t: [L2CACHE_AXI] Memory Write Addr: addr=0x%h, len=%0d, id=%0d", 
-                         $time, mem_if.awaddr, mem_if.awlen, mem_if.awid);
-            end
-            
-            if (write_data_accept) begin
-                $display("@%0t: [L2CACHE_AXI] Memory Write Data: data=0x%h, strb=0x%h, last=%0d", 
-                         $time, mem_if.wdata, mem_if.wstrb, mem_if.wlast);
-            end
-            
-            if (write_resp_accept) begin
-                $display("@%0t: [L2CACHE_AXI] Memory Write Response: resp=%0d, id=%0d", 
-                         $time, mem_if.bresp, mem_if.bid);
-            end
-        end
-    end
-    endgenerate
 
 endmodule : rvgpu_l2cache_axi_adapter
 

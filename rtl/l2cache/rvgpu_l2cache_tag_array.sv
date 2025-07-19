@@ -182,7 +182,7 @@ module rvgpu_l2cache_tag_array #(
                     update_ready_nxt = 1'b0;
                     lookup_ready_nxt = 1'b0; // 阻止查找请求
                     `DEBUG_PRINT("L2CACHE_TAG", $sformatf("Update: index=0x%h, way=%0d", tag_if.update_index, tag_if.update_way));
-                end else                 if (tag_if.lookup_valid) begin
+                end else if (tag_if.lookup_valid) begin
                     // 开始Tag查找
                     state_nxt = TAG_LOOKUP;
                     lookup_index_nxt = tag_if.lookup_index;

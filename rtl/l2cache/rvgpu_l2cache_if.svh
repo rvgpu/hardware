@@ -23,17 +23,6 @@
 import rvgpu_l2cache_pkg::*;
 `endif // RVGPU_L2CACHE_PKG_IMPORTED
 
-//=============================================================================
-// L2 Cache Internal Interfaces
-// 
-// L2 Cache内部模块间使用的Interface定义
-// 命名规则：controller_tag, controller_data, controller_axi
-//=============================================================================
-
-//=============================================================================
-// Tag Array Interface - Controller ↔ Tag Array
-// 用于控制器与Tag数组之间的查找和更新操作
-//=============================================================================
 interface l2cache_tag_if #(
     parameter l2cache_config_t L2CACHE_CONFIG = DEFAULT_L2CACHE_CONFIG
 );
@@ -76,7 +65,7 @@ interface l2cache_tag_if #(
 endinterface : l2cache_tag_if
 
 //=============================================================================
-// Data Array Interface - Controller ↔ Data Array
+// Data Array Interface - Controller <-> Data Array
 // 用于控制器与数据数组之间的读写操作
 //=============================================================================
 interface l2cache_data_if #(
@@ -151,7 +140,7 @@ interface l2cache_data_if #(
 endinterface : l2cache_data_if
 
 //=============================================================================
-// AXI Adapter Interface - Controller ↔ AXI Adapter
+// AXI Adapter Interface - Controller <-> AXI Adapter
 // 用于控制器与AXI适配器之间的内存访问
 //=============================================================================
 interface l2cache_axi_if #(
@@ -224,7 +213,7 @@ interface l2cache_axi_if #(
 endinterface : l2cache_axi_if
 
 //=============================================================================
-// NOC Adapter Interface - Controller ↔ NOC Adapter
+// NOC Adapter Interface - Controller <-> NOC Adapter
 // 用于控制器与NOC适配器之间的请求处理
 //=============================================================================
 interface l2cache_noc_if #(
@@ -286,47 +275,5 @@ interface l2cache_noc_if #(
         input  out_resp_ready
     );
 endinterface : l2cache_noc_if
-
-//=============================================================================
-// 调试接口 - 用于调试和监控
-//=============================================================================
-interface l2cache_debug_if #(
-    parameter l2cache_config_t L2CACHE_CONFIG = DEFAULT_L2CACHE_CONFIG
-);
-    // 性能计数器
-    l2cache_perf_counters_t             perf_counters;
-    
-    // 状态信息
-    l2cache_state_t                     current_state;
-    logic [63:0]                        current_addr;
-    logic [7:0]                         current_trans_id;
-    logic                               cache_busy;
-    
-    // 调试控制
-    logic                               debug_enable;
-    logic                               force_invalidate;
-    logic                               force_flush;
-    logic [63:0]                        debug_addr;
-    logic [7:0]                         debug_way;
-    
-    // 调试响应
-    logic                               debug_valid;
-    logic [255:0]                       debug_data;
-    logic [31:0]                        debug_status;
-    
-    // Controller modport (提供调试信息)
-    modport controller (
-        output perf_counters, current_state, current_addr, current_trans_id, cache_busy,
-        input  debug_enable, force_invalidate, force_flush, debug_addr, debug_way,
-        output debug_valid, debug_data, debug_status
-    );
-    
-    // Debug Interface modport (接收调试信息)
-    modport debug_interface (
-        input  perf_counters, current_state, current_addr, current_trans_id, cache_busy,
-        output debug_enable, force_invalidate, force_flush, debug_addr, debug_way,
-        input  debug_valid, debug_data, debug_status
-    );
-endinterface : l2cache_debug_if
 
 `endif // RVGPU_L2CACHE_IF_SVH 

@@ -60,10 +60,7 @@ module rvgpu_l2cache_controller #(
     l2cache_data_if.controller data_if,
     
     // AXI Interface
-    l2cache_axi_if.controller axi_if,
-    
-    // Debug Interface
-    l2cache_debug_if.controller debug_if
+    l2cache_axi_if.controller axi_if
 );
 
     //=============================================================================
@@ -213,8 +210,6 @@ module rvgpu_l2cache_controller #(
         req_queue_full_nxt = req_queue_full_r;
         req_queue_empty_nxt = req_queue_empty_r;
         perf_counters_nxt = perf_counters_r;
-        debug_addr_nxt = debug_addr_r;
-        debug_trans_id_nxt = debug_trans_id_r;
         cache_busy_nxt = cache_busy_r;
         write_valid_nxt = write_valid_r;
         read_valid_nxt = read_valid_r;
@@ -281,9 +276,6 @@ module rvgpu_l2cache_controller #(
                     current_index_nxt = extract_index(current_req_r.addr, L2CACHE_CONFIG);
                     current_offset_nxt = extract_offset(current_req_r.addr, L2CACHE_CONFIG);
                     
-                    // 更新调试信息
-                    debug_addr_nxt = current_req_r.addr;
-                    debug_trans_id_nxt = current_req_r.trans_id;
                 end else if (noc_if.req_valid) begin
                     // 直接处理新请求
                     current_req_nxt = parse_noc_request(noc_if.req_header, noc_if.req_data);
@@ -294,11 +286,7 @@ module rvgpu_l2cache_controller #(
                     current_tag_nxt = extract_tag(current_req_nxt.addr, L2CACHE_CONFIG);
                     current_index_nxt = extract_index(current_req_nxt.addr, L2CACHE_CONFIG);
                     current_offset_nxt = extract_offset(current_req_nxt.addr, L2CACHE_CONFIG);
-                    
-                    // 更新调试信息
-                    debug_addr_nxt = current_req_nxt.addr;
-                    debug_trans_id_nxt = current_req_nxt.trans_id;
-                    
+                                        
                     noc_if.req_ready = 1'b1;
                 end
             end
@@ -674,8 +662,7 @@ module rvgpu_l2cache_controller #(
             req_queue_full_r <= 1'b0;
             req_queue_empty_r <= 1'b1;
             perf_counters_r <= '0;
-            debug_addr_r <= '0;
-            debug_trans_id_r <= '0;
+
             cache_busy_r <= 1'b0;
             write_valid_r <= 1'b0;
             read_valid_r <= 1'b0;
@@ -697,8 +684,7 @@ module rvgpu_l2cache_controller #(
             req_queue_full_r <= req_queue_full_nxt;
             req_queue_empty_r <= req_queue_empty_nxt;
             perf_counters_r <= perf_counters_nxt;
-            debug_addr_r <= debug_addr_nxt;
-            debug_trans_id_r <= debug_trans_id_nxt;
+
             cache_busy_r <= cache_busy_nxt;
             write_valid_r <= write_valid_nxt;
             read_valid_r <= read_valid_nxt;
@@ -706,16 +692,6 @@ module rvgpu_l2cache_controller #(
             line_write_valid_r <= line_write_valid_nxt;
         end
     end
-    
-    //=============================================================================
-    // 调试接口输出
-    //=============================================================================
-    
-    assign debug_if.perf_counters = perf_counters_r;
-    assign debug_if.current_state = l2cache_state_t'(state_r[3:0]);
-    assign debug_if.current_addr = debug_addr_r;
-    assign debug_if.current_trans_id = debug_trans_id_r;
-    assign debug_if.cache_busy = cache_busy_r;
 
     //=============================================================================
     // 调试输出 (仅在仿真时)

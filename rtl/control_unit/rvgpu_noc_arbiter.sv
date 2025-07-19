@@ -196,23 +196,13 @@ module rvgpu_noc_arbiter (
         case (route_state)
             RESP_ROUTE_IDLE: begin
                 if (noc_if.m_resp_valid) begin
-                    // 基于local_addr高4位判断响应目标，直接使用位选择
-                    case (noc_if.m_resp_header[7:4])
-                        LOCAL_ADDR_CP_RANGE: begin
-                            // 0x0x范围 → Command Processor
-                            route_state_next = RESP_ROUTE_CP;
-                        end
-                        
-                        LOCAL_ADDR_MMU_RANGE: begin
-                            // 0x1x范围 → MMU
-                            route_state_next = RESP_ROUTE_MMU;
-                        end
-                        
-                        default: begin
-                            // 未知地址范围，保持IDLE状态，在输出逻辑中丢弃响应
-                            route_state_next = RESP_ROUTE_IDLE;
-                        end
-                    endcase
+                    if (get_noc_header_local_addr(noc_if.m_resp_header) == NOC_NODE_CONTROL_MMU) begin
+                        route_state_next = RESP_ROUTE_MMU;
+                    end else if (get_noc_header_local_addr(noc_if.m_resp_header) == NOC_NODE_CONTROL_JD) begin
+                        route_state_next = RESP_ROUTE_CP;
+                    end else begin
+                        route_state_next = RESP_ROUTE_IDLE;
+                    end
                 end
             end
             
@@ -257,16 +247,10 @@ module rvgpu_noc_arbiter (
             RESP_ROUTE_IDLE: begin
                 // 检查是否为未知地址范围，如果是则丢弃响应
                 if (noc_if.m_resp_valid) begin
-                    // Extract local_addr directly from header bits [7:0]
-                    case (noc_if.m_resp_header[7:4])
-                        LOCAL_ADDR_CP_RANGE, LOCAL_ADDR_MMU_RANGE: begin
-                            // 已知地址范围，不在这里处理
-                        end
-                        default: begin
-                            // 未知地址范围，丢弃响应
-                            noc_if.m_resp_ready = 1'b1;
-                        end
-                    endcase
+                    if (get_noc_header_local_addr(noc_if.m_resp_header) != NOC_NODE_CONTROL_MMU && 
+                        get_noc_header_local_addr(noc_if.m_resp_header) != NOC_NODE_CONTROL_JD) begin
+                        noc_if.m_resp_ready = 1'b1;  // 丢弃未知地址的响应
+                    end
                 end
             end
             

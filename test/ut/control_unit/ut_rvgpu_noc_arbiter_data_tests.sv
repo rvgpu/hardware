@@ -19,9 +19,9 @@ module rvgpu_noc_arbiter_data_tests_unit_test;
   `CLK_RESET_FIXTURE(5, 10)        
 
   // Interface instances
-  rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) cp_if();
-  rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) mmu_if();
-  rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) noc_if();
+  rvgpu_internal_noc_if cp_if();
+  rvgpu_internal_noc_if mmu_if();
+  rvgpu_internal_noc_if noc_if();
 
   // DUT Instance
   rvgpu_noc_arbiter dut (
@@ -78,7 +78,7 @@ module rvgpu_noc_arbiter_data_tests_unit_test;
   // Send CP request and verify data transmission (works for both pre-ready and controlled scenarios)
   task send_cp_request_and_verify_transmission(logic [255:0] expected_data, logic [31:0] expected_strb);
     logic [31:0] expected_header;
-    expected_header = test_base.create_cp_mem_read_header(8'h10, 8'h00);
+    expected_header = test_base.create_cp_mem_read_header(8'h10, NOC_NODE_CONTROL_JD);
     
     // Clear previous capture
     test_base.data_transmission_detected = 1'b0;
@@ -213,7 +213,7 @@ module rvgpu_noc_arbiter_data_tests_unit_test;
       // Test 1: Send CP request first
       $display("Testing CP request with AAAA pattern");
       cp_if.m_req_valid = 1'b1;
-      cp_if.m_req_header = test_base.create_cp_mem_read_header(8'h10, 8'h00);
+      cp_if.m_req_header = test_base.create_cp_mem_read_header(8'h10, NOC_NODE_CONTROL_JD);
       cp_if.m_req_data = test_base.test_patterns[2];    // AAAA pattern
       cp_if.m_req_strb = test_base.strobe_patterns[1];  // F0F0 strobe
       cp_if.m_req_last = 1'b1;
@@ -238,7 +238,7 @@ module rvgpu_noc_arbiter_data_tests_unit_test;
       
       $display("Testing MMU request with 5555 pattern");
       mmu_if.m_req_valid = 1'b1;
-      mmu_if.m_req_header = test_base.create_mmu_mem_write_header(8'h20, 8'h10);
+      mmu_if.m_req_header = test_base.create_mmu_mem_write_header(8'h20, NOC_NODE_CONTROL_MMU);
       mmu_if.m_req_data = test_base.test_patterns[3];   // 5555 pattern
       mmu_if.m_req_strb = test_base.strobe_patterns[2]; // Lower half strobe
       mmu_if.m_req_last = 1'b1;
@@ -277,7 +277,7 @@ module rvgpu_noc_arbiter_data_tests_unit_test;
         // Send response from NOC with specific pattern (CP not ready initially)
         cp_if.m_resp_ready = 1'b0;
         noc_if.m_resp_valid = 1'b1;
-        noc_if.m_resp_header = test_base.create_mem_read_resp_header(8'h50, 8'h05);
+        noc_if.m_resp_header = test_base.create_mem_read_resp_header(8'h50, NOC_NODE_CONTROL_JD);
         noc_if.m_resp_data = test_base.test_patterns[i];
         noc_if.m_resp_status = RESP_OKAY;
         noc_if.m_resp_last = 1'b1;

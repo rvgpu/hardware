@@ -19,9 +19,9 @@ module rvgpu_noc_arbiter_baisc_unit_test;
   `CLK_RESET_FIXTURE(5, 10)        
 
   // Interface instances
-  rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) cp_if();  // Command Processor
-  rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) mmu_if();  // MMU
-  rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) noc_if(); // NOC output
+  rvgpu_internal_noc_if cp_if();  // Command Processor
+  rvgpu_internal_noc_if mmu_if();  // MMU
+  rvgpu_internal_noc_if noc_if(); // NOC output
 
   // DUT Instance
   rvgpu_noc_arbiter dut (
@@ -166,7 +166,7 @@ module rvgpu_noc_arbiter_baisc_unit_test;
       test_base.initialize_signals();
       step(5);
       
-      test_packet = test_base.create_cp_mem_read_packet(8'h10, 8'h00, 
+      test_packet = test_base.create_cp_mem_read_packet(8'h10, NOC_NODE_CONTROL_JD, 
                       256'hDEADBEEF_CAFEBABE_12345678_9ABCDEF0_FEDCBA98_76543210_ABCDEF01_23456789, 
                       32'hFFFFFFFF);
       
@@ -205,7 +205,7 @@ module rvgpu_noc_arbiter_baisc_unit_test;
       
       // Test MMU with same controlled timing
       $display("@%0t: Step 4 - Test MMU request", $time);
-      test_packet = test_base.create_mmu_mem_write_packet(8'h20, 8'h10, test_packet.data, test_packet.strb);
+      test_packet = test_base.create_mmu_mem_write_packet(8'h20, NOC_NODE_CONTROL_MMU, test_packet.data, test_packet.strb);
       test_base.send_request(mmu_if, test_packet);
       step(1);
       nextSamplePoint();
@@ -241,7 +241,7 @@ module rvgpu_noc_arbiter_baisc_unit_test;
       test_packet_cp.data = 256'hA5A5A5A5_5A5A5A5A_F0F0F0F0_0F0F0F0F_CCCCCCCC_33333333_AAAAAAAA_55555555;
       test_packet_cp.strb = 32'hFFFFFFFF;
       
-      test_packet_mmu = test_base.create_mmu_mem_read_packet(8'h40, 8'h10,
+      test_packet_mmu = test_base.create_mmu_mem_read_packet(8'h40, NOC_NODE_CONTROL_MMU,
                           256'h12345678_9ABCDEF0_FEDCBA98_76543210_ABCDEF01_23456789_DEADBEEF_CAFEBABE,
                           32'hFFFFFFFF);
       
@@ -367,7 +367,7 @@ module rvgpu_noc_arbiter_baisc_unit_test;
       step(5);
             
       // Test response routing to Command Processor - local_addr 0x0x
-      resp_packet = test_base.create_mem_read_response_packet(8'h50, 8'h05, 
+      resp_packet = test_base.create_mem_read_response_packet(8'h50, NOC_NODE_CONTROL_JD, 
                      256'h87654321_FEDCBA98_76543210_ABCDEF01_23456789_DEADBEEF_CAFEBABE_12345678);
       
       cp_if.m_resp_ready = 1'b0;  // Start with CP not ready
@@ -390,12 +390,12 @@ module rvgpu_noc_arbiter_baisc_unit_test;
       test_base.clear_response();
       cp_if.m_resp_ready = 1'b0;
       
-      // Test response routing to MMU - local_addr 0x1x
-      resp_packet.header = test_base.create_mem_write_resp_header(8'h60, 8'h15);
+      // Test response routing to MMU - local_addr NOC_NODE_CONTROL_MMU
+      resp_packet.header = test_base.create_mem_write_resp_header(8'h60, NOC_NODE_CONTROL_MMU);
       mmu_if.m_resp_ready = 1'b0;  // Start with MMU not ready
       cp_if.m_resp_ready = 1'b0;
       
-      test_base.send_response(8'h15, resp_packet);
+      test_base.send_response(NOC_NODE_CONTROL_MMU, resp_packet);
       step(1);
       nextSamplePoint();
       
@@ -559,12 +559,12 @@ module rvgpu_noc_arbiter_baisc_unit_test;
       $display("============== 7. Testing Unknown Address Range Response Handling ==============");
       test_base.initialize_signals();
       step(5);      
-      // Test response with unknown local_addr (0x2x range)
-      unknown_resp_packet.header = test_base.create_unknown_response_header(8'h90, 8'h25);
+      // Test response with unknown local_addr (0x02 - not in defined range)
+      unknown_resp_packet.header = test_base.create_unknown_response_header(8'h90, 8'h02);
       unknown_resp_packet.data = 256'hFFFFFFFF_FFFFFFFF_FFFFFFFF_FFFFFFFF_FFFFFFFF_FFFFFFFF_FFFFFFFF_FFFFFFFF;
       unknown_resp_packet.strb = 32'hFFFFFFFF;
       
-      test_base.send_response(8'h25, unknown_resp_packet);
+      test_base.send_response(8'h02, unknown_resp_packet);
       step(1);
       nextSamplePoint();
       

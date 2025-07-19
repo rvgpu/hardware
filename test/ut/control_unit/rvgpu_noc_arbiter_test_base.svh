@@ -17,7 +17,7 @@ typedef struct packed {
 } noc_packet_t;
 
 // Virtual interface type for task parameters
-typedef virtual rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) noc_vif_t;
+typedef virtual rvgpu_internal_noc_if noc_vif_t;
 
 // Base class for RVGPU NOC Arbiter testing
 class rvgpu_noc_arbiter_test_base;
@@ -267,7 +267,7 @@ class rvgpu_noc_arbiter_test_base;
   // Send CP request with specific data pattern (simplified version)
   task send_cp_data_request(logic [255:0] data_pattern, logic [31:0] strb_pattern);
     cp_if.m_req_valid = 1'b1;
-    cp_if.m_req_header = create_cp_mem_read_header(8'h10, 8'h00);
+    cp_if.m_req_header = create_cp_mem_read_header(8'h10, NOC_NODE_CONTROL_JD);
     cp_if.m_req_data = data_pattern;
     cp_if.m_req_strb = strb_pattern;
     cp_if.m_req_last = 1'b1;

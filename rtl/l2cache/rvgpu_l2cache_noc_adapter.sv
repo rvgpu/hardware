@@ -101,6 +101,7 @@ module rvgpu_l2cache_noc_adapter #(
     logic [REQ_QUEUE_BITS-1:0] resp_queue_tail_r, resp_queue_tail_nxt;
     logic resp_queue_full_r, resp_queue_full_nxt;
     logic resp_queue_empty_r, resp_queue_empty_nxt;
+    logic resp_queue_empty_next;
     
     // 消息解析寄存器
     noc_header_t parsed_header;
@@ -139,7 +140,8 @@ module rvgpu_l2cache_noc_adapter #(
         // 外部NOC接口输出默认值
         // 队列未满时接受新请求，队列满时拉低ready信号
         noc_external_if.s_req_ready = !req_queue_full_r;
-        noc_external_if.s_resp_valid = 1'b0;
+        resp_queue_empty_next = (resp_queue_head_r + 1 == resp_queue_tail_r) && external_resp_accept;
+        noc_external_if.s_resp_valid = !resp_queue_empty_r && !resp_queue_empty_next;
         noc_external_if.s_resp_header = (!resp_queue_empty_r) ? resp_queue[resp_queue_head_r].header : '0;
         noc_external_if.s_resp_data = (!resp_queue_empty_r) ? resp_queue[resp_queue_head_r].data : '0;
         noc_external_if.s_resp_status = (!resp_queue_empty_r) ? resp_queue[resp_queue_head_r].status : '0;
@@ -177,7 +179,12 @@ module rvgpu_l2cache_noc_adapter #(
                     resp_queue_empty_nxt = 1'b1;
                 end
                 resp_queue_full_nxt = 1'b0;
+                
+                `DEBUG_PRINT("L2CACHE_NOC", $sformatf("Response accepted, queue head: %0d -> %0d, empty: %0d", resp_queue_head_r, resp_queue_head_nxt, resp_queue_empty_nxt));
             end
+        end else begin
+            // 队列为空时，确保valid信号为低
+            noc_external_if.s_resp_valid = 1'b0;
         end
         
         // 控制器状态机
@@ -239,6 +246,7 @@ module rvgpu_l2cache_noc_adapter #(
                     ctrl_state_nxt = CTRL_STATE_IDLE;
 
                     `DEBUG_PRINT("L2CACHE_NOC", $sformatf("L2 Response to Noc %s", noc_response_mem_read_to_string(noc_if.resp_header, noc_if.resp_data)));
+                    `DEBUG_PRINT("L2CACHE_NOC", $sformatf("Response queue tail: %0d -> %0d, empty: %0d", resp_queue_tail_r, resp_queue_tail_nxt, resp_queue_empty_nxt));
                 end
             end
             

@@ -27,29 +27,30 @@ interface l2cache_tag_if #(
     parameter l2cache_config_t L2CACHE_CONFIG = DEFAULT_L2CACHE_CONFIG
 );
     // 查找请求通道
-    logic                               lookup_valid;
-    logic [L2CACHE_CONFIG.index_bits-1:0] lookup_index;
-    logic                               lookup_ready;
+    logic                                   lookup_valid;
+    logic [L2CACHE_CONFIG.index_bits-1:0]   lookup_index;
+    logic [L2CACHE_CONFIG.tag_bits-1:0]     lookup_tag;
+    logic                                   lookup_ready;
     
     // 查找响应通道
-    logic                               lookup_hit;
-    logic [L2CACHE_CONFIG.ways-1:0]    hit_way;
-    l2cache_tag_entry_t                 tag_entry;
-    logic                               lookup_done;
+    logic                                   lookup_hit;
+    logic [L2CACHE_CONFIG.ways-1:0]         hit_way;
+    l2cache_tag_entry_t                     tag_entry;
+    logic                                   lookup_done;
     
     // 更新请求通道
-    logic                               update_valid;
-    logic [L2CACHE_CONFIG.index_bits-1:0] update_index;
-    logic [L2CACHE_CONFIG.ways-1:0]    update_way;
-    l2cache_tag_entry_t                 update_entry;
-    logic                               update_ready;
+    logic                                   update_valid;
+    logic [L2CACHE_CONFIG.index_bits-1:0]   update_index;
+    logic [L2CACHE_CONFIG.ways-1:0]         update_way;
+    l2cache_tag_entry_t                     update_entry;
+    logic                                   update_ready;
     
     // 更新响应通道
-    logic                               update_done;
+    logic                                   update_done;
     
     // Controller modport (发起Tag操作)
     modport controller (
-        output lookup_valid, lookup_index,
+        output lookup_valid, lookup_index, lookup_tag,
         input  lookup_ready, lookup_hit, hit_way, tag_entry, lookup_done,
         output update_valid, update_index, update_way, update_entry,
         input  update_ready, update_done
@@ -57,7 +58,7 @@ interface l2cache_tag_if #(
     
     // Tag Array modport (执行Tag操作)
     modport tag_array (
-        input  lookup_valid, lookup_index,
+        input  lookup_valid, lookup_index, lookup_tag,
         output lookup_ready, lookup_hit, hit_way, tag_entry, lookup_done,
         input  update_valid, update_index, update_way, update_entry,
         output update_ready, update_done

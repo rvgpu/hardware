@@ -48,7 +48,7 @@ module rvgpu_l2cache_tag_array #(
 );
 
     //=============================================================================
-    // Local Parameters and Types
+    // 1. 本地参数定义
     //=============================================================================
     
     // 从配置中提取的本地参数
@@ -62,18 +62,24 @@ module rvgpu_l2cache_tag_array #(
     localparam int TAG_ADDR_WIDTH = INDEX_BITS;
     localparam int TAG_DEPTH = L2CACHE_CONFIG.sets;
     
-    // 状态机参数
-    localparam int STATE_BITS = 2;
-    localparam int STATE_IDLE = 2'b00;
-    localparam int STATE_LOOKUP = 2'b01;
-    localparam int STATE_UPDATE = 2'b10;
+    //=============================================================================
+    // 2. 状态机定义 - 明确定义所有状态
+    //=============================================================================
+    
+    typedef enum logic [2:0] {
+        TAG_IDLE = 3'b000,           // 空闲状态
+        TAG_LOOKUP = 3'b001,         // 发起Tag查找
+        TAG_LOOKUP_WAIT = 3'b010,    // 等待Tag查找完成
+        TAG_UPDATE = 3'b011,         // 发起Tag更新
+        TAG_UPDATE_WAIT = 3'b100     // 等待Tag更新完成
+    } tag_state_t;
     
     //=============================================================================
-    // Internal Registers and Signals
+    // 3. 内部信号定义 - 使用清晰的前缀命名规范
     //=============================================================================
     
     // 状态机寄存器
-    logic [STATE_BITS-1:0] state_r, state_nxt;
+    tag_state_t state_r, state_nxt;
     
     // 查找请求寄存器
     logic [TAG_ADDR_WIDTH-1:0] lookup_index_r, lookup_index_nxt;
@@ -91,19 +97,20 @@ module rvgpu_l2cache_tag_array #(
     logic lookup_done_r, lookup_done_nxt;
     logic update_done_r, update_done_nxt;
     
-    // SRAM接口信号
-    logic sram_ce_r, sram_ce_nxt;
-    logic sram_we_r, sram_we_nxt;
-    logic [TAG_ADDR_WIDTH-1:0] sram_addr_r, sram_addr_nxt;
-    logic [TAG_DATA_WIDTH-1:0] sram_wdata_r, sram_wdata_nxt;
-    logic [TAG_DATA_WIDTH-1:0] sram_rdata;
+    // 接口就绪状态寄存器
+    logic lookup_ready_r, lookup_ready_nxt;
+    logic update_ready_r, update_ready_nxt;
     
     // Tag比较信号
     logic [WAYS-1:0] way_hit;
     logic any_hit;
     
+    // 错误检测信号
+    logic multiple_hit_error;
+    logic invalid_way_error;
+    
     //=============================================================================
-    // SRAM实例化
+    // 4. SRAM实例化
     //=============================================================================
     
     // 创建SRAM接口实例
@@ -125,11 +132,24 @@ module rvgpu_l2cache_tag_array #(
     );
     
     //=============================================================================
-    // 组合逻辑 - 状态机和输出控制
+    // 5. SRAM接口控制逻辑
     //=============================================================================
     
-    always_comb begin : comb_logic
-        // 默认值
+    always_comb begin
+        // SRAM控制信号
+        sram_if_inst.ce = (state_r == TAG_LOOKUP) || (state_r == TAG_UPDATE);
+        sram_if_inst.we = (state_r == TAG_UPDATE);
+        sram_if_inst.addr = (state_r == TAG_LOOKUP) ? lookup_index_r : 
+                           (state_r == TAG_UPDATE) ? update_index_r : '0;
+        sram_if_inst.wdata = (state_r == TAG_UPDATE) ? tag_entry_to_raw(update_entry_r) : '0;
+    end
+    
+    //=============================================================================
+    // 6. 状态机组合逻辑
+    //=============================================================================
+    
+    always_comb begin
+        // 默认值 - 避免锁存器
         state_nxt = state_r;
         lookup_index_nxt = lookup_index_r;
         lookup_tag_nxt = lookup_tag_r;
@@ -141,69 +161,59 @@ module rvgpu_l2cache_tag_array #(
         tag_entry_nxt = tag_entry_r;
         lookup_done_nxt = lookup_done_r;
         update_done_nxt = update_done_r;
-        sram_ce_nxt = sram_ce_r;
-        sram_we_nxt = sram_we_r;
-        sram_addr_nxt = sram_addr_r;
-        sram_wdata_nxt = sram_wdata_r;
-        
-        // SRAM接口控制
-        sram_if_inst.ce = sram_ce_r;
-        sram_if_inst.we = sram_we_r;
-        sram_if_inst.addr = sram_addr_r;
-        sram_if_inst.wdata = sram_wdata_r;
-        sram_rdata = sram_if_inst.rdata;
-        
-        // 接口输出默认值
-        tag_if.lookup_ready = (state_r == STATE_IDLE);
-        tag_if.update_ready = (state_r == STATE_IDLE);
-        tag_if.lookup_hit = lookup_hit_r;
-        tag_if.hit_way = hit_way_r;
-        tag_if.tag_entry = tag_entry_r;
-        tag_if.lookup_done = lookup_done_r;
-        tag_if.update_done = update_done_r;
+        lookup_ready_nxt = lookup_ready_r;
+        update_ready_nxt = update_ready_r;
         
         case (state_r)
-            STATE_IDLE: begin
+            TAG_IDLE: begin
                 // 空闲状态：等待新请求
                 lookup_done_nxt = 1'b0;
                 update_done_nxt = 1'b0;
+                lookup_ready_nxt = 1'b1;
+                update_ready_nxt = 1'b1;
                 
-                if (tag_if.lookup_valid) begin
-                    // 开始Tag查找
-                    state_nxt = STATE_LOOKUP;
-                    lookup_index_nxt = tag_if.lookup_index;
-                    lookup_tag_nxt = extract_tag_from_addr(tag_if.lookup_index, L2CACHE_CONFIG);
-                    sram_ce_nxt = 1'b1;
-                    sram_we_nxt = 1'b0;
-                    sram_addr_nxt = tag_if.lookup_index;
-                    `DEBUG_PRINT("L2CACHE_TAG", $sformatf("Lookup: index=0x%h, tag=0x%h", tag_if.lookup_index, lookup_tag_nxt));
-                end else if (tag_if.update_valid) begin
+                // 优先级：更新请求优先于查找请求
+                if (tag_if.update_valid) begin
                     // 开始Tag更新
-                    state_nxt = STATE_UPDATE;
+                    state_nxt = TAG_UPDATE;
                     update_index_nxt = tag_if.update_index;
                     update_way_nxt = tag_if.update_way;
                     update_entry_nxt = tag_if.update_entry;
-                    sram_ce_nxt = 1'b1;
-                    sram_we_nxt = 1'b1;
-                    sram_addr_nxt = tag_if.update_index;
-                    sram_wdata_nxt = tag_entry_to_raw(tag_if.update_entry);
+                    update_ready_nxt = 1'b0;
+                    lookup_ready_nxt = 1'b0; // 阻止查找请求
+                    `DEBUG_PRINT("L2CACHE_TAG", $sformatf("Update: index=0x%h, way=%0d", tag_if.update_index, tag_if.update_way));
+                end else                 if (tag_if.lookup_valid) begin
+                    // 开始Tag查找
+                    state_nxt = TAG_LOOKUP;
+                    lookup_index_nxt = tag_if.lookup_index;
+                    lookup_tag_nxt = tag_if.lookup_tag;
+                    lookup_ready_nxt = 1'b0;
+                    `DEBUG_PRINT("L2CACHE_TAG", $sformatf("Lookup: index=0x%h, tag=0x%h", tag_if.lookup_index, tag_if.lookup_tag));
                 end
             end
             
-            STATE_LOOKUP: begin
-                // Tag查找状态
-                sram_ce_nxt = 1'b0; // 停止SRAM访问
-                
+            TAG_LOOKUP: begin
+                // Tag查找状态 - 发起SRAM读取
+                state_nxt = TAG_LOOKUP_WAIT;
+            end
+            
+            TAG_LOOKUP_WAIT: begin
+                // Tag查找等待状态 - 等待SRAM读取完成
                 // 解析Tag条目
-                tag_entry_nxt = raw_to_tag_entry(sram_rdata);
+                tag_entry_nxt = raw_to_tag_entry(sram_if_inst.rdata);
                 
-                // 并行比较所有way（固定8路）
-                for (int i = 0; i < 8; i++) begin
+                // 并行比较所有way
+                for (int i = 0; i < WAYS; i++) begin
                     way_hit[i] = tag_entry_nxt.valid[i] && 
                                  (tag_entry_nxt.tag[i] == lookup_tag_r);
                 end
                 
                 any_hit = |way_hit;
+                
+                // 错误检测
+                multiple_hit_error = $countones(way_hit) > 1;
+                invalid_way_error = (tag_if.update_valid && tag_if.update_ready) ? 
+                                  (tag_if.update_way >= WAYS) : 1'b0;
                 
                 // 更新查找结果
                 lookup_hit_nxt = any_hit;
@@ -211,24 +221,27 @@ module rvgpu_l2cache_tag_array #(
                 lookup_done_nxt = 1'b1;
                 
                 // 返回空闲状态
-                state_nxt = STATE_IDLE;
-                `DEBUG_PRINT("L2CACHE_TAG", $sformatf("Lookup done: hit=%0d, way=%0d", lookup_hit_nxt, hit_way_nxt));
+                state_nxt = TAG_IDLE;
+                `DEBUG_PRINT("L2CACHE_TAG", $sformatf("Lookup done: hit=%0d, way=%0d, sram_if_inst.rdata=0x%h", lookup_hit_nxt, hit_way_nxt, sram_if_inst.rdata));
             end
             
-            STATE_UPDATE: begin
-                // Tag更新状态
-                sram_ce_nxt = 1'b0; // 停止SRAM访问
-                
-                // 更新完成
+            TAG_UPDATE: begin
+                // Tag更新状态 - 发起SRAM写入
+                state_nxt = TAG_UPDATE_WAIT;
+            end
+            
+            TAG_UPDATE_WAIT: begin
+                // Tag更新等待状态 - 等待SRAM写入完成
                 update_done_nxt = 1'b1;
                 
                 // 返回空闲状态
-                state_nxt = STATE_IDLE;
+                state_nxt = TAG_IDLE;
+                `DEBUG_PRINT("L2CACHE_TAG", "Update done");
             end
             
             default: begin
                 // 错误状态
-                state_nxt = STATE_IDLE;
+                state_nxt = TAG_IDLE;
                 lookup_hit_nxt = 1'bx;
                 hit_way_nxt = 'x;
                 tag_entry_nxt = 'x;
@@ -237,17 +250,61 @@ module rvgpu_l2cache_tag_array #(
     end
     
     //=============================================================================
-    // 辅助函数
+    // 7. 输出信号赋值
     //=============================================================================
     
-    // 从地址中提取Tag
-    function automatic logic [TAG_BITS-1:0] extract_tag_from_addr(
-        input logic [INDEX_BITS-1:0] index,
-        input l2cache_config_t config
-    );
-        // 这里简化处理，实际应该从完整地址中提取
-        return index; // 临时实现
-    endfunction
+    // Tag查找接口
+    assign tag_if.lookup_ready = lookup_ready_r;
+    assign tag_if.lookup_hit = lookup_hit_r;
+    assign tag_if.hit_way = hit_way_r;
+    assign tag_if.tag_entry = tag_entry_r;
+    assign tag_if.lookup_done = lookup_done_r;
+    
+    // Tag更新接口
+    assign tag_if.update_ready = update_ready_r;
+    assign tag_if.update_done = update_done_r;
+    
+    //=============================================================================
+    // 8. 时序逻辑 - 寄存器更新
+    //=============================================================================
+    
+    always_ff @(posedge clk) begin
+        if (!rst_n) begin
+            // 复位逻辑
+            state_r <= TAG_IDLE;
+            lookup_index_r <= '0;
+            lookup_tag_r <= '0;
+            update_index_r <= '0;
+            update_way_r <= '0;
+            update_entry_r <= '0;
+            lookup_hit_r <= 1'b0;
+            hit_way_r <= '0;
+            tag_entry_r <= '0;
+            lookup_done_r <= 1'b0;
+            update_done_r <= 1'b0;
+            lookup_ready_r <= 1'b1;
+            update_ready_r <= 1'b1;
+        end else begin
+            // 状态更新
+            state_r <= state_nxt;
+            lookup_index_r <= lookup_index_nxt;
+            lookup_tag_r <= lookup_tag_nxt;
+            update_index_r <= update_index_nxt;
+            update_way_r <= update_way_nxt;
+            update_entry_r <= update_entry_nxt;
+            lookup_hit_r <= lookup_hit_nxt;
+            hit_way_r <= hit_way_nxt;
+            tag_entry_r <= tag_entry_nxt;
+            lookup_done_r <= lookup_done_nxt;
+            update_done_r <= update_done_nxt;
+            lookup_ready_r <= lookup_ready_nxt;
+            update_ready_r <= update_ready_nxt;
+        end
+    end
+    
+    //=============================================================================
+    // 9. 辅助函数
+    //=============================================================================
     
     // Tag条目转换为原始数据
     function automatic logic [TAG_DATA_WIDTH-1:0] tag_entry_to_raw(
@@ -256,23 +313,23 @@ module rvgpu_l2cache_tag_array #(
         logic [TAG_DATA_WIDTH-1:0] raw;
         logic [31:0] offset = 0;
         
-        // 序列化Tag条目（固定8路）
-        for (int i = 0; i < 8; i++) begin
+        // 序列化Tag条目
+        for (int i = 0; i < WAYS; i++) begin
             raw[offset +: 32] = entry.tag[i];
             offset += 32;
         end
         
-        for (int i = 0; i < 8; i++) begin
+        for (int i = 0; i < WAYS; i++) begin
             raw[offset +: 1] = entry.valid[i];
             offset += 1;
         end
         
-        for (int i = 0; i < 8; i++) begin
+        for (int i = 0; i < WAYS; i++) begin
             raw[offset +: 1] = entry.dirty[i];
             offset += 1;
         end
         
-        for (int i = 0; i < 8; i++) begin
+        for (int i = 0; i < WAYS; i++) begin
             raw[offset +: 2] = entry.mesi_state[i];
             offset += 2;
         end
@@ -289,23 +346,23 @@ module rvgpu_l2cache_tag_array #(
         l2cache_tag_entry_t entry;
         logic [31:0] offset = 0;
         
-        // 反序列化Tag条目（固定8路）
-        for (int i = 0; i < 8; i++) begin
+        // 反序列化Tag条目
+        for (int i = 0; i < WAYS; i++) begin
             entry.tag[i] = raw[offset +: 32];
             offset += 32;
         end
         
-        for (int i = 0; i < 8; i++) begin
+        for (int i = 0; i < WAYS; i++) begin
             entry.valid[i] = raw[offset +: 1];
             offset += 1;
         end
         
-        for (int i = 0; i < 8; i++) begin
+        for (int i = 0; i < WAYS; i++) begin
             entry.dirty[i] = raw[offset +: 1];
             offset += 1;
         end
         
-        for (int i = 0; i < 8; i++) begin
+        for (int i = 0; i < WAYS; i++) begin
             entry.mesi_state[i] = raw[offset +: 2];
             offset += 2;
         end
@@ -314,89 +371,6 @@ module rvgpu_l2cache_tag_array #(
         
         return entry;
     endfunction
-    
-    //=============================================================================
-    // 时序逻辑 - 寄存器更新
-    //=============================================================================
-    
-    always_ff @(posedge clk) begin
-        if (!rst_n) begin
-            // 复位逻辑
-            state_r <= STATE_IDLE;
-            lookup_index_r <= '0;
-            lookup_tag_r <= '0;
-            update_index_r <= '0;
-            update_way_r <= '0;
-            update_entry_r <= '0;
-            lookup_hit_r <= 1'b0;
-            hit_way_r <= '0;
-            tag_entry_r <= '0;
-            lookup_done_r <= 1'b0;
-            update_done_r <= 1'b0;
-            sram_ce_r <= 1'b0;
-            sram_we_r <= 1'b0;
-            sram_addr_r <= '0;
-            sram_wdata_r <= '0;
-        end else begin
-            // 状态更新
-            state_r <= state_nxt;
-            lookup_index_r <= lookup_index_nxt;
-            lookup_tag_r <= lookup_tag_nxt;
-            update_index_r <= update_index_nxt;
-            update_way_r <= update_way_nxt;
-            update_entry_r <= update_entry_nxt;
-            lookup_hit_r <= lookup_hit_nxt;
-            hit_way_r <= hit_way_nxt;
-            tag_entry_r <= tag_entry_nxt;
-            lookup_done_r <= lookup_done_nxt;
-            update_done_r <= update_done_nxt;
-            sram_ce_r <= sram_ce_nxt;
-            sram_we_r <= sram_we_nxt;
-            sram_addr_r <= sram_addr_nxt;
-            sram_wdata_r <= sram_wdata_nxt;
-        end
-    end
-    
-    //=============================================================================
-    // 调试输出 (仅在仿真时)
-    //=============================================================================
-    
-    generate
-    if (L2CACHE_CONFIG.debug_enable) begin : gen_debug
-        always_ff @(posedge clk) begin
-            // 监控Tag查找
-            if (tag_if.lookup_valid && tag_if.lookup_ready) begin
-                $display("@%0t: [L2CACHE_TAG] Lookup: index=0x%h", 
-                         $time, tag_if.lookup_index);
-            end
-            
-            if (tag_if.lookup_done) begin
-                if (tag_if.lookup_hit) begin
-                    $display("@%0t: [L2CACHE_TAG] Hit: way=%0d", 
-                             $time, tag_if.hit_way);
-                end else begin
-                    $display("@%0t: [L2CACHE_TAG] Miss", $time);
-                end
-            end
-            
-            // 监控Tag更新
-            if (tag_if.update_valid && tag_if.update_ready) begin
-                $display("@%0t: [L2CACHE_TAG] Update: index=0x%h, way=%0d", 
-                         $time, tag_if.update_index, tag_if.update_way);
-            end
-            
-            // 监控SRAM访问
-            if (sram_if_inst.ce && sram_if_inst.we) begin
-                $display("@%0t: [L2CACHE_TAG] SRAM Write: addr=0x%h, data=0x%h", 
-                         $time, sram_if_inst.addr, sram_if_inst.wdata);
-            end
-            if (sram_if_inst.ce && !sram_if_inst.we) begin
-                $display("@%0t: [L2CACHE_TAG] SRAM Read: addr=0x%h, data=0x%h", 
-                         $time, sram_if_inst.addr, sram_if_inst.rdata);
-            end
-        end
-    end
-    endgenerate
 
 endmodule : rvgpu_l2cache_tag_array
 

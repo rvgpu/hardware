@@ -71,9 +71,11 @@ module rvgpu_l2cache_controller #(
     localparam int STATE_BITS = 4;
     localparam int L2_STATE_IDLE = 4'b0000;
     localparam int L2_STATE_TAG_LOOKUP = 4'b0001;
-    localparam int L2_STATE_DATA_ACCESS = 4'b0010;
+    localparam int L2_STATE_TAG_WAIT = 4'b0010;
+    localparam int L2_STATE_DATA_ACCESS = 4'b0011;
     localparam int L2_STATE_MISS_HANDLE = 4'b0100;
     localparam int L2_STATE_MEMORY_ACCESS = 4'b1000;
+    localparam int L2_STATE_TAG_UPDATE_WAIT = 4'b1001;
     
     // 请求队列深度
     localparam int REQ_QUEUE_DEPTH = 16;
@@ -177,6 +179,8 @@ module rvgpu_l2cache_controller #(
     logic read_valid_r, read_valid_nxt; 
     logic line_read_valid_r, line_read_valid_nxt;
     logic line_write_valid_r, line_write_valid_nxt;
+    
+
     //=============================================================================
     // 握手信号定义
     //=============================================================================
@@ -264,6 +268,8 @@ module rvgpu_l2cache_controller #(
                 cache_busy_nxt = 1'b0;
                 write_valid_nxt = 1'b0;
                 read_valid_nxt = 1'b0;
+                
+
 
                 if (!req_queue_empty_r) begin
                     // 从队列中取出请求
@@ -292,12 +298,22 @@ module rvgpu_l2cache_controller #(
             end
             
             L2_STATE_TAG_LOOKUP: begin
-                // Tag查找状态
+                // Tag查找状态 - 发起查找请求
                 tag_if.lookup_valid = 1'b1;
                 tag_if.lookup_index = current_index_r;
+                tag_if.lookup_tag = current_tag_r;
                 
                 if (tag_if.lookup_ready) begin
-                    $display("@%0t: [L2CACHE_CTRL] Tag Lookup: %s", $time, tag_if.lookup_hit);
+                    // 握手成功，进入等待状态
+                    state_nxt = L2_STATE_TAG_WAIT;
+                end
+            end
+            
+            L2_STATE_TAG_WAIT: begin
+                // Tag等待状态 - 等待查找完成
+                tag_if.lookup_valid = 1'b0; // 清除valid信号
+                
+                if (tag_if.lookup_done) begin
                     // 检查命中
                     cache_hit_nxt = tag_if.lookup_hit;
                     hit_way_nxt = tag_if.hit_way;
@@ -306,6 +322,8 @@ module rvgpu_l2cache_controller #(
                         // 缓存命中
                         state_nxt = L2_STATE_DATA_ACCESS;
                         perf_counters_nxt.hit_count = perf_counters_r.hit_count + 1;
+
+                        `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("Tag Lookup: hit=%0d, way=%0d", tag_if.lookup_hit, tag_if.hit_way));
                     end else begin
                         // 缓存未命中
                         state_nxt = L2_STATE_MISS_HANDLE;
@@ -313,6 +331,8 @@ module rvgpu_l2cache_controller #(
                         
                         // 选择替换way
                         selected_way_nxt = select_lru_way(tag_if.tag_entry.lru);
+
+                        `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("Tag Lookup: miss, way=%0d", tag_if.hit_way));
                     end
                 end
             end
@@ -427,7 +447,7 @@ module rvgpu_l2cache_controller #(
                 
                 if (axi_if.read_resp_valid) begin
                     if (axi_if.read_resp_status == RESP_OKAY) begin
-                        // 内存读取成功，更新缓存
+                        // 内存读取成功，发起tag更新请求
                         tag_if.update_valid = 1'b1;
                         tag_if.update_index = current_index_r;
                         tag_if.update_way = selected_way_r;
@@ -441,29 +461,11 @@ module rvgpu_l2cache_controller #(
                         tag_if.update_entry.lru = update_lru(tag_if.tag_entry.lru, selected_way_r);
                         
                         if (tag_if.update_ready) begin
-                            // 更新数据数组
-                            if(!line_write_valid_r) begin
-                                line_write_valid_nxt = 1'b1;
-                            end
-                            data_if.line_write_valid = line_write_valid_r;
-                            data_if.line_write_index = current_index_r;
-                            data_if.line_write_way = selected_way_r;
-                            data_if.line_write_data.data = axi_if.read_resp_data;
-                            data_if.line_write_data.strb = '1;
-                            
-                            if (data_if.line_write_ready) begin
-                                line_write_valid_nxt = 1'b0;
-                                state_nxt = L2_STATE_IDLE;
-                                
-                                // 准备响应
-                                current_resp_nxt.data = axi_if.read_resp_data;
-                                current_resp_nxt.status = RESP_OKAY;
-                                current_resp_nxt.trans_id = current_req_r.trans_id;
-                                current_resp_nxt.dest_node = current_req_r.src_node;
-                                current_resp_nxt.hit = 1'b0;
-                                current_resp_nxt.dirty = 1'b0;
-                            end
+                            // 握手成功，进入等待状态
+                            state_nxt = L2_STATE_TAG_UPDATE_WAIT;
                         end
+
+                        `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("MEM Responsed, Tag Update: index=0x%h, way=%0d", tag_if.update_index, tag_if.update_way));
                     end else begin
                         // 内存访问错误
                         state_nxt = L2_STATE_IDLE;
@@ -476,6 +478,36 @@ module rvgpu_l2cache_controller #(
                         current_resp_nxt.dirty = 1'b0;
                         
                         perf_counters_nxt.error_count = perf_counters_r.error_count + 1;
+                    end
+                end
+            end
+            
+            L2_STATE_TAG_UPDATE_WAIT: begin
+                // Tag更新等待状态 - 等待更新完成
+                tag_if.update_valid = 1'b0; // 清除valid信号
+                
+                if (tag_if.update_done) begin
+                    // 更新数据数组
+                    if(!line_write_valid_r) begin
+                        line_write_valid_nxt = 1'b1;
+                    end
+                    data_if.line_write_valid = line_write_valid_r;
+                    data_if.line_write_index = current_index_r;
+                    data_if.line_write_way = selected_way_r;
+                    data_if.line_write_data.data = axi_if.read_resp_data;
+                    data_if.line_write_data.strb = '1;
+                    
+                    if (data_if.line_write_ready) begin
+                        line_write_valid_nxt = 1'b0;
+                        state_nxt = L2_STATE_IDLE;
+                        
+                        // 准备响应
+                        current_resp_nxt.data = axi_if.read_resp_data;
+                        current_resp_nxt.status = RESP_OKAY;
+                        current_resp_nxt.trans_id = current_req_r.trans_id;
+                        current_resp_nxt.dest_node = current_req_r.src_node;
+                        current_resp_nxt.hit = 1'b0;
+                        current_resp_nxt.dirty = 1'b0;
                     end
                 end
             end
@@ -692,122 +724,6 @@ module rvgpu_l2cache_controller #(
             line_write_valid_r <= line_write_valid_nxt;
         end
     end
-
-    //=============================================================================
-    // 调试输出 (仅在仿真时)
-    //=============================================================================
-    
-    generate
-    if (L2CACHE_CONFIG.debug_enable) begin : gen_debug
-        // 队列状态跟踪寄存器
-        logic prev_queue_empty;
-        
-        always_ff @(posedge clk) begin
-            if (!rst_n) begin
-                prev_queue_empty <= 1'b1;
-            end else begin
-                prev_queue_empty <= req_queue_empty_r;
-            end
-        end
-        
-        always_ff @(posedge clk) begin
-            // 监控NOC请求
-            if (noc_if.req_valid && noc_if.req_ready) begin
-                `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("NOC Request: %s", noc_request_mem_read_to_string(noc_if.req_header, noc_if.req_data)));
-            end
-            
-            // 监控NOC响应
-            if (noc_if.resp_valid && noc_if.resp_ready) begin
-                `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("NOC Response: trans_id=%0d, hit=%0d, status=%0d", 
-                         current_resp_r.trans_id, current_resp_r.hit, current_resp_r.status));
-            end
-            
-            // 监控状态变化
-            if (state_r != state_nxt) begin
-                $display("@%0t: [L2CACHE_CTRL] State transition: %s -> %s", 
-                         $time, get_state_name(state_r), get_state_name(state_nxt));
-            end
-            
-            // 监控Tag查找
-            if (tag_if.lookup_valid && tag_if.lookup_ready) begin
-                $display("@%0t: [L2CACHE_CTRL] Tag lookup: index=0x%h, hit=%0d, way=%0d", 
-                         $time, current_index_r, tag_if.lookup_hit, way_to_index(tag_if.hit_way));
-            end
-            
-            // 监控数据访问
-            if (data_if.read_valid && data_if.read_ready) begin
-                $display("@%0t: [L2CACHE_CTRL] Data read: index=0x%h, way=%0d, offset=0x%h", 
-                         $time, current_index_r, way_to_index(hit_way_r), current_offset_r);
-            end
-            
-            if (data_if.write_valid && data_if.write_ready) begin
-                $display("@%0t: [L2CACHE_CTRL] Data write: index=0x%h, way=%0d, offset=0x%h", 
-                         $time, current_index_r, way_to_index(hit_way_r), current_offset_r);
-            end
-            
-            // 监控AXI内存访问
-            if (axi_if.read_req_valid && axi_if.read_req_ready) begin
-                $display("@%0t: [L2CACHE_CTRL] AXI read request: addr=0x%h, size=%0d, id=%0d", 
-                         $time, axi_if.read_req_addr, axi_if.read_req_size, axi_if.read_req_id);
-            end
-            
-            if (axi_if.read_resp_valid && axi_if.read_resp_ready) begin
-                $display("@%0t: [L2CACHE_CTRL] AXI read response: data=0x%h, status=%0d, id=%0d", 
-                         $time, axi_if.read_resp_data, axi_if.read_resp_status, axi_if.read_resp_id);
-            end
-            
-            if (axi_if.write_req_valid && axi_if.write_req_ready) begin
-                $display("@%0t: [L2CACHE_CTRL] AXI write request: addr=0x%h, size=%0d, id=%0d", 
-                         $time, axi_if.write_req_addr, axi_if.write_req_size, axi_if.write_req_id);
-            end
-            
-            if (axi_if.write_data_valid && axi_if.write_data_ready) begin
-                $display("@%0t: [L2CACHE_CTRL] AXI write data: data=0x%h, strb=0x%h, last=%0d", 
-                         $time, axi_if.write_data, axi_if.write_strb, axi_if.write_last);
-            end
-            
-            if (axi_if.write_resp_valid && axi_if.write_resp_ready) begin
-                $display("@%0t: [L2CACHE_CTRL] AXI write response: status=%0d, id=%0d", 
-                         $time, axi_if.write_resp_status, axi_if.write_resp_id);
-            end
-            
-            // 监控队列状态
-            if (req_queue_full_r && noc_if.req_valid && !noc_if.req_ready) begin
-                $display("@%0t: [L2CACHE_CTRL] Warning: Request queue full", $time);
-            end
-            
-            // 只在队列从非空变为空时打印一次
-            if (!prev_queue_empty && req_queue_empty_r && state_r == L2_STATE_IDLE) begin
-                $display("@%0t: [L2CACHE_CTRL] Info: Request queue became empty", $time);
-            end
-            
-            // 监控性能计数器变化
-            if (perf_counters_r.hit_count != perf_counters_nxt.hit_count) begin
-                $display("@%0t: [L2CACHE_CTRL] Cache hit: total=%0d", 
-                         $time, perf_counters_nxt.hit_count);
-            end
-            
-            if (perf_counters_r.miss_count != perf_counters_nxt.miss_count) begin
-                $display("@%0t: [L2CACHE_CTRL] Cache miss: total=%0d", 
-                         $time, perf_counters_nxt.miss_count);
-            end
-        end
-        
-        // 状态名称函数
-        function automatic string get_state_name(input l2cache_state_t state);
-            case (state)
-                L2_STATE_IDLE: return "IDLE";
-                L2_STATE_TAG_LOOKUP: return "TAG_LOOKUP";
-                L2_STATE_DATA_ACCESS: return "DATA_ACCESS";
-                L2_STATE_MISS_HANDLE: return "MISS_HANDLE";
-                L2_STATE_MEMORY_ACCESS: return "MEMORY_ACCESS";
-                default: return "UNKNOWN";
-            endcase
-        endfunction
-        
-    end
-    endgenerate
-
 endmodule : rvgpu_l2cache_controller
 
 `endif // RVGPU_L2CACHE_CONTROLLER_SV 

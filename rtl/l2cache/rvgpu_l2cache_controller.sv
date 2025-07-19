@@ -217,8 +217,10 @@ module rvgpu_l2cache_controller #(
         cache_busy_nxt = cache_busy_r;
         write_valid_nxt = write_valid_r;
         read_valid_nxt = read_valid_r;
+        line_read_valid_nxt = line_read_valid_r;
+        line_write_valid_nxt = line_write_valid_r;
         // 接口输出默认值   
-        noc_if.req_ready = 1'b0;
+        noc_if.req_ready = !req_queue_full_r; // 只要队列不满就可以接受新请求
         noc_if.resp_valid = 1'b0;
         noc_if.resp_header = '0;
         noc_if.resp_data = '0;
@@ -269,8 +271,7 @@ module rvgpu_l2cache_controller #(
                 write_valid_nxt = 1'b0;
                 read_valid_nxt = 1'b0;
                 
-
-
+                // 只处理队列中的请求，新请求先入队
                 if (!req_queue_empty_r) begin
                     // 从队列中取出请求
                     current_req_nxt = req_queue[req_queue_head_r];
@@ -278,22 +279,16 @@ module rvgpu_l2cache_controller #(
                     cache_busy_nxt = 1'b1;
                     
                     // 解析地址
-                    current_tag_nxt = extract_tag(current_req_r.addr, L2CACHE_CONFIG);
-                    current_index_nxt = extract_index(current_req_r.addr, L2CACHE_CONFIG);
-                    current_offset_nxt = extract_offset(current_req_r.addr, L2CACHE_CONFIG);
-                    
-                end else if (noc_if.req_valid) begin
-                    // 直接处理新请求
-                    current_req_nxt = parse_noc_request(noc_if.req_header, noc_if.req_data);
-                    state_nxt = L2_STATE_TAG_LOOKUP;
-                    cache_busy_nxt = 1'b1;
-                    
-                    // 解析地址
                     current_tag_nxt = extract_tag(current_req_nxt.addr, L2CACHE_CONFIG);
                     current_index_nxt = extract_index(current_req_nxt.addr, L2CACHE_CONFIG);
                     current_offset_nxt = extract_offset(current_req_nxt.addr, L2CACHE_CONFIG);
-                                        
-                    noc_if.req_ready = 1'b1;
+                    
+                    // 更新队列头指针（在下一个周期生效）
+                    req_queue_head_nxt = req_queue_head_r + 1;
+                    if (req_queue_head_nxt == req_queue_tail_r) begin
+                        req_queue_empty_nxt = 1'b1;
+                    end
+                    req_queue_full_nxt = 1'b0;
                 end
             end
             
@@ -538,7 +533,7 @@ module rvgpu_l2cache_controller #(
             end
         end
         
-        // 请求队列管理
+        // 请求队列管理 - 只处理入队逻辑
         if (noc_req_accept && !req_queue_full_r) begin
             req_queue[req_queue_tail_r] = parse_noc_request(noc_if.req_header, noc_if.req_data);
             req_queue_tail_nxt = req_queue_tail_r + 1;
@@ -546,14 +541,6 @@ module rvgpu_l2cache_controller #(
             if (req_queue_tail_nxt == req_queue_head_r) begin
                 req_queue_full_nxt = 1'b1;
             end
-        end
-        
-        if (!req_queue_empty_r && state_r == L2_STATE_IDLE) begin
-            req_queue_head_nxt = req_queue_head_r + 1;
-            if (req_queue_head_nxt == req_queue_tail_r) begin
-                req_queue_empty_nxt = 1'b1;
-            end
-            req_queue_full_nxt = 1'b0;
         end
     end
     

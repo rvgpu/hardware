@@ -407,37 +407,14 @@ module rvgpu_internal_noc #(
                 noc_header_t resp_header_check;
                 int resp_target_port_check;
                 logic resp_match_check;
-                logic resp_grant_check;
                 
                 resp_header_check = noc_header_t'(port_resp_out[src_port].header);
                 resp_target_port_check = get_source_port(noc_node_id_t'(resp_header_check.dest_node));
                 resp_match_check = port_resp_out[src_port].valid && (resp_target_port_check == dst_port);
                 
-                // 确定是否获得仲裁权
-                resp_grant_check = 1'b0;
-                if (resp_match_check) begin
-                    case (resp_arb_state[dst_port])
-                        2'b00: resp_grant_check = (src_port == 0) || 
-                                                (!port_resp_out[0].valid && src_port == 1) || 
-                                                (!port_resp_out[0].valid && !port_resp_out[1].valid && src_port == 2) ||
-                                                (!port_resp_out[0].valid && !port_resp_out[1].valid && !port_resp_out[2].valid && src_port == 3);
-                        2'b01: resp_grant_check = (src_port == 1) || 
-                                                (!port_resp_out[1].valid && src_port == 2) || 
-                                                (!port_resp_out[1].valid && !port_resp_out[2].valid && src_port == 3) ||
-                                                (!port_resp_out[1].valid && !port_resp_out[2].valid && !port_resp_out[3].valid && src_port == 0);
-                        2'b10: resp_grant_check = (src_port == 2) || 
-                                                (!port_resp_out[2].valid && src_port == 3) || 
-                                                (!port_resp_out[2].valid && !port_resp_out[3].valid && src_port == 0) ||
-                                                (!port_resp_out[2].valid && !port_resp_out[3].valid && !port_resp_out[0].valid && src_port == 1);
-                        2'b11: resp_grant_check = (src_port == 3) || 
-                                                (!port_resp_out[3].valid && src_port == 0) || 
-                                                (!port_resp_out[3].valid && !port_resp_out[0].valid && src_port == 1) ||
-                                                (!port_resp_out[3].valid && !port_resp_out[0].valid && !port_resp_out[1].valid && src_port == 2);
-                    endcase
-                end
-                
-                if (resp_grant_check) begin
-                    port_resp_ready[src_port] = port_resp_in_ready[dst_port];
+                // 简化：如果匹配且目标端口ready，就传递ready信号
+                if (resp_match_check && port_resp_in_ready[dst_port]) begin
+                    port_resp_ready[src_port] = 1'b1;
                     break;
                 end
             end

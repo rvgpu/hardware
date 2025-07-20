@@ -56,7 +56,7 @@ module rvgpu_l2cache_controller #(
     //=============================================================================
     
     // 状态机定义
-    typedef enum {
+    typedef enum logic [3:0] {
         L2_STATE_IDLE = 4'b0000,
         L2_STATE_TAG_LOOKUP = 4'b0001,
         L2_STATE_TAG_WAIT = 4'b0010,

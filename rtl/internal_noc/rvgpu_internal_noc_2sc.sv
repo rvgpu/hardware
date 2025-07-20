@@ -176,20 +176,6 @@ module rvgpu_internal_noc #(
     endgenerate
     
     //=============================================================================
-    // 路由逻辑 - 端口ID直接对应节点ID
-    //=============================================================================
-    
-    // 根据目标节点ID确定目标端口 - 现在可以直接返回节点ID作为端口ID
-    function automatic int get_target_port(input noc_node_id_t dest_node);
-        return int'(dest_node); // 直接转换，因为端口ID = 节点ID
-    endfunction
-    
-    // 根据源节点ID确定源端口 - 现在可以直接返回节点ID作为端口ID  
-    function automatic int get_source_port(input noc_node_id_t src_node);
-        return int'(src_node); // 直接转换，因为端口ID = 节点ID
-    endfunction
-    
-    //=============================================================================
     // 请求路由和仲裁逻辑
     //=============================================================================
     
@@ -200,12 +186,12 @@ module rvgpu_internal_noc #(
             logic [NUM_PORTS-1:0] req_grant;
             logic [NUM_PORTS-1:0] req_request;
             noc_header_t req_headers [NUM_PORTS];
-            int target_ports [NUM_PORTS];
+            l4_t target_ports [NUM_PORTS];
             
             // 解析每个源端口的请求header并确定目标端口
             for (genvar j = 0; j < NUM_PORTS; j++) begin : gen_req_parse
                 assign req_headers[j] = noc_header_t'(port_req_out[j].header);
-                assign target_ports[j] = get_target_port(noc_node_id_t'(req_headers[j].dest_node));
+                assign target_ports[j] = req_headers[j].dest_node; 
                 assign req_request[j] = port_req_out[j].valid && (target_ports[j] == i);
             end
             
@@ -278,12 +264,12 @@ module rvgpu_internal_noc #(
             // 检查每个目标端口
             for (int dst_port = 0; dst_port < NUM_PORTS; dst_port++) begin
                 noc_header_t header_check;
-                int target_port_check;
+                l4_t target_port_check;
                 logic req_match_check;
                 logic grant_check;
                 
                 header_check = noc_header_t'(port_req_out[src_port].header);
-                target_port_check = get_target_port(noc_node_id_t'(header_check.dest_node));
+                target_port_check = header_check.dest_node; 
                 req_match_check = port_req_out[src_port].valid && (target_port_check == dst_port);
                 
                 // 确定是否获得仲裁权
@@ -328,12 +314,12 @@ module rvgpu_internal_noc #(
             logic [NUM_PORTS-1:0] resp_grant;
             logic [NUM_PORTS-1:0] resp_request;
             noc_header_t resp_headers [NUM_PORTS];
-            int target_ports [NUM_PORTS];
+            l4_t target_ports [NUM_PORTS];
             
             // 解析每个源端口的响应header并确定目标端口
             for (genvar j = 0; j < NUM_PORTS; j++) begin : gen_resp_parse
                 assign resp_headers[j] = noc_header_t'(port_resp_out[j].header);
-                assign target_ports[j] = get_source_port(noc_node_id_t'(resp_headers[j].dest_node));
+                assign target_ports[j] = resp_headers[j].dest_node; 
                 assign resp_request[j] = port_resp_out[j].valid && (target_ports[j] == i);
             end
             
@@ -405,11 +391,11 @@ module rvgpu_internal_noc #(
             // 检查每个目标端口
             for (int dst_port = 0; dst_port < NUM_PORTS; dst_port++) begin
                 noc_header_t resp_header_check;
-                int resp_target_port_check;
+                l4_t resp_target_port_check;
                 logic resp_match_check;
                 
                 resp_header_check = noc_header_t'(port_resp_out[src_port].header);
-                resp_target_port_check = get_source_port(noc_node_id_t'(resp_header_check.dest_node));
+                resp_target_port_check = resp_header_check.dest_node; // 直接赋值，无需类型转换
                 resp_match_check = port_resp_out[src_port].valid && (resp_target_port_check == dst_port);
                 
                 // 简化：如果匹配且目标端口ready，就传递ready信号

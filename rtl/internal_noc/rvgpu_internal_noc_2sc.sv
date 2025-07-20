@@ -41,8 +41,7 @@ module rvgpu_internal_noc #(
 );
 
     // 内部参数定义
-    // control_unit + l2cache + 2 x shader_core
-    localparam int NUM_PORTS = NOC_CONFIG.num_shader_cores + 2; 
+    localparam int NUM_PORTS = 4; // Control Unit + L2Cache + 2 Shader Cores
     
     // 内部信号定义
     typedef struct packed {
@@ -61,27 +60,26 @@ module rvgpu_internal_noc #(
         logic                                           last;
     } noc_resp_t;
     
-    // 请求通道信号
-    noc_req_t  port_req_out [NUM_PORTS];    // 各端口发出的请求
-    logic      port_req_ready [NUM_PORTS];  // 各端口请求ready信号
-    noc_req_t  port_req_in [NUM_PORTS];     // 各端口接收的请求
-    logic      port_req_in_ready [NUM_PORTS]; // 各端口接收请求的ready信号
+    // 端口信号
+    noc_req_t  port_req_out [NUM_PORTS];
+    logic      port_req_ready [NUM_PORTS];
+    noc_req_t  port_req_in [NUM_PORTS];
+    logic      port_req_in_ready [NUM_PORTS];
     
-    // 响应通道信号
-    noc_resp_t port_resp_out [NUM_PORTS];   // 各端口发出的响应
-    logic      port_resp_ready [NUM_PORTS]; // 各端口响应ready信号
-    noc_resp_t port_resp_in [NUM_PORTS];    // 各端口接收的响应
-    logic      port_resp_in_ready [NUM_PORTS]; // 各端口接收响应的ready信号
+    noc_resp_t port_resp_out [NUM_PORTS];
+    logic      port_resp_ready [NUM_PORTS];
+    noc_resp_t port_resp_in [NUM_PORTS];
+    logic      port_resp_in_ready [NUM_PORTS];
     
     // 仲裁状态
-    logic [1:0] req_arb_state [NUM_PORTS];  // 每个目标端口的请求仲裁状态
-    logic [1:0] resp_arb_state [NUM_PORTS]; // 每个目标端口的响应仲裁状态
+    logic [1:0] req_arb_state [NUM_PORTS];
+    logic [1:0] resp_arb_state [NUM_PORTS];
     
     //=============================================================================
     // 端口信号连接
     //=============================================================================
     
-    // Control Unit端口连接 (NODE_CONTROL = 0)
+    // Control Unit端口连接 (端口0)
     assign port_req_out[NODE_CONTROL].valid  = control_unit.m_req_valid;
     assign port_req_out[NODE_CONTROL].header = control_unit.m_req_header;
     assign port_req_out[NODE_CONTROL].data   = control_unit.m_req_data;
@@ -110,7 +108,7 @@ module rvgpu_internal_noc #(
     assign port_resp_out[NODE_CONTROL].last   = control_unit.s_resp_last;
     assign control_unit.s_resp_ready = port_resp_ready[NODE_CONTROL];
     
-    // L2Cache端口连接 (NODE_L2_CACHE = 1)
+    // L2Cache端口连接 (端口1)
     assign port_req_out[NODE_L2_CACHE].valid  = l2cache.m_req_valid;
     assign port_req_out[NODE_L2_CACHE].header = l2cache.m_req_header;
     assign port_req_out[NODE_L2_CACHE].data   = l2cache.m_req_data;
@@ -139,272 +137,333 @@ module rvgpu_internal_noc #(
     assign port_resp_out[NODE_L2_CACHE].last   = l2cache.s_resp_last;
     assign l2cache.s_resp_ready = port_resp_ready[NODE_L2_CACHE];
     
-    // Shader Core端口连接 (NODE_SHADER_0 = 2, NODE_SHADER_1 = 3)
-    genvar i;
-    generate
-        for (i = 0; i < 2; i++) begin : gen_shader_ports
-            localparam int PORT_IDX = NODE_SHADER_0 + i;  // 2, 3
-            
-            assign port_req_out[PORT_IDX].valid  = shader_core[i].m_req_valid;
-            assign port_req_out[PORT_IDX].header = shader_core[i].m_req_header;
-            assign port_req_out[PORT_IDX].data   = shader_core[i].m_req_data;
-            assign port_req_out[PORT_IDX].strb   = shader_core[i].m_req_strb;
-            assign port_req_out[PORT_IDX].last   = shader_core[i].m_req_last;
-            assign shader_core[i].m_req_ready = port_req_ready[PORT_IDX];
-            
-            assign shader_core[i].s_req_valid  = port_req_in[PORT_IDX].valid;
-            assign shader_core[i].s_req_header = port_req_in[PORT_IDX].header;
-            assign shader_core[i].s_req_data   = port_req_in[PORT_IDX].data;
-            assign shader_core[i].s_req_strb   = port_req_in[PORT_IDX].strb;
-            assign shader_core[i].s_req_last   = port_req_in[PORT_IDX].last;
-            assign port_req_in_ready[PORT_IDX] = shader_core[i].s_req_ready;
-            
-            assign shader_core[i].m_resp_valid  = port_resp_in[PORT_IDX].valid;
-            assign shader_core[i].m_resp_header = port_resp_in[PORT_IDX].header;
-            assign shader_core[i].m_resp_data   = port_resp_in[PORT_IDX].data;
-            assign shader_core[i].m_resp_status = port_resp_in[PORT_IDX].status;
-            assign shader_core[i].m_resp_last   = port_resp_in[PORT_IDX].last;
-            assign port_resp_in_ready[PORT_IDX] = shader_core[i].m_resp_ready;
-            
-            assign port_resp_out[PORT_IDX].valid  = shader_core[i].s_resp_valid;
-            assign port_resp_out[PORT_IDX].header = shader_core[i].s_resp_header;
-            assign port_resp_out[PORT_IDX].data   = shader_core[i].s_resp_data;
-            assign port_resp_out[PORT_IDX].status = shader_core[i].s_resp_status;
-            assign port_resp_out[PORT_IDX].last   = shader_core[i].s_resp_last;
-            assign shader_core[i].s_resp_ready = port_resp_ready[PORT_IDX];
-        end
-    endgenerate
+    // Shader Core 0 端口连接 (端口2)
+    assign port_req_out[NODE_SHADER_0].valid  = shader_core[0].m_req_valid;
+    assign port_req_out[NODE_SHADER_0].header = shader_core[0].m_req_header;
+    assign port_req_out[NODE_SHADER_0].data   = shader_core[0].m_req_data;
+    assign port_req_out[NODE_SHADER_0].strb   = shader_core[0].m_req_strb;
+    assign port_req_out[NODE_SHADER_0].last   = shader_core[0].m_req_last;
+    assign shader_core[0].m_req_ready = port_req_ready[NODE_SHADER_0];
+    assign shader_core[0].s_req_valid  = port_req_in[NODE_SHADER_0].valid;
+    assign shader_core[0].s_req_header = port_req_in[NODE_SHADER_0].header;
+    assign shader_core[0].s_req_data   = port_req_in[NODE_SHADER_0].data;
+    assign shader_core[0].s_req_strb   = port_req_in[NODE_SHADER_0].strb;
+    assign shader_core[0].s_req_last   = port_req_in[NODE_SHADER_0].last;
+    assign port_req_in_ready[NODE_SHADER_0] = shader_core[0].s_req_ready;
+    
+    assign shader_core[0].m_resp_valid  = port_resp_in[NODE_SHADER_0].valid;
+    assign shader_core[0].m_resp_header = port_resp_in[NODE_SHADER_0].header;
+    assign shader_core[0].m_resp_data   = port_resp_in[NODE_SHADER_0].data;
+    assign shader_core[0].m_resp_status = port_resp_in[NODE_SHADER_0].status;
+    assign shader_core[0].m_resp_last   = port_resp_in[NODE_SHADER_0].last;
+    assign port_resp_in_ready[NODE_SHADER_0] = shader_core[0].m_resp_ready;
+    
+    assign port_resp_out[NODE_SHADER_0].valid  = shader_core[0].s_resp_valid;
+    assign port_resp_out[NODE_SHADER_0].header = shader_core[0].s_resp_header;
+    assign port_resp_out[NODE_SHADER_0].data   = shader_core[0].s_resp_data;
+    assign port_resp_out[NODE_SHADER_0].status = shader_core[0].s_resp_status;
+    assign port_resp_out[NODE_SHADER_0].last   = shader_core[0].s_resp_last;
+    assign shader_core[0].s_resp_ready = port_resp_ready[NODE_SHADER_0];
+    
+    // Shader Core 1 端口连接 (端口3)
+    assign port_req_out[NODE_SHADER_1].valid  = shader_core[1].m_req_valid;
+    assign port_req_out[NODE_SHADER_1].header = shader_core[1].m_req_header;
+    assign port_req_out[NODE_SHADER_1].data   = shader_core[1].m_req_data;
+    assign port_req_out[NODE_SHADER_1].strb   = shader_core[1].m_req_strb;
+    assign port_req_out[NODE_SHADER_1].last   = shader_core[1].m_req_last;
+    assign shader_core[1].m_req_ready = port_req_ready[NODE_SHADER_1];
+    
+    assign shader_core[1].s_req_valid  = port_req_in[NODE_SHADER_1].valid;
+    assign shader_core[1].s_req_header = port_req_in[NODE_SHADER_1].header;
+    assign shader_core[1].s_req_data   = port_req_in[NODE_SHADER_1].data;
+    assign shader_core[1].s_req_strb   = port_req_in[NODE_SHADER_1].strb;
+    assign shader_core[1].s_req_last   = port_req_in[NODE_SHADER_1].last;
+    assign port_req_in_ready[NODE_SHADER_1] = shader_core[1].s_req_ready;
+    
+    assign shader_core[1].m_resp_valid  = port_resp_in[NODE_SHADER_1].valid;
+    assign shader_core[1].m_resp_header = port_resp_in[NODE_SHADER_1].header;
+    assign shader_core[1].m_resp_data   = port_resp_in[NODE_SHADER_1].data;
+    assign shader_core[1].m_resp_status = port_resp_in[NODE_SHADER_1].status;
+    assign shader_core[1].m_resp_last   = port_resp_in[NODE_SHADER_1].last;
+    assign port_resp_in_ready[NODE_SHADER_1] = shader_core[1].m_resp_ready;
+    
+    assign port_resp_out[NODE_SHADER_1].valid  = shader_core[1].s_resp_valid;
+    assign port_resp_out[NODE_SHADER_1].header = shader_core[1].s_resp_header;
+    assign port_resp_out[NODE_SHADER_1].data   = shader_core[1].s_resp_data;
+    assign port_resp_out[NODE_SHADER_1].status = shader_core[1].s_resp_status;
+    assign port_resp_out[NODE_SHADER_1].last   = shader_core[1].s_resp_last;
+    assign shader_core[1].s_resp_ready = port_resp_ready[NODE_SHADER_1];
     
     //=============================================================================
-    // 请求路由和仲裁逻辑
+    // 路由和仲裁逻辑
     //=============================================================================
     
-    generate
-        for (i = 0; i < NUM_PORTS; i++) begin : gen_req_routing
-            
-            // 请求仲裁器
-            logic [NUM_PORTS-1:0] req_grant;
-            logic [NUM_PORTS-1:0] req_request;
-            noc_header_t req_headers [NUM_PORTS];
-            l4_t target_ports [NUM_PORTS];
-            
-            // 解析每个源端口的请求header并确定目标端口
-            for (genvar j = 0; j < NUM_PORTS; j++) begin : gen_req_parse
-                assign req_headers[j] = noc_header_t'(port_req_out[j].header);
-                assign target_ports[j] = req_headers[j].dest_node; 
-                assign req_request[j] = port_req_out[j].valid && (target_ports[j] == i);
-            end
-            
-            // 轮询仲裁器
-            always_ff @(posedge clk) begin
-                if (!rst_n) begin
-                    req_arb_state[i] <= 2'b00;
-                end else begin
-                    // 简单的轮询仲裁
-                    case (req_arb_state[i])
-                        2'b00: if (req_request != 4'b0000) req_arb_state[i] <= 2'b01;
-                        2'b01: if (req_request != 4'b0000) req_arb_state[i] <= 2'b10;
-                        2'b10: if (req_request != 4'b0000) req_arb_state[i] <= 2'b11;
-                        2'b11: if (req_request != 4'b0000) req_arb_state[i] <= 2'b00;
-                    endcase
-                end
-            end
-            
-            // 仲裁逻辑
-            always_comb begin
-                req_grant = 4'b0000;
-                case (req_arb_state[i])
-                    2'b00: begin
-                        if (req_request[0]) req_grant[0] = 1'b1;
-                        else if (req_request[1]) req_grant[1] = 1'b1;
-                        else if (req_request[2]) req_grant[2] = 1'b1;
-                        else if (req_request[3]) req_grant[3] = 1'b1;
-                    end
-                    2'b01: begin
-                        if (req_request[1]) req_grant[1] = 1'b1;
-                        else if (req_request[2]) req_grant[2] = 1'b1;
-                        else if (req_request[3]) req_grant[3] = 1'b1;
-                        else if (req_request[0]) req_grant[0] = 1'b1;
-                    end
-                    2'b10: begin
-                        if (req_request[2]) req_grant[2] = 1'b1;
-                        else if (req_request[3]) req_grant[3] = 1'b1;
-                        else if (req_request[0]) req_grant[0] = 1'b1;
-                        else if (req_request[1]) req_grant[1] = 1'b1;
-                    end
-                    2'b11: begin
-                        if (req_request[3]) req_grant[3] = 1'b1;
-                        else if (req_request[0]) req_grant[0] = 1'b1;
-                        else if (req_request[1]) req_grant[1] = 1'b1;
-                        else if (req_request[2]) req_grant[2] = 1'b1;
-                    end
-                endcase
-            end
-            
-            // 多路选择器 - 选择获得仲裁权的请求
-            always_comb begin
-                port_req_in[i] = '0;
-                for (int j = 0; j < NUM_PORTS; j++) begin
-                    if (req_grant[j]) begin
-                        port_req_in[i] = port_req_out[j];
-                        break;
-                    end
-                end
-            end
-            
-        end
-    endgenerate
+    // 请求路由和仲裁 - 使用具体名称提高可读性
+    logic [NUM_PORTS-1:0] req_grant_cu;    // Control Unit的grant信号
+    logic [NUM_PORTS-1:0] req_grant_l2;    // L2Cache的grant信号
+    logic [NUM_PORTS-1:0] req_grant_s0;    // Shader Core 0的grant信号
+    logic [NUM_PORTS-1:0] req_grant_s1;    // Shader Core 1的grant信号
     
-    // Ready信号连接 - 独立于generate块以避免作用域问题
-    // 简化ready信号连接 - 使用OR逻辑
+    // 功能函数：检查目标为dst的端口req有哪些，使用mask标记
+    function automatic logic [NUM_PORTS-1:0] get_req_mask(noc_node_id_t dst);
+        logic [NUM_PORTS-1:0] mask = 4'b0000;
+        mask[0] = port_req_out[0].valid && (get_noc_header_dest_node(port_req_out[0].header) == dst);
+        mask[1] = port_req_out[1].valid && (get_noc_header_dest_node(port_req_out[1].header) == dst);
+        mask[2] = port_req_out[2].valid && (get_noc_header_dest_node(port_req_out[2].header) == dst);
+        mask[3] = port_req_out[3].valid && (get_noc_header_dest_node(port_req_out[3].header) == dst);
+        return mask;
+    endfunction
+    
+    // 功能函数：检查目标为dst的端口resp有哪些，使用mask标记
+    function automatic logic [NUM_PORTS-1:0] get_resp_mask(noc_node_id_t dst);
+        logic [NUM_PORTS-1:0] mask = 4'b0000;
+        mask[0] = port_resp_out[0].valid && (get_noc_header_dest_node(port_resp_out[0].header) == dst);
+        mask[1] = port_resp_out[1].valid && (get_noc_header_dest_node(port_resp_out[1].header) == dst);
+        mask[2] = port_resp_out[2].valid && (get_noc_header_dest_node(port_resp_out[2].header) == dst);
+        mask[3] = port_resp_out[3].valid && (get_noc_header_dest_node(port_resp_out[3].header) == dst);
+        return mask;
+    endfunction
+    
+    // 功能函数：更新req的仲裁状态，如果有请求，状态按照 0 -> 1 -> 2 -> 3 的顺序轮转
+    function automatic void update_req_arb_state(int port);
+        logic [NUM_PORTS-1:0] req_mask = get_req_mask(port);
+        if (req_mask != 4'b0000) begin
+            case (req_arb_state[port])
+                2'b00: req_arb_state[port] <= 2'b01;
+                2'b01: req_arb_state[port] <= 2'b10;
+                2'b10: req_arb_state[port] <= 2'b11;
+                2'b11: req_arb_state[port] <= 2'b00;
+            endcase
+        end else begin
+            req_arb_state[port] <= req_arb_state[port];
+        end
+    endfunction
+
+    // 功能函数：更新resp的仲裁状态，如果有请求，状态按照 0 -> 1 -> 2 -> 3 的顺序轮转
+    function automatic void update_resp_arb_state(int port);
+        logic [NUM_PORTS-1:0] resp_mask = get_resp_mask(port);
+        if (resp_mask != 4'b0000) begin
+            case (resp_arb_state[port])
+                2'b00: resp_arb_state[port] <= 2'b01;
+                2'b01: resp_arb_state[port] <= 2'b10;
+                2'b10: resp_arb_state[port] <= 2'b11;
+                2'b11: resp_arb_state[port] <= 2'b00;
+            endcase
+        end else begin
+            resp_arb_state[port] <= resp_arb_state[port];
+        end
+    endfunction
+    
+    // 更新req和resp的仲裁状态
+    // 仲裁状态 logic[1:0] xxxx_arb_state[NUM_PORTS]，即对于每个端口，有4个状态
+    // 状态0表示优先级顺序是 0 -> 1 -> 2 -> 3，0号端口的优先级最高
+    // 状态1表示优先级顺序是 1 -> 2 -> 3 -> 0，1号端口的优先级最高
+    // 状态2表示优先级顺序是 2 -> 3 -> 0 -> 1，2号端口的优先级最高
+    // 状态3表示优先级顺序是 3 -> 0 -> 1 -> 2，3号端口的优先级最高
+    always_ff @(posedge clk) begin
+        if (!rst_n) begin
+            for (int i = 0; i < NUM_PORTS; i++) begin
+                req_arb_state[i] <= 2'b00;
+                resp_arb_state[i] <= 2'b00;
+            end
+        end else begin
+            // 对于每一个port:
+            // 1. 检查是否有req请求，如果有的话，来更新req_arb_state状态
+            update_req_arb_state(0);
+            update_req_arb_state(1);
+            update_req_arb_state(2);
+            update_req_arb_state(3);
+
+            // 2. 检查是否有resp请求，如果有的话，来更新resp_arb_state状态
+            update_resp_arb_state(0);
+            update_resp_arb_state(1);
+            update_resp_arb_state(2);
+            update_resp_arb_state(3);
+        end
+    end
+    
+    // 请求仲裁逻辑，根据arb_state来检查grant哪个端口
+    function automatic logic [NUM_PORTS-1:0] get_req_grant(int dst, logic [1:0] arb_state);
+        logic [NUM_PORTS-1:0] grant = 4'b0000;
+        logic [NUM_PORTS-1:0] mask = get_req_mask(dst);
+        
+        case (arb_state)
+            2'b00: begin
+                if (mask[0]) grant[0] = 1'b1;
+                else if (mask[1]) grant[1] = 1'b1;
+                else if (mask[2]) grant[2] = 1'b1;
+                else if (mask[3]) grant[3] = 1'b1;
+            end
+            2'b01: begin
+                if (mask[1]) grant[1] = 1'b1;
+                else if (mask[2]) grant[2] = 1'b1;
+                else if (mask[3]) grant[3] = 1'b1;
+                else if (mask[0]) grant[0] = 1'b1;
+            end
+            2'b10: begin
+                if (mask[2]) grant[2] = 1'b1;
+                else if (mask[3]) grant[3] = 1'b1;
+                else if (mask[0]) grant[0] = 1'b1;
+                else if (mask[1]) grant[1] = 1'b1;
+            end
+            2'b11: begin
+                if (mask[3]) grant[3] = 1'b1;
+                else if (mask[0]) grant[0] = 1'b1;
+                else if (mask[1]) grant[1] = 1'b1;
+                else if (mask[2]) grant[2] = 1'b1;
+            end
+        endcase
+        return grant;
+    endfunction
+    
+    // 生成各个端口的grant信号
     always_comb begin
-        for (int src_port = 0; src_port < NUM_PORTS; src_port++) begin
-            port_req_ready[src_port] = 1'b0;
-            
-            // 检查每个目标端口
-            for (int dst_port = 0; dst_port < NUM_PORTS; dst_port++) begin
-                noc_header_t header_check;
-                l4_t target_port_check;
-                logic req_match_check;
-                logic grant_check;
-                
-                header_check = noc_header_t'(port_req_out[src_port].header);
-                target_port_check = header_check.dest_node; 
-                req_match_check = port_req_out[src_port].valid && (target_port_check == dst_port);
-                
-                // 确定是否获得仲裁权
-                grant_check = 1'b0;
-                if (req_match_check) begin
-                    case (req_arb_state[dst_port])
-                        2'b00: grant_check = (src_port == 0) || 
-                                           (!port_req_out[0].valid && src_port == 1) || 
-                                           (!port_req_out[0].valid && !port_req_out[1].valid && src_port == 2) ||
-                                           (!port_req_out[0].valid && !port_req_out[1].valid && !port_req_out[2].valid && src_port == 3);
-                        2'b01: grant_check = (src_port == 1) || 
-                                           (!port_req_out[1].valid && src_port == 2) || 
-                                           (!port_req_out[1].valid && !port_req_out[2].valid && src_port == 3) ||
-                                           (!port_req_out[1].valid && !port_req_out[2].valid && !port_req_out[3].valid && src_port == 0);
-                        2'b10: grant_check = (src_port == 2) || 
-                                           (!port_req_out[2].valid && src_port == 3) || 
-                                           (!port_req_out[2].valid && !port_req_out[3].valid && src_port == 0) ||
-                                           (!port_req_out[2].valid && !port_req_out[3].valid && !port_req_out[0].valid && src_port == 1);
-                        2'b11: grant_check = (src_port == 3) || 
-                                           (!port_req_out[3].valid && src_port == 0) || 
-                                           (!port_req_out[3].valid && !port_req_out[0].valid && src_port == 1) ||
-                                           (!port_req_out[3].valid && !port_req_out[0].valid && !port_req_out[1].valid && src_port == 2);
-                    endcase
-                end
-                
-                if (grant_check) begin
-                    port_req_ready[src_port] = port_req_in_ready[dst_port];
-                    break;
-                end
-            end
+        req_grant_cu = get_req_grant(NODE_CONTROL, req_arb_state[NODE_CONTROL]);
+        req_grant_l2 = get_req_grant(NODE_L2_CACHE, req_arb_state[NODE_L2_CACHE]);
+        req_grant_s0 = get_req_grant(NODE_SHADER_0, req_arb_state[NODE_SHADER_0]);
+        req_grant_s1 = get_req_grant(NODE_SHADER_1, req_arb_state[NODE_SHADER_1]);
+    end
+    
+    // 请求多路选择器，优先级编码器，选择第一个为true的grant位，get_req_grant已经根据arb_state顺序检查mask设置了grant
+    function automatic noc_req_t select_req(int dst, logic [NUM_PORTS-1:0] grant);
+        noc_req_t selected = '0;
+        case (1'b1)
+            grant[0]: selected = port_req_out[0];
+            grant[1]: selected = port_req_out[1];
+            grant[2]: selected = port_req_out[2];
+            grant[3]: selected = port_req_out[3];
+            default: selected = '0;
+        endcase
+        return selected;
+    endfunction
+    
+    // 将grant信号传递给各个端口
+    always_comb begin
+        port_req_in[NODE_CONTROL] = select_req(NODE_CONTROL, req_grant_cu);
+        port_req_in[NODE_L2_CACHE] = select_req(NODE_L2_CACHE, req_grant_l2);
+        port_req_in[NODE_SHADER_0] = select_req(NODE_SHADER_0, req_grant_s0);
+        port_req_in[NODE_SHADER_1] = select_req(NODE_SHADER_1, req_grant_s1);
+    end
+    
+    // 请求Ready信号连接 - 使用函数
+    function automatic logic get_req_ready(int src);
+        logic ready = 1'b0;
+        // 当某个源被grant时，使用对应目标端口的ready信号
+        // 由于每个grant信号最多只有一位为true，所以只需要检查对应的ready
+        if (req_grant_cu[src]) begin
+            ready = port_req_in_ready[NODE_CONTROL];
+        end else if (req_grant_l2[src]) begin
+            ready = port_req_in_ready[NODE_L2_CACHE];
+        end else if (req_grant_s0[src]) begin
+            ready = port_req_in_ready[NODE_SHADER_0];
+        end else if (req_grant_s1[src]) begin
+            ready = port_req_in_ready[NODE_SHADER_1];
         end
+        return ready;
+    endfunction
+    
+    always_comb begin
+        port_req_ready[NODE_CONTROL]   = get_req_ready(NODE_CONTROL);
+        port_req_ready[NODE_L2_CACHE]  = get_req_ready(NODE_L2_CACHE);
+        port_req_ready[NODE_SHADER_0]  = get_req_ready(NODE_SHADER_0);
+        port_req_ready[NODE_SHADER_1]  = get_req_ready(NODE_SHADER_1); 
     end
     
     //=============================================================================
     // 响应路由和仲裁逻辑
     //=============================================================================
     
-    generate
-        for (i = 0; i < NUM_PORTS; i++) begin : gen_resp_routing
-            
-            // 响应仲裁器
-            logic [NUM_PORTS-1:0] resp_grant;
-            logic [NUM_PORTS-1:0] resp_request;
-            noc_header_t resp_headers [NUM_PORTS];
-            l4_t target_ports [NUM_PORTS];
-            
-            // 解析每个源端口的响应header并确定目标端口
-            for (genvar j = 0; j < NUM_PORTS; j++) begin : gen_resp_parse
-                assign resp_headers[j] = noc_header_t'(port_resp_out[j].header);
-                assign target_ports[j] = resp_headers[j].dest_node; 
-                assign resp_request[j] = port_resp_out[j].valid && (target_ports[j] == i);
-            end
-            
-            // 轮询仲裁器
-            always_ff @(posedge clk) begin
-                if (!rst_n) begin
-                    resp_arb_state[i] <= 2'b00;
-                end else begin
-                    // 简单的轮询仲裁
-                    case (resp_arb_state[i])
-                        2'b00: if (resp_request != 4'b0000) resp_arb_state[i] <= 2'b01;
-                        2'b01: if (resp_request != 4'b0000) resp_arb_state[i] <= 2'b10;
-                        2'b10: if (resp_request != 4'b0000) resp_arb_state[i] <= 2'b11;
-                        2'b11: if (resp_request != 4'b0000) resp_arb_state[i] <= 2'b00;
-                    endcase
-                end
-            end
-            
-            // 仲裁逻辑
-            always_comb begin
-                resp_grant = 4'b0000;
-                case (resp_arb_state[i])
-                    2'b00: begin
-                        if (resp_request[0]) resp_grant[0] = 1'b1;
-                        else if (resp_request[1]) resp_grant[1] = 1'b1;
-                        else if (resp_request[2]) resp_grant[2] = 1'b1;
-                        else if (resp_request[3]) resp_grant[3] = 1'b1;
-                    end
-                    2'b01: begin
-                        if (resp_request[1]) resp_grant[1] = 1'b1;
-                        else if (resp_request[2]) resp_grant[2] = 1'b1;
-                        else if (resp_request[3]) resp_grant[3] = 1'b1;
-                        else if (resp_request[0]) resp_grant[0] = 1'b1;
-                    end
-                    2'b10: begin
-                        if (resp_request[2]) resp_grant[2] = 1'b1;
-                        else if (resp_request[3]) resp_grant[3] = 1'b1;
-                        else if (resp_request[0]) resp_grant[0] = 1'b1;
-                        else if (resp_request[1]) resp_grant[1] = 1'b1;
-                    end
-                    2'b11: begin
-                        if (resp_request[3]) resp_grant[3] = 1'b1;
-                        else if (resp_request[0]) resp_grant[0] = 1'b1;
-                        else if (resp_request[1]) resp_grant[1] = 1'b1;
-                        else if (resp_request[2]) resp_grant[2] = 1'b1;
-                    end
-                endcase
-            end
-            
-            // 多路选择器 - 选择获得仲裁权的响应
-            always_comb begin
-                port_resp_in[i] = '0;
-                for (int j = 0; j < NUM_PORTS; j++) begin
-                    if (resp_grant[j]) begin
-                        port_resp_in[i] = port_resp_out[j];
-                        break;
-                    end
-                end
-            end
-            
-        end
-    endgenerate
+    // 响应路由和仲裁 - 使用具体名称提高可读性
+    logic [NUM_PORTS-1:0] resp_grant_cu;    // Control Unit的响应grant信号
+    logic [NUM_PORTS-1:0] resp_grant_l2;    // L2Cache的响应grant信号
+    logic [NUM_PORTS-1:0] resp_grant_s0;    // Shader Core 0的响应grant信号
+    logic [NUM_PORTS-1:0] resp_grant_s1;    // Shader Core 1的响应grant信号
     
-    // 响应Ready信号连接
-    always_comb begin
-        for (int src_port = 0; src_port < NUM_PORTS; src_port++) begin
-            port_resp_ready[src_port] = 1'b0;
-            
-            // 检查每个目标端口
-            for (int dst_port = 0; dst_port < NUM_PORTS; dst_port++) begin
-                noc_header_t resp_header_check;
-                l4_t resp_target_port_check;
-                logic resp_match_check;
-                
-                resp_header_check = noc_header_t'(port_resp_out[src_port].header);
-                resp_target_port_check = resp_header_check.dest_node; // 直接赋值，无需类型转换
-                resp_match_check = port_resp_out[src_port].valid && (resp_target_port_check == dst_port);
-                
-                // 简化：如果匹配且目标端口ready，就传递ready信号
-                if (resp_match_check && port_resp_in_ready[dst_port]) begin
-                    port_resp_ready[src_port] = 1'b1;
-                    break;
-                end
+    // 响应仲裁逻辑 - 使用函数和查找表
+    function automatic logic [NUM_PORTS-1:0] get_resp_grant(int dst, logic [1:0] arb_state);
+        logic [NUM_PORTS-1:0] grant = 4'b0000;
+        logic [NUM_PORTS-1:0] mask = get_resp_mask(dst);
+        
+        case (arb_state)
+            2'b00: begin
+                if (mask[0]) grant[0] = 1'b1;
+                else if (mask[1]) grant[1] = 1'b1;
+                else if (mask[2]) grant[2] = 1'b1;
+                else if (mask[3]) grant[3] = 1'b1;
             end
+            2'b01: begin
+                if (mask[1]) grant[1] = 1'b1;
+                else if (mask[2]) grant[2] = 1'b1;
+                else if (mask[3]) grant[3] = 1'b1;
+                else if (mask[0]) grant[0] = 1'b1;
+            end
+            2'b10: begin
+                if (mask[2]) grant[2] = 1'b1;
+                else if (mask[3]) grant[3] = 1'b1;
+                else if (mask[0]) grant[0] = 1'b1;
+                else if (mask[1]) grant[1] = 1'b1;
+            end
+            2'b11: begin
+                if (mask[3]) grant[3] = 1'b1;
+                else if (mask[0]) grant[0] = 1'b1;
+                else if (mask[1]) grant[1] = 1'b1;
+                else if (mask[2]) grant[2] = 1'b1;
+            end
+        endcase
+        return grant;
+    endfunction
+    
+    // 生成各个端口的响应grant信号
+    always_comb begin
+        resp_grant_cu = get_resp_grant(NODE_CONTROL, resp_arb_state[NODE_CONTROL]);
+        resp_grant_l2 = get_resp_grant(NODE_L2_CACHE, resp_arb_state[NODE_L2_CACHE]);
+        resp_grant_s0 = get_resp_grant(NODE_SHADER_0, resp_arb_state[NODE_SHADER_0]);
+        resp_grant_s1 = get_resp_grant(NODE_SHADER_1, resp_arb_state[NODE_SHADER_1]);
+    end
+    
+    // 响应多路选择器 - 使用函数
+    function automatic noc_resp_t select_resp(int dst, logic [NUM_PORTS-1:0] grant);
+        noc_resp_t selected = '0;
+        case (1'b1)
+            grant[0]: selected = port_resp_out[0];
+            grant[1]: selected = port_resp_out[1];
+            grant[2]: selected = port_resp_out[2];
+            grant[3]: selected = port_resp_out[3];
+            default: selected = '0;
+        endcase
+        return selected;
+    endfunction
+    
+    // 将响应grant信号传递给各个端口
+    always_comb begin
+        port_resp_in[NODE_CONTROL] = select_resp(NODE_CONTROL, resp_grant_cu);
+        port_resp_in[NODE_L2_CACHE] = select_resp(NODE_L2_CACHE, resp_grant_l2);
+        port_resp_in[NODE_SHADER_0] = select_resp(NODE_SHADER_0, resp_grant_s0);
+        port_resp_in[NODE_SHADER_1] = select_resp(NODE_SHADER_1, resp_grant_s1);
+    end
+    
+    // 响应Ready信号连接 - 使用函数
+    function automatic logic get_resp_ready(int src);
+        logic ready = 1'b0;
+        // 当某个源被grant时，使用对应目标端口的ready信号
+        // 由于每个grant信号最多只有一位为true，所以只需要检查对应的ready
+        if (resp_grant_cu[src]) begin
+            ready = port_resp_in_ready[NODE_CONTROL];
+        end else if (resp_grant_l2[src]) begin
+            ready = port_resp_in_ready[NODE_L2_CACHE];
+        end else if (resp_grant_s0[src]) begin
+            ready = port_resp_in_ready[NODE_SHADER_0];
+        end else if (resp_grant_s1[src]) begin
+            ready = port_resp_in_ready[NODE_SHADER_1];
         end
+        return ready;
+    endfunction
+    
+    always_comb begin
+        port_resp_ready[NODE_CONTROL]   = get_resp_ready(NODE_CONTROL);
+        port_resp_ready[NODE_L2_CACHE]  = get_resp_ready(NODE_L2_CACHE);
+        port_resp_ready[NODE_SHADER_0]  = get_resp_ready(NODE_SHADER_0);
+        port_resp_ready[NODE_SHADER_1]  = get_resp_ready(NODE_SHADER_1);
     end
 
 endmodule : rvgpu_internal_noc

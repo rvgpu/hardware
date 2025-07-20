@@ -73,9 +73,11 @@ typedef enum l2_t {
     RESP_DECERR             = 2'b11     // 解码错误
 } noc_resp_t;
     
-function automatic noc_local_addr_t get_noc_header_local_addr(
-    input noc_header_t header
-);
+function automatic noc_node_id_t get_noc_header_dest_node(input noc_header_t header);
+    return header.dest_node;
+endfunction
+
+function automatic noc_local_addr_t get_noc_header_local_addr(input noc_header_t header);
     return header.local_addr;
 endfunction
 

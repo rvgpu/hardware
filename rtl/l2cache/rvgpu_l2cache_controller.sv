@@ -409,20 +409,32 @@ module rvgpu_l2cache_controller #(
                     end
                 end else begin
                     // 写未命中：直接写内存
-                    axi_if.write_req_valid = 1'b1;
-                    axi_if.write_req_addr = current_req_r.addr;
-                    axi_if.write_req_len = 0;
-                    axi_if.write_req_size = current_req_r.size[2:0]; // 从请求payload中获取size
-                    axi_if.write_req_id = current_req_r.trans_id;
-                    
-                    if (axi_if.write_req_ready) begin
+                    // 发送写地址请求（只在第一次发送）
+                    if (!write_valid_r) begin
+                        axi_if.write_req_valid = 1'b1;
+                        axi_if.write_req_addr = current_req_r.addr;
+                        axi_if.write_req_len = 0;
+                        axi_if.write_req_size = current_req_r.size[2:0]; // 从请求payload中获取size
+                        axi_if.write_req_id = current_req_r.trans_id;
+                        
+                        if (axi_if.write_req_ready) begin
+                            // 写地址握手成功，标记写地址已发送
+                            write_valid_nxt = 1'b1;
+                        end
+                    end else begin
+                        // 写地址已发送，清除写地址请求
+                        axi_if.write_req_valid = 1'b0;
+                        
+                        // 发送写数据
                         axi_if.write_data_valid = 1'b1;
                         axi_if.write_data = current_req_r.data;
                         axi_if.write_strb = current_req_r.strb;
                         axi_if.write_last = 1'b1;
                         
                         if (axi_if.write_data_ready) begin
+                            // 写数据握手成功，完成写操作
                             state_nxt = L2_STATE_IDLE;
+                            write_valid_nxt = 1'b0;  // 清除写标志
                             
                             // 准备响应
                             current_resp_nxt.data = '0;

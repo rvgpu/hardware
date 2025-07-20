@@ -45,277 +45,157 @@ module rvgpu_l2cache_noc_adapter #(
 );
 
     //=============================================================================
-    // Local Parameters and Types
+    // 状态机定义
     //=============================================================================
     
-    // 从配置中提取的本地参数
-    localparam int NOC_HEADER_WIDTH = L2CACHE_CONFIG.noc_header_width;
-    localparam int NOC_DATA_WIDTH = L2CACHE_CONFIG.noc_data_width;
+    typedef enum logic [1:0] {
+        STATE_IDLE,
+        STATE_PROCESS_REQ,
+        STATE_WAIT_RESP
+    } state_t;
     
-    // 控制器状态机参数
-    localparam int CTRL_STATE_BITS = 2;
-    localparam int CTRL_STATE_IDLE = 2'b00;
-    localparam int CTRL_STATE_PROCESS_REQ = 2'b01;
-    localparam int CTRL_STATE_WAIT_RESP = 2'b10;
-    
-    // 请求队列深度
-    localparam int REQ_QUEUE_DEPTH = 16;
-    localparam int REQ_QUEUE_BITS = $clog2(REQ_QUEUE_DEPTH);
-    
-    // 响应状态
-    localparam int RESP_OKAY = 2'b00;
-    localparam int RESP_SLVERR = 2'b10;
+    state_t state_r, state_nxt;
     
     //=============================================================================
-    // Internal Registers and Signals
+    // 内部信号
     //=============================================================================
     
-    // 控制器状态机寄存器
-    logic [CTRL_STATE_BITS-1:0] ctrl_state_r, ctrl_state_nxt;
+    // 请求缓存
+    logic [L2CACHE_CONFIG.noc_header_width-1:0] req_header_r;
+    logic [L2CACHE_CONFIG.noc_data_width-1:0] req_data_r;
+    logic [L2CACHE_CONFIG.noc_data_width/8-1:0] req_strb_r;
+    logic req_last_r;
+    logic req_valid_r;
     
-    // 请求队列
-    typedef struct packed {
-        logic [NOC_HEADER_WIDTH-1:0] header;
-        logic [NOC_DATA_WIDTH-1:0] data;
-        logic [NOC_DATA_WIDTH/8-1:0] strb;
-        logic last;
-        logic is_valid;  // 是否为有效请求（非转发）
-    } noc_request_t;
-    
-    noc_request_t req_queue [REQ_QUEUE_DEPTH];
-    logic [REQ_QUEUE_BITS-1:0] req_queue_head_r, req_queue_head_nxt;
-    logic [REQ_QUEUE_BITS-1:0] req_queue_tail_r, req_queue_tail_nxt;
-    logic req_queue_full_r, req_queue_full_nxt;
-    logic req_queue_empty_r, req_queue_empty_nxt;
-    
-    // 响应队列
-    typedef struct packed {
-        logic [NOC_HEADER_WIDTH-1:0] header;
-        logic [NOC_DATA_WIDTH-1:0] data;
-        logic [1:0] status;
-        logic last;
-    } noc_response_t;
-    
-    noc_response_t resp_queue [REQ_QUEUE_DEPTH];
-    logic [REQ_QUEUE_BITS-1:0] resp_queue_head_r, resp_queue_head_nxt;
-    logic [REQ_QUEUE_BITS-1:0] resp_queue_tail_r, resp_queue_tail_nxt;
-    logic resp_queue_full_r, resp_queue_full_nxt;
-    logic resp_queue_empty_r, resp_queue_empty_nxt;
-    logic resp_queue_empty_next;
-    
-    // 消息解析寄存器
-    noc_header_t parsed_header;
-    logic [63:0] parsed_addr;
-    logic [7:0] parsed_size;
-    logic [7:0] parsed_trans_id;
-    logic [7:0] parsed_src_node;
-    logic [7:0] parsed_dest_node;
+    // 响应缓存
+    logic [L2CACHE_CONFIG.noc_header_width-1:0] resp_header_r;
+    logic [L2CACHE_CONFIG.noc_data_width-1:0] resp_data_r;
+    logic [1:0] resp_status_r;
+    logic resp_last_r;
+    logic resp_valid_r;
     
     //=============================================================================
-    // 握手信号定义
+    // 组合逻辑
     //=============================================================================
     
-    wire external_req_accept = noc_external_if.s_req_valid && noc_external_if.s_req_ready;
-    wire external_resp_accept = noc_external_if.s_resp_valid && noc_external_if.s_resp_ready;
-    wire noc_req_accept = noc_if.req_valid && noc_if.req_ready;
-    wire noc_resp_accept = noc_if.resp_valid && noc_if.resp_ready;
-    // wire out_resp_accept = noc_external_if.m_resp_valid && noc_external_if.m_resp_ready;
-    
-    //=============================================================================
-    // 组合逻辑 - 状态机和输出控制
-    //=============================================================================
-    
-    always_comb begin : comb_logic
+    always_comb begin
         // 默认值
-        ctrl_state_nxt = ctrl_state_r;
-        req_queue_head_nxt = req_queue_head_r;
-        req_queue_tail_nxt = req_queue_tail_r;
-        req_queue_full_nxt = req_queue_full_r;
-        req_queue_empty_nxt = req_queue_empty_r;
-        resp_queue_head_nxt = resp_queue_head_r;
-        resp_queue_tail_nxt = resp_queue_tail_r;
-        resp_queue_full_nxt = resp_queue_full_r;
-        resp_queue_empty_nxt = resp_queue_empty_r;
-        
-        // 外部NOC接口输出默认值
-        // 队列未满时接受新请求，队列满时拉低ready信号
-        noc_external_if.s_req_ready = !req_queue_full_r;
-        resp_queue_empty_next = (resp_queue_head_r + 1 == resp_queue_tail_r) && external_resp_accept;
-        noc_external_if.s_resp_valid = !resp_queue_empty_r && !resp_queue_empty_next;
-        noc_external_if.s_resp_header = (!resp_queue_empty_r) ? resp_queue[resp_queue_head_r].header : '0;
-        noc_external_if.s_resp_data = (!resp_queue_empty_r) ? resp_queue[resp_queue_head_r].data : '0;
-        noc_external_if.s_resp_status = (!resp_queue_empty_r) ? resp_queue[resp_queue_head_r].status : '0;
-        noc_external_if.s_resp_last = (!resp_queue_empty_r) ? resp_queue[resp_queue_head_r].last : 1'b0;
-        
-        // 控制器接口输出默认值
+        state_nxt = state_r;
         noc_if.req_valid = 1'b0;
-        noc_if.req_header = (!req_queue_empty_r) ? req_queue[req_queue_head_r].header : '0;
-        noc_if.req_data = (!req_queue_empty_r) ? req_queue[req_queue_head_r].data : '0;
-        noc_if.req_strb = (!req_queue_empty_r) ? req_queue[req_queue_head_r].strb : '0;
-        noc_if.req_last = (!req_queue_empty_r) ? req_queue[req_queue_head_r].last : 1'b0;
-        
+        noc_if.req_header = '0;
+        noc_if.req_data = '0;
+        noc_if.req_strb = '0;
+        noc_if.req_last = 1'b0;
         noc_if.resp_ready = 1'b1;
         
-        // 解析当前请求（从队列头部读取）
-        parsed_header = (!req_queue_empty_r) ? noc_header_t'(req_queue[req_queue_head_r].header) : '0;
-        parsed_addr = (!req_queue_empty_r) ? req_queue[req_queue_head_r].data[63:0] : '0;
-        parsed_size = (!req_queue_empty_r) ? req_queue[req_queue_head_r].data[71:64] : '0;
-        parsed_trans_id = parsed_header.trans_id;
-        parsed_src_node = parsed_header.src_node;
-        parsed_dest_node = parsed_header.dest_node;
+        noc_external_if.s_req_ready = 1'b0;
+        noc_external_if.s_resp_valid = 1'b0;
+        noc_external_if.s_resp_header = '0;
+        noc_external_if.s_resp_data = '0;
+        noc_external_if.s_resp_status = '0;
+        noc_external_if.s_resp_last = 1'b0;
         
-        // NOC接口逻辑：直接发送响应（如果有）
-        if (!resp_queue_empty_r) begin
-            noc_external_if.s_resp_valid = 1'b1;
-            noc_external_if.s_resp_header = resp_queue[resp_queue_head_r].header;
-            noc_external_if.s_resp_data = resp_queue[resp_queue_head_r].data;
-            noc_external_if.s_resp_status = resp_queue[resp_queue_head_r].status;
-            noc_external_if.s_resp_last = resp_queue[resp_queue_head_r].last;
-            
-            if (external_resp_accept) begin
-                // 更新响应队列头部
-                resp_queue_head_nxt = resp_queue_head_r + 1;
-                if (resp_queue_head_nxt == resp_queue_tail_r) begin
-                    resp_queue_empty_nxt = 1'b1;
-                end
-                resp_queue_full_nxt = 1'b0;
+        // 状态机
+        case (state_r)
+            STATE_IDLE: begin
+                // 空闲状态：接受新请求，发送响应
+                noc_external_if.s_req_ready = 1'b1;
                 
-                `DEBUG_PRINT("L2CACHE_NOC", $sformatf("Response accepted, queue head: %0d -> %0d, empty: %0d", resp_queue_head_r, resp_queue_head_nxt, resp_queue_empty_nxt));
+                if (resp_valid_r) begin
+                    noc_external_if.s_resp_valid = 1'b1;
+                    noc_external_if.s_resp_header = resp_header_r;
+                    noc_external_if.s_resp_data = resp_data_r;
+                    noc_external_if.s_resp_status = resp_status_r;
+                    noc_external_if.s_resp_last = resp_last_r;
+                end
+                
+                if (noc_external_if.s_req_valid && noc_external_if.s_req_ready) begin
+                    state_nxt = STATE_PROCESS_REQ;
+                end
             end
-        end else begin
-            // 队列为空时，确保valid信号为低
-            noc_external_if.s_resp_valid = 1'b0;
-        end
-        
-        // 控制器状态机
-        case (ctrl_state_r)
-            CTRL_STATE_IDLE: begin
-                // 控制器空闲状态：处理队列中的请求
-                if (!req_queue_empty_r) begin
-                    if (req_queue[req_queue_head_r].is_valid) begin
-                        // 有效请求：处理
-                        ctrl_state_nxt = CTRL_STATE_PROCESS_REQ;
-                    end else begin
-                        // 无效请求：直接丢弃并更新队列头部
-                        req_queue_head_nxt = req_queue_head_r + 1;
-                        if (req_queue_head_nxt == req_queue_tail_r) begin
-                            req_queue_empty_nxt = 1'b1;
-                        end
-                        req_queue_full_nxt = 1'b0;
+            
+            STATE_PROCESS_REQ: begin
+                // 处理请求状态：向控制器发送请求
+                if (req_valid_r) begin
+                    noc_if.req_valid = 1'b1;
+                    noc_if.req_header = req_header_r;
+                    noc_if.req_data = req_data_r;
+                    noc_if.req_strb = req_strb_r;
+                    noc_if.req_last = req_last_r;
+                    
+                    if (noc_if.req_ready) begin
+                        state_nxt = STATE_WAIT_RESP;
                     end
+                end else begin
+                    state_nxt = STATE_IDLE;
                 end
             end
             
-            CTRL_STATE_PROCESS_REQ: begin
-                // 处理控制器请求状态
-                noc_if.req_valid = 1'b1;
-                noc_if.req_header = req_queue[req_queue_head_r].header;
-                noc_if.req_data = req_queue[req_queue_head_r].data;
-                noc_if.req_strb = req_queue[req_queue_head_r].strb;
-                noc_if.req_last = req_queue[req_queue_head_r].last;
-                
-                if (noc_if.req_ready) begin
-                    ctrl_state_nxt = CTRL_STATE_WAIT_RESP;
-                end
-            end
-            
-            CTRL_STATE_WAIT_RESP: begin
-                // 等待控制器响应状态
+            STATE_WAIT_RESP: begin
+                // 等待响应状态：等待控制器响应
                 noc_if.resp_ready = 1'b1;
                 
                 if (noc_if.resp_valid) begin
-                    // 将响应加入队列并更新队列状态
-                    resp_queue[resp_queue_tail_r].header = noc_if.resp_header;
-                    resp_queue[resp_queue_tail_r].data = noc_if.resp_data;
-                    resp_queue[resp_queue_tail_r].status = noc_if.resp_status;
-                    resp_queue[resp_queue_tail_r].last = noc_if.resp_last;
-                    
-                    resp_queue_tail_nxt = resp_queue_tail_r + 1;
-                    resp_queue_empty_nxt = 1'b0;
-                    if (resp_queue_tail_nxt == resp_queue_head_r) begin
-                        resp_queue_full_nxt = 1'b1;
-                    end
-                    
-                    // 更新请求队列头部
-                    req_queue_head_nxt = req_queue_head_r + 1;
-                    if (req_queue_head_nxt == req_queue_tail_r) begin
-                        req_queue_empty_nxt = 1'b1;
-                    end
-                    req_queue_full_nxt = 1'b0;
-                    
-                    ctrl_state_nxt = CTRL_STATE_IDLE;
-
-                    `DEBUG_PRINT("L2CACHE_NOC", $sformatf("L2 Response to Noc %s", noc_response_mem_read_to_string(noc_if.resp_header, noc_if.resp_data)));
-                    `DEBUG_PRINT("L2CACHE_NOC", $sformatf("Response queue tail: %0d -> %0d, empty: %0d", resp_queue_tail_r, resp_queue_tail_nxt, resp_queue_empty_nxt));
+                    state_nxt = STATE_IDLE;
                 end
             end
             
             default: begin
-                ctrl_state_nxt = CTRL_STATE_IDLE;
+                state_nxt = STATE_IDLE;
             end
         endcase
-        
-        // 请求队列管理：所有外部请求都进入队列
-        // 使用时序逻辑确保每个请求只被处理一次
-        if (noc_external_if.s_req_valid && noc_external_if.s_req_ready) begin
-            // 将新请求加入队列
-            req_queue[req_queue_tail_r].header = noc_external_if.s_req_header;
-            req_queue[req_queue_tail_r].data = noc_external_if.s_req_data;
-            req_queue[req_queue_tail_r].strb = noc_external_if.s_req_strb;
-            req_queue[req_queue_tail_r].last = noc_external_if.s_req_last;
-            // 判断是否为有效请求（当前节点支持的消息类型）
-            req_queue[req_queue_tail_r].is_valid = (noc_external_if.s_req_header[31:24] == MSG_MEM_READ_REQ) ||
-                                                  (noc_external_if.s_req_header[31:24] == MSG_MEM_WRITE_REQ);
-            
-            // 更新队列状态
-            req_queue_tail_nxt = req_queue_tail_r + 1;
-            req_queue_empty_nxt = 1'b0;
-            if (req_queue_tail_nxt == req_queue_head_r) begin
-                req_queue_full_nxt = 1'b1;
-            end
-        end
     end
     
     //=============================================================================
-    // 时序逻辑 - 寄存器更新
+    // 时序逻辑
     //=============================================================================
     
     always_ff @(posedge clk) begin
         if (!rst_n) begin
-            // 复位逻辑
-            ctrl_state_r <= CTRL_STATE_IDLE;
-            req_queue_head_r <= '0;
-            req_queue_tail_r <= '0;
-            req_queue_full_r <= 1'b0;
-            req_queue_empty_r <= 1'b1;
-            resp_queue_head_r <= '0;
-            resp_queue_tail_r <= '0;
-            resp_queue_full_r <= 1'b0;
-            resp_queue_empty_r <= 1'b1;
+            state_r <= STATE_IDLE;
+            req_valid_r <= 1'b0;
+            resp_valid_r <= 1'b0;
         end else begin
-            // 状态更新
-            ctrl_state_r <= ctrl_state_nxt;
-            req_queue_head_r <= req_queue_head_nxt;
-            req_queue_tail_r <= req_queue_tail_nxt;
-            req_queue_full_r <= req_queue_full_nxt;
-            req_queue_empty_r <= req_queue_empty_nxt;
-            resp_queue_head_r <= resp_queue_head_nxt;
-            resp_queue_tail_r <= resp_queue_tail_nxt;
-            resp_queue_full_r <= resp_queue_full_nxt;
-            resp_queue_empty_r <= resp_queue_empty_nxt;
+            state_r <= state_nxt;
+            
+            // 缓存外部请求
+            if (noc_external_if.s_req_valid && noc_external_if.s_req_ready) begin
+                req_header_r <= noc_external_if.s_req_header;
+                req_data_r <= noc_external_if.s_req_data;
+                req_strb_r <= noc_external_if.s_req_strb;
+                req_last_r <= noc_external_if.s_req_last;
+                req_valid_r <= 1'b1;
+            end
+            
+            // 缓存控制器响应
+            if (noc_if.resp_valid && noc_if.resp_ready) begin
+                resp_header_r <= noc_if.resp_header;
+                resp_data_r <= noc_if.resp_data;
+                resp_status_r <= noc_if.resp_status;
+                resp_last_r <= noc_if.resp_last;
+                resp_valid_r <= 1'b1;
+                req_valid_r <= 1'b0;  // 清除请求缓存
+            end
+            
+            // 清除响应缓存
+            if (noc_external_if.s_resp_valid && noc_external_if.s_resp_ready) begin
+                resp_valid_r <= 1'b0;
+            end
         end
     end
-
-    // Debug Output
+    
+    //=============================================================================
+    // Debug输出
+    //=============================================================================
+    
     generate 
         if (L2CACHE_CONFIG.debug_enable == 1) begin
             always_ff @(posedge clk) begin
-
-                if (external_req_accept) begin
+                if (noc_external_if.s_req_valid && noc_external_if.s_req_ready) begin
                     $display("@%0t: [L2CACHE_NOC] External Request Accepted: %s", $time, noc_request_mem_read_to_string(noc_external_if.s_req_header, noc_external_if.s_req_data));
                 end
-
-                if (external_resp_accept) begin
+                
+                if (noc_external_if.s_resp_valid && noc_external_if.s_resp_ready) begin
                     $display("@%0t: [L2CACHE_NOC] External Response Accepted: %s", $time, noc_response_mem_read_to_string(noc_external_if.s_resp_header, noc_external_if.s_resp_data));
                 end
             end

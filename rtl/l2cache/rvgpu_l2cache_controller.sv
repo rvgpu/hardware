@@ -152,9 +152,7 @@ module rvgpu_l2cache_controller #(
     l2cache_response_t current_resp_r, current_resp_nxt;
     
     // 地址解析寄存器
-    logic [TAG_BITS-1:0] current_tag_r, current_tag_nxt;
-    logic [INDEX_BITS-1:0] current_index_r, current_index_nxt;
-    logic [OFFSET_BITS-1:0] current_offset_r, current_offset_nxt;
+    cache_addr_t current_addr_r, current_addr_nxt;
     
     // 缓存访问结果寄存器
     logic cache_hit_r, cache_hit_nxt;
@@ -203,9 +201,7 @@ module rvgpu_l2cache_controller #(
         state_nxt = state_r;
         current_req_nxt = current_req_r;
         current_resp_nxt = current_resp_r;
-        current_tag_nxt = current_tag_r;
-        current_index_nxt = current_index_r;
-        current_offset_nxt = current_offset_r;
+        current_addr_nxt = current_addr_r;
         cache_hit_nxt = cache_hit_r;
         hit_way_nxt = hit_way_r;
         selected_way_nxt = selected_way_r;
@@ -277,11 +273,9 @@ module rvgpu_l2cache_controller #(
                     current_req_nxt = req_queue[req_queue_head_r];
                     state_nxt = L2_STATE_TAG_LOOKUP;
                     cache_busy_nxt = 1'b1;
-                    
+                   
                     // 解析地址
-                    current_tag_nxt = extract_tag(current_req_nxt.addr, L2CACHE_CONFIG);
-                    current_index_nxt = extract_index(current_req_nxt.addr, L2CACHE_CONFIG);
-                    current_offset_nxt = extract_offset(current_req_nxt.addr, L2CACHE_CONFIG);
+                    current_addr_nxt = addr64_to_cache_addr(current_req_nxt.addr);
                     
                     // 更新队列头指针（在下一个周期生效）
                     req_queue_head_nxt = req_queue_head_r + 1;
@@ -295,8 +289,8 @@ module rvgpu_l2cache_controller #(
             L2_STATE_TAG_LOOKUP: begin
                 // Tag查找状态 - 发起查找请求
                 tag_if.lookup_valid = 1'b1;
-                tag_if.lookup_index = current_index_r;
-                tag_if.lookup_tag = current_tag_r;
+                tag_if.lookup_index = current_addr_r.index;
+                tag_if.lookup_tag = current_addr_r.tag;
                 
                 if (tag_if.lookup_ready) begin
                     // 握手成功，进入等待状态
@@ -341,9 +335,9 @@ module rvgpu_l2cache_controller #(
                     end
 
                     data_if.read_valid = read_valid_r;
-                    data_if.read_index = current_index_r;
+                    data_if.read_index = current_addr_r.index;
                     data_if.read_way = hit_way_r;
-                    data_if.read_offset = current_offset_r;
+                    data_if.read_offset = current_addr_r.offset;
                     data_if.read_size = current_req_r.size;
                     
                     if (data_if.read_ready) begin
@@ -368,9 +362,9 @@ module rvgpu_l2cache_controller #(
                     end
 
                     data_if.write_valid = write_valid_r;
-                    data_if.write_index = current_index_r;
+                    data_if.write_index = current_addr_r.index;
                     data_if.write_way = hit_way_r;
-                    data_if.write_offset = current_offset_r;
+                    data_if.write_offset = current_addr_r.offset;
                     data_if.write_data = current_req_r.data;
                     data_if.write_strb = current_req_r.strb;
                     data_if.write_size = current_req_r.size;
@@ -398,7 +392,7 @@ module rvgpu_l2cache_controller #(
                 if (current_req_r.read) begin
                     // 读未命中：从内存加载
                     axi_if.read_req_valid = 1'b1;
-                    axi_if.read_req_addr = {current_tag_r, current_index_r, 6'b0}; // 对齐到缓存行
+                    axi_if.read_req_addr = {current_addr_r.tag, current_addr_r.index, 6'b0}; // 对齐到缓存行
                     axi_if.read_req_len = 0; // 单次传输
                     axi_if.read_req_size = current_req_r.size; 
                     axi_if.read_req_id = current_req_r.trans_id;
@@ -456,12 +450,12 @@ module rvgpu_l2cache_controller #(
                     if (axi_if.read_resp_status == RESP_OKAY) begin
                         // 内存读取成功，发起tag更新请求
                         tag_if.update_valid = 1'b1;
-                        tag_if.update_index = current_index_r;
+                        tag_if.update_index = current_addr_r.index;
                         tag_if.update_way = selected_way_r;
                         // 保持现有的tag条目，只更新选中的way
                         tag_if.update_entry = tag_if.tag_entry;
                         // 更新选中way的状态
-                        tag_if.update_entry.tag[way_to_index(selected_way_r)] = current_tag_r;
+                        tag_if.update_entry.tag[way_to_index(selected_way_r)] = current_addr_r.tag;
                         tag_if.update_entry.valid[way_to_index(selected_way_r)] = 1'b1;
                         tag_if.update_entry.dirty[way_to_index(selected_way_r)] = 1'b0;
                         tag_if.update_entry.mesi_state[way_to_index(selected_way_r)] = MESI_EXCLUSIVE;
@@ -499,7 +493,7 @@ module rvgpu_l2cache_controller #(
                         line_write_valid_nxt = 1'b1;
                     end
                     data_if.line_write_valid = line_write_valid_r;
-                    data_if.line_write_index = current_index_r;
+                    data_if.line_write_index = current_addr_r.index;
                     data_if.line_write_way = selected_way_r;
                     data_if.line_write_data.data = axi_if.read_resp_data;
                     data_if.line_write_data.strb = '1;
@@ -582,39 +576,6 @@ module rvgpu_l2cache_controller #(
         return req;
     endfunction
     
-    // 从地址中提取Tag
-    function automatic logic [TAG_BITS-1:0] extract_tag(
-        input logic [63:0] addr,
-        input l2cache_config_t config
-    );
-        // 使用固定位宽，避免动态位选择
-        logic [TAG_BITS-1:0] tag;
-        tag = addr >> (config.index_bits + config.offset_bits);
-        return tag;
-    endfunction
-    
-    // 从地址中提取Index
-    function automatic logic [INDEX_BITS-1:0] extract_index(
-        input logic [63:0] addr,
-        input l2cache_config_t config
-    );
-        // 使用固定位宽，避免动态位选择
-        logic [INDEX_BITS-1:0] index;
-        index = (addr >> config.offset_bits) & ((1 << config.index_bits) - 1);
-        return index;
-    endfunction
-    
-    // 从地址中提取Offset
-    function automatic logic [OFFSET_BITS-1:0] extract_offset(
-        input logic [63:0] addr,
-        input l2cache_config_t config
-    );
-        // 使用固定位宽，避免动态位选择
-        logic [OFFSET_BITS-1:0] offset;
-        offset = addr & ((1 << config.offset_bits) - 1);
-        return offset;
-    endfunction
-    
     // 选择LRU替换的way
     function automatic logic [WAYS-1:0] select_lru_way(
         input logic [LRU_BITS-1:0] lru
@@ -683,9 +644,7 @@ module rvgpu_l2cache_controller #(
             state_r <= L2_STATE_IDLE;
             current_req_r <= '0;
             current_resp_r <= '0;
-            current_tag_r <= '0;
-            current_index_r <= '0;
-            current_offset_r <= '0;
+            current_addr_r <= '0;
             cache_hit_r <= 1'b0;
             hit_way_r <= '0;
             selected_way_r <= '0;
@@ -705,9 +664,7 @@ module rvgpu_l2cache_controller #(
             state_r <= state_nxt;
             current_req_r <= current_req_nxt;
             current_resp_r <= current_resp_nxt;
-            current_tag_r <= current_tag_nxt;
-            current_index_r <= current_index_nxt;
-            current_offset_r <= current_offset_nxt;
+            current_addr_r <= current_addr_nxt;
             cache_hit_r <= cache_hit_nxt;
             hit_way_r <= hit_way_nxt;
             selected_way_r <= selected_way_nxt;

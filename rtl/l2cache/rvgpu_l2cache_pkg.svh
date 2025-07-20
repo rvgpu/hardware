@@ -351,6 +351,9 @@ package rvgpu_l2cache_pkg;
         endcase
     endfunction
 
+    `include "rvgpu_l2cache_types.svh"
+
+
 endpackage : rvgpu_l2cache_pkg
 
 `endif // RVGPU_L2CACHE_PKG_SV 

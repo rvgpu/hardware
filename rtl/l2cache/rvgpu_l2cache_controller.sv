@@ -31,18 +31,6 @@ import rvgpu_l2cache_pkg::*;
 import rvgpu_internal_noc_pkg::*;
 `endif // RVGPU_INTERNAL_NOC_PKG_IMPORTED
 
-//=============================================================================
-// RVGPU L2 Cache Controller
-// 
-// 主要功能：
-// 1. 缓存状态机管理
-// 2. NOC请求解析和处理
-// 3. Tag和数据数组协调访问
-// 4. 缓存命中/未命中处理
-// 5. 替换策略实现
-// 6. 缓存一致性管理
-//=============================================================================
-
 module rvgpu_l2cache_controller #(
     parameter l2cache_config_t L2CACHE_CONFIG = DEFAULT_L2CACHE_CONFIG
 ) (
@@ -67,15 +55,16 @@ module rvgpu_l2cache_controller #(
     // Local Parameters and Types
     //=============================================================================
     
-    // 状态机参数
-    localparam int STATE_BITS = 4;
-    localparam int L2_STATE_IDLE = 4'b0000;
-    localparam int L2_STATE_TAG_LOOKUP = 4'b0001;
-    localparam int L2_STATE_TAG_WAIT = 4'b0010;
-    localparam int L2_STATE_DATA_ACCESS = 4'b0011;
-    localparam int L2_STATE_MISS_HANDLE = 4'b0100;
-    localparam int L2_STATE_MEMORY_ACCESS = 4'b1000;
-    localparam int L2_STATE_TAG_UPDATE_WAIT = 4'b1001;
+    // 状态机定义
+    typedef enum {
+        L2_STATE_IDLE = 4'b0000,
+        L2_STATE_TAG_LOOKUP = 4'b0001,
+        L2_STATE_TAG_WAIT = 4'b0010,
+        L2_STATE_DATA_ACCESS = 4'b0011,
+        L2_STATE_MISS_HANDLE = 4'b0100,
+        L2_STATE_MEMORY_ACCESS = 4'b1000,
+        L2_STATE_TAG_UPDATE_WAIT = 4'b1001
+    } l2cache_state_t;
     
     // 请求队列深度
     localparam int REQ_QUEUE_DEPTH = 16;
@@ -85,7 +74,7 @@ module rvgpu_l2cache_controller #(
     localparam int NODE_L2_CACHE = 8'h02;
     
     // 状态类型定义
-    typedef logic [STATE_BITS-1:0] l2cache_state_t;
+
     
     // 请求和响应类型定义
     typedef struct packed {

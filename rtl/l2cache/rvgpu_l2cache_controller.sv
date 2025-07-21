@@ -73,9 +73,6 @@ module rvgpu_l2cache_controller #(
     // 节点ID
     localparam int NODE_L2_CACHE = 8'h02;
     
-    // 状态类型定义
-
-    
     // 请求和响应类型定义
     typedef struct packed {
         logic [63:0] addr;
@@ -150,15 +147,12 @@ module rvgpu_l2cache_controller #(
     l2cache_perf_counters_t perf_counters_r, perf_counters_nxt;
     
     // 调试寄存器
-    logic [63:0] debug_addr_r, debug_addr_nxt;
-    logic [7:0] debug_trans_id_r, debug_trans_id_nxt;
     logic cache_busy_r, cache_busy_nxt;
     logic write_valid_r, write_valid_nxt;
     logic read_valid_r, read_valid_nxt; 
     logic line_read_valid_r, line_read_valid_nxt;
     logic line_write_valid_r, line_write_valid_nxt;
     
-
     //=============================================================================
     // 握手信号定义
     //=============================================================================
@@ -372,7 +366,7 @@ module rvgpu_l2cache_controller #(
                 if (current_req_r.read) begin
                     // 读未命中：从内存加载
                     axi_if.read_req_valid = 1'b1;
-                    axi_if.read_req_addr = {current_addr_r.tag, current_addr_r.index, 6'b0}; // 对齐到缓存行
+                    axi_if.read_req_addr = request_mem_addr_aligned(current_addr_r); // 对齐到缓存行
                     axi_if.read_req_len = 0; // 单次传输
                     axi_if.read_req_size = current_req_r.size; 
                     axi_if.read_req_id = current_req_r.trans_id;

@@ -33,7 +33,8 @@ package rvgpu_l2cache_pkg;
     typedef struct packed {
         int unsigned cache_size;           // 缓存总容量(KB)
         int unsigned slice_number;         // slice数量
-        int unsigned line_width;           // 缓存行大小(位)
+        int unsigned line_width;           // 缓存行宽度(位)
+        int unsigned line_strb;            // 字节使能位宽度
         int unsigned ways;                 // 组相联度
         int unsigned sets;                 // 组数
         int unsigned tag_bits;             // Tag位宽
@@ -52,6 +53,7 @@ package rvgpu_l2cache_pkg;
         cache_size: `RVGPU_CONST_L2CACHE_SIZE,
         slice_number: `RVGPU_CONST_L2CACHE_SLICE_NUMBER,
         line_width: `RVGPU_CONST_L2CACHE_LINE_WIDTH,
+        line_strb: `RVGPU_CONST_L2CACHE_LINE_STRB,                    // 512位 / 8 = 64字节
         ways: `RVGPU_CONST_L2CACHE_WAYS,
         sets: `RVGPU_CONST_L2CACHE_SETS,
         tag_bits: `RVGPU_CONST_L2CACHE_TAG_BITS,
@@ -80,8 +82,8 @@ package rvgpu_l2cache_pkg;
     
     // 缓存行数据结构
     typedef struct packed {
-        logic [511:0] data;               // 64字节缓存行数据
-        logic [63:0]  strb;               // 字节使能位
+        logic [`RVGPU_CONST_L2CACHE_LINE_WIDTH-1:0]     data; // 512位缓存行数据
+        logic [`RVGPU_CONST_L2CACHE_LINE_STRB-1:0]      strb; // 64字节使能位
     } l2cache_line_t;
     
     // 缓存访问请求结构
@@ -162,42 +164,6 @@ package rvgpu_l2cache_pkg;
         logic [31:0] prefetch_count;      // 预取计数
         logic [31:0] error_count;         // 错误计数
     } l2cache_perf_counters_t;
-    
-    //=============================================================================
-    // 地址解析函数
-    //=============================================================================
-    
-    // 从地址中提取Tag
-    function automatic logic [31:0] extract_tag(
-        input logic [63:0] addr,
-        input l2cache_config_t config
-    );
-        return addr[63:32];
-    endfunction
-    
-    // 从地址中提取索引
-    function automatic logic [9:0] extract_index(
-        input logic [63:0] addr,
-        input l2cache_config_t config
-    );
-        return addr[31:22];
-    endfunction
-    
-    // 从地址中提取偏移
-    function automatic logic [5:0] extract_offset(
-        input logic [63:0] addr,
-        input l2cache_config_t config
-    );
-        return addr[21:16];
-    endfunction
-    
-    // 从地址中提取行内偏移
-    function automatic logic [5:0] extract_line_offset(
-        input logic [63:0] addr,
-        input l2cache_config_t config
-    );
-        return addr[5:0];
-    endfunction
     
     //=============================================================================
     // LRU管理函数
@@ -357,3 +323,5 @@ package rvgpu_l2cache_pkg;
 endpackage : rvgpu_l2cache_pkg
 
 `endif // RVGPU_L2CACHE_PKG_SV 
+
+

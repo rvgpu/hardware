@@ -41,4 +41,9 @@ function automatic cache_addr_t addr64_to_cache_addr(logic [63:0] addr64);
     return addr;
 endfunction
 
+function automatic logic [63:0] request_mem_addr_aligned(cache_addr_t addr);
+    logic [`RVGPU_CONST_L2CACHE_OFFSET_BITS-1:0] zero_offset = 0;
+    return {addr.tag, addr.index, zero_offset};
+endfunction
+
 `endif // RVGPU_L2CACHE_TYPES_SVH

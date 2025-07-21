@@ -33,7 +33,7 @@ package rvgpu_l2cache_pkg;
     typedef struct packed {
         int unsigned cache_size;           // 缓存总容量(KB)
         int unsigned slice_number;         // slice数量
-        int unsigned line_size;            // 缓存行大小(字节)
+        int unsigned line_width;           // 缓存行大小(位)
         int unsigned ways;                 // 组相联度
         int unsigned sets;                 // 组数
         int unsigned tag_bits;             // Tag位宽
@@ -51,7 +51,7 @@ package rvgpu_l2cache_pkg;
     localparam l2cache_config_t DEFAULT_L2CACHE_CONFIG = '{
         cache_size: `RVGPU_CONST_L2CACHE_SIZE,
         slice_number: `RVGPU_CONST_L2CACHE_SLICE_NUMBER,
-        line_size: `RVGPU_CONST_L2CACHE_LINE_SIZE,
+        line_width: `RVGPU_CONST_L2CACHE_LINE_WIDTH,
         ways: `RVGPU_CONST_L2CACHE_WAYS,
         sets: `RVGPU_CONST_L2CACHE_SETS,
         tag_bits: `RVGPU_CONST_L2CACHE_TAG_BITS,

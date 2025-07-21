@@ -106,9 +106,6 @@ module rvgpu_l2cache_controller #(
         logic [31:0] error_count;
     } l2cache_perf_counters_t;
     
-    // 使用 rvgpu_internal_noc_pkg 中定义的类型
-    // noc_header_t 已在包中定义
-    
     // 响应状态
     localparam int RESP_OKAY = 2'b00;
     localparam int RESP_SLVERR = 2'b10;
@@ -119,13 +116,7 @@ module rvgpu_l2cache_controller #(
     localparam int MESI_SHARED = 2'b10;
     localparam int MESI_MODIFIED = 2'b11;
     
-    // 使用 rvgpu_internal_noc_pkg 中定义的类型
-    // noc_msg_type_t 已在包中定义
-    
     // 从配置中提取的本地参数
-    localparam int TAG_BITS = L2CACHE_CONFIG.tag_bits;
-    localparam int INDEX_BITS = L2CACHE_CONFIG.index_bits;
-    localparam int OFFSET_BITS = L2CACHE_CONFIG.offset_bits;
     localparam int WAYS = L2CACHE_CONFIG.ways;
     localparam int LRU_BITS = L2CACHE_CONFIG.lru_bits;
     

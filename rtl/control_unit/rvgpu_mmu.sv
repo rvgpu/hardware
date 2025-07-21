@@ -210,26 +210,28 @@ module rvgpu_mmu #(
             end
             
             MMU_STATE_PAGE_WAIT: begin
+                logic [63:0] respaddr;
                 noc_resp_ready_nxt = 1'b1;
+                respaddr = select_resp_data(noc_if.m_resp_data);
                 
                 if (noc_resp_accept && noc_if.m_resp_status == 2'b00) begin
                     // 使用查找表确定下一步状态
                     case (page_level_r)
                         L1_LEVEL: begin
-                            current_pt_base_nxt = noc_if.m_resp_data[PA_WIDTH-1:0];
+                            current_pt_base_nxt = respaddr[PA_WIDTH-1:0];
                             page_level_nxt = L2_LEVEL;
                             state_nxt = MMU_STATE_PAGE_WALK;
                             noc_resp_ready_nxt = 1'b0;
                         end
                         L2_LEVEL: begin
-                            current_pt_base_nxt = noc_if.m_resp_data[PA_WIDTH-1:0];
+                            current_pt_base_nxt = respaddr[PA_WIDTH-1:0];
                             page_level_nxt = L3_LEVEL;
                             state_nxt = MMU_STATE_PAGE_WALK;
                             noc_resp_ready_nxt = 1'b0;
                         end
                         L3_LEVEL: begin
                             // L3页表查找成功，得到物理页号
-                            paddr_nxt = {noc_if.m_resp_data[PA_WIDTH-1:PAGE_OFFSET_BITS], vaddr_r[PAGE_OFFSET_BITS-1:0]};
+                            paddr_nxt = {respaddr[PA_WIDTH-1:PAGE_OFFSET_BITS], vaddr_r[PAGE_OFFSET_BITS-1:0]};
                             
                             // 更新TLB - 设置输出寄存器
                             tlb_update_valid_nxt = 1'b1;
@@ -240,7 +242,7 @@ module rvgpu_mmu #(
                                 accessed: 1'b1,
                                 permission: 2'b11,  // 读写权限
                                 tag: vaddr_r[VA_WIDTH-1:PAGE_OFFSET_BITS+TLB_INDEX_BITS],
-                                ppn: noc_if.m_resp_data[PA_WIDTH-1:PAGE_OFFSET_BITS]
+                                ppn: respaddr[PA_WIDTH-1:PAGE_OFFSET_BITS]
                             };
 
                             state_nxt = MMU_STATE_TLB_UPDATE;
@@ -383,6 +385,17 @@ module rvgpu_mmu #(
     assign mmu_if.resp_hit = (state_r == MMU_STATE_RESPONSE);
     assign mmu_if.resp_status = (state_r == MMU_STATE_ERROR) ? 2'b10 : 2'b00;
     
+    function automatic logic [63:0] select_resp_data(input logic [255:0] data);
+        logic [63:0] result;
+        case (noc_req_data_r.req_mem_read.addr[4:3])
+            2'b00: result = data[63:0];
+            2'b01: result = data[127:64];
+            2'b10: result = data[191:128];
+            2'b11: result = data[255:192];
+        endcase
+        return result;
+    endfunction
+
     //=============================================================================
     // 10. 调试输出 - 使用 generate 块进行条件编译
     //=============================================================================
@@ -391,6 +404,10 @@ module rvgpu_mmu #(
         always_ff @(posedge clk) begin
             if (state_r == MMU_STATE_IDLE && req_accept) begin
                 `DEBUG_PRINT("MMU", $sformatf("MMU Request, vaddr: 0x%h, req_read: %b, req_write: %b", mmu_if.req_vaddr, req_read_r, req_write_r));
+            end
+
+            if ((state_r == MMU_STATE_PAGE_WAIT) && noc_resp_accept) begin
+                `DEBUG_PRINT("MMU", $sformatf("L%d Page Wait, Noc response: %s", page_level_r, noc_response_mem_read_to_string(noc_if.m_resp_header, noc_if.m_resp_data)));
             end
 
             if (state_r == MMU_STATE_PAGE_WALK && noc_req_accept) begin

@@ -154,7 +154,7 @@ module ut_rvgpu_mmu_basic_unit_test;
     
     // 第三次NOC请求（L3页表访问）
     test_base.wait_for_noc_request(noc_addr, noc_size, 100);  // 增加到100个周期
-    test_base.send_noc_response({208'h0, 39'h40000000}, 2'b00, 8'h00);  // 物理页号
+    test_base.send_noc_response(128'h00000000_40000000_00000000_00000000, 2'b00, 8'h00);  // 物理页号
     
     // 等待MMU响应线程完成
     wait fork;
@@ -199,7 +199,7 @@ module ut_rvgpu_mmu_basic_unit_test;
     test_base.wait_for_noc_request(noc_addr, noc_size, 100);
     
     // 发送L3页表条目（包含物理页号）
-    test_base.send_noc_response({208'h0, 39'h40000000}, 2'b00, 8'h00);
+    test_base.send_noc_response(256'h00000000_00000000_00000000_40000000_00000000_00000000_00000000_00000000, 2'b00, 8'h00);
     
     // 等待MMU响应线程完成
     wait fork;
@@ -241,7 +241,7 @@ module ut_rvgpu_mmu_basic_unit_test;
     
     // 第三次NOC请求（L3页表访问）
     test_base.wait_for_noc_request(noc_addr, noc_size, 100);
-    test_base.send_noc_response({208'h0, 39'h40000000}, 2'b00, 8'h00);  // 物理页号
+    test_base.send_noc_response(256'h00000000_40000000_00000000_00000000_00000000_00000000_00000000_00000000, 2'b00, 8'h00);  // 物理页号
     
     // 等待MMU响应线程完成
     wait fork;
@@ -308,7 +308,15 @@ module ut_rvgpu_mmu_basic_unit_test;
       
       // 第三次NOC请求（L3页表访问）
       test_base.wait_for_noc_request(noc_addr, noc_size, 100);
-      test_base.send_noc_response({208'h0, 39'h40000000}, 2'b00, 8'h00);  // 物理页号
+      if (i == 0) begin
+        test_base.send_noc_response(256'h00000000_00000000_00000000_00000000_00000000_00000000_00000000_40000000, 2'b00, 8'h00);
+      end else if (i == 1) begin
+        test_base.send_noc_response(256'h00000000_00000000_00000000_00000000_00000000_40000000_00000000_00000000, 2'b00, 8'h00);  // 物理页号
+      end else if (i == 2) begin
+        test_base.send_noc_response(256'h00000000_00000000_00000000_40000000_00000000_00000000_00000000_00000000, 2'b00, 8'h00);  // 物理页号
+      end else if (i == 3) begin
+        test_base.send_noc_response(256'h00000000_40000000_00000000_00000000_00000000_00000000_00000000_00000000, 2'b00, 8'h00);  // 物理页号
+      end
       
       // 等待MMU响应线程完成
       wait fork;

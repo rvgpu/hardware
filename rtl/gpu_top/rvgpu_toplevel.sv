@@ -54,7 +54,7 @@ module rvgpu_toplevel (
 );
     rvgpu_internal_noc_if control_unit_noc_if();
     rvgpu_internal_noc_if l2cache_noc_if();
-    rvgpu_internal_noc_if shader_core_noc_if [2]();
+    rvgpu_internal_noc_if gpc_noc_if [2]();
 
     // Control Unit - 使用control_unit_config_t参数
     rvgpu_control_unit u_control_unit (
@@ -73,16 +73,16 @@ module rvgpu_toplevel (
         .mem_if(mem_if[0])  // 只使用第一个接口
     );
 
-    // Shader Core 实例化
-    rvgpu_shader_core #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) u_shader_core_0 (
+    // GPC 实例化
+    rvgpu_gpc_top #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) u_gpc_0 (
         .clk(clk),
         .rst_n(rst_n),
-        .noc_if(shader_core_noc_if[0].device)
+        .noc_if(gpc_noc_if[0].device)
     );
-    rvgpu_shader_core #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) u_shader_core_1 (
+    rvgpu_gpc_top #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) u_gpc_1 (
         .clk(clk),
         .rst_n(rst_n),
-        .noc_if(shader_core_noc_if[1].device)
+        .noc_if(gpc_noc_if[1].device)
     );
 
     // NOC - 连接所有模块的网络
@@ -91,7 +91,7 @@ module rvgpu_toplevel (
         .rst_n(rst_n),
         .control_unit(control_unit_noc_if.noc),
         .l2cache(l2cache_noc_if.noc),
-        .shader_core(shader_core_noc_if)
+        .shader_core(gpc_noc_if)
     );
 
 endmodule : rvgpu_toplevel

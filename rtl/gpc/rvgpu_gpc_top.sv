@@ -13,13 +13,13 @@
 // limitations under the License.
 //=============================================================================
 
-`ifndef RVGPU_SHADER_CORE_SV
-`define RVGPU_SHADER_CORE_SV
+`ifndef RVGPU_GPC_TOP_SV
+`define RVGPU_GPC_TOP_SV
 
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_internal_noc_pkg.svh"
 
-module rvgpu_shader_core #(
+module rvgpu_gpc_top #(
     parameter noc_config_t NOC_CONFIG = DEFAULT_NOC_CONFIG
 ) (
     input  logic clk,
@@ -27,6 +27,6 @@ module rvgpu_shader_core #(
     rvgpu_internal_noc_if.device noc_if
 );
     // 空实现
-endmodule : rvgpu_shader_core
+endmodule : rvgpu_gpc_top
 
-`endif // RVGPU_SHADER_CORE_SV 
+`endif // RVGPU_GPC_TOP_SV 

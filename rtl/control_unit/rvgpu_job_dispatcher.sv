@@ -239,10 +239,6 @@ module rvgpu_job_dispatcher #(
                 state_n = STATE_IDLE;
             end
         endcase
-
-        // 错误检测
-        error_status_n[ERROR_BIT_MMU_FAULT] = mmu_if.resp_valid && (mmu_if.resp_status != 2'b00);
-        error_status_n[ERROR_BIT_NOC_ERROR] = noc_if.m_resp_valid && (noc_if.m_resp_status != 2'b00);
     end
 
     //==================== 时序逻辑：寄存器更新 ====================

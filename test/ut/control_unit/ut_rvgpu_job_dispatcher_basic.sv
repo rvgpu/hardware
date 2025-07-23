@@ -345,7 +345,6 @@ module ut_rvgpu_job_dispatcher_basic_unit_test;
     `FAIL_IF(error !== 1'b1)  // 应该有错误
     `FAIL_IF(complete !== 1'b0)  // 不应该完成
     
-    // 验证DUT不会继续发送MMU请求（没有重试机制）
     // 等待一段时间，确保没有新的MMU请求
     clk_mgr.wait_clks(10);
     `FAIL_IF(mmu_if.req_valid !== 1'b0)  // 不应该有新的MMU请求

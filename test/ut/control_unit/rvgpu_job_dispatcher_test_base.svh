@@ -496,7 +496,7 @@ class rvgpu_job_dispatcher_test_base;
         cmd.header.flags = 16'h1;
         cmd.header.command_type = CMD_COMPUTE_JOB;
         cmd.prog.argument_size = 32'h10; // 示例参数
-        cmd.prog.work_dim = '{x: 8'd2, y: 8'd1, z: 8'd1, w: 8'd1};
+        cmd.prog.work_dim = '{x: 8'd1, y: 8'd0, z: 8'd0, w: 8'd0};
         cmd.prog.program_addr = 64'h10000000;
 
         fork

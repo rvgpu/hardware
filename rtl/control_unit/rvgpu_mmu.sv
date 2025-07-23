@@ -407,7 +407,7 @@ module rvgpu_mmu #(
             end
 
             if ((state_r == MMU_STATE_PAGE_WAIT) && noc_resp_accept) begin
-                `DEBUG_PRINT("MMU", $sformatf("L%d Page Wait, Noc response: %s", page_level_r, noc_response_mem_read_to_string(noc_if.m_resp_header, noc_if.m_resp_data)));
+                `DEBUG_PRINT("MMU", $sformatf("L%-d Page Wait, Noc response: %s", page_level_r + 1, noc_response_mem_read_to_string(noc_if.m_resp_header, noc_if.m_resp_data)));
             end
 
             if (state_r == MMU_STATE_PAGE_WALK && noc_req_accept) begin

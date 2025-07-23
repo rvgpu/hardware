@@ -55,8 +55,8 @@ module ut_rvgpu_job_dispatcher_basic_unit_test;
   logic [63:0] package_addr, mmu_addr;
   logic [47:0] vaddr;
   logic read, write;
-  logic [31:0] noc_addr;
-  logic [15:0] noc_size;
+  logic [63:0] noc_addr;
+  logic [7:0] noc_size;
 
   //===================================
   // Build
@@ -211,14 +211,14 @@ module ut_rvgpu_job_dispatcher_basic_unit_test;
     
     // 等待Header fetch MMU请求 (重构后直接从Header fetch开始)
     test_base.wait_for_mmu_request(vaddr, read, write, 50);
+
     test_base.send_mmu_translation_response(48'h4000, 1'b1, 2'b00);
     $display("@%0t: MMU response sent", $time);
     
     // 等待NOC请求
-    $display("@%0t: Waiting for NOC request", $time);
     test_base.wait_for_noc_request(noc_addr, noc_size, 50);
     `FAIL_IF(noc_addr !== 32'h4000)
-    `FAIL_IF(noc_size !== 16'h8)  // Header大小
+    `FAIL_IF(noc_size !== NOC_SIZE_8B)  // Header大小
     
     // 发送NOC响应
     test_header.payload_size = 16'h20;
@@ -267,11 +267,13 @@ module ut_rvgpu_job_dispatcher_basic_unit_test;
     $display("@%0t: Testing multiple operations", $time);
     
     // 第一次操作
+    $display("@%0t: First Operate", $time);
     test_base.simulate_job_dispatcher_workflow(64'h1000, 64'h2000);
     
     clk_mgr.wait_clks(20);
     
     // 第二次操作
+    $display("@%0t: Second Operate", $time);
     test_base.simulate_job_dispatcher_workflow(64'h3000, 64'h4000);
     
     $display("@%0t: Multiple operations test completed", $time);

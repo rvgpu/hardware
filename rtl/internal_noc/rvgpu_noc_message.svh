@@ -72,7 +72,37 @@ typedef enum l2_t {
     RESP_SLVERR             = 2'b10,    // 从设备错误
     RESP_DECERR             = 2'b11     // 解码错误
 } noc_resp_t;
-    
+
+// noc size与axi awsize/arsize 相同
+localparam l8_t NOC_SIZE_1B = 8'h00;        // 0: 1字节传输
+localparam l8_t NOC_SIZE_2B = 8'h01;        // 1: 2字节传输
+localparam l8_t NOC_SIZE_4B = 8'h02;        // 2: 4字节传输
+localparam l8_t NOC_SIZE_8B = 8'h03;        // 3: 8字节传输
+localparam l8_t NOC_SIZE_16B = 8'h04;       // 4: 16字节传输
+localparam l8_t NOC_SIZE_32B = 8'h05;       // 5: 32字节传输
+
+typedef struct packed {
+    logic [63:0]    reserver2;
+    logic [63:0]    reserver1;
+    logic [63-8:0]  reserved0;
+    logic [7:0]     size;
+    logic [63:0]    addr;
+} noc_req_mem_read_t;
+
+typedef struct packed {
+    logic [63:0]    reserver2;
+    logic [63:0]    reserver1;
+    logic [63:0]    reserved0;
+    logic [63:0]    data;
+} noc_resp_mem_read_t;
+
+typedef union packed {
+    logic [`RVGPU_CONST_CU_MAX_PAYLOAD_SIZE-1:0] payload_256b; // 256bit   
+    noc_req_mem_read_t req_mem_read;
+    noc_resp_mem_read_t resp_mem_read;
+} noc_payload_t;
+
+
 function automatic noc_node_id_t get_noc_header_dest_node(input noc_header_t header);
     return header.dest_node;
 endfunction
@@ -105,6 +135,21 @@ function automatic noc_header_t build_noc_header_mem_request(
 );
     return build_noc_header(MSG_MEM_READ_REQ, trans_id, src_node, NODE_L2_CACHE, local_addr);
 endfunction
+
+function automatic noc_header_t build_noc_header_mem_response(
+    input noc_trans_id_t    trans_id,
+    input noc_node_id_t     dst_node,
+    input noc_local_addr_t  local_addr = 8'h00
+);
+    return build_noc_header(MSG_MEM_READ_RESP, trans_id, NODE_L2_CACHE, dst_node, local_addr); 
+endfunction
+
+function automatic noc_header_t build_noc_header_jobblock_dispatch(
+    input noc_trans_id_t    trans_id,
+    input noc_node_id_t     dst_node
+);
+    return build_noc_header(MSG_COMPUTE_REQ, trans_id, NODE_CONTROL, dst_node, NOC_NODE_CONTROL_JD);
+endfunction
     
 // 解析NOC header
 function automatic void parse_noc_header(
@@ -121,35 +166,6 @@ function automatic void parse_noc_header(
     dest_node = noc_node_id_t'(header.dest_node);
     local_addr = header.local_addr;
 endfunction
-
-// noc size与axi awsize/arsize 相同
-localparam l8_t NOC_SIZE_1B = 8'h00;        // 0: 1字节传输
-localparam l8_t NOC_SIZE_2B = 8'h01;        // 1: 2字节传输
-localparam l8_t NOC_SIZE_4B = 8'h02;        // 2: 4字节传输
-localparam l8_t NOC_SIZE_8B = 8'h03;        // 3: 8字节传输
-localparam l8_t NOC_SIZE_16B = 8'h04;       // 4: 16字节传输
-localparam l8_t NOC_SIZE_32B = 8'h05;       // 5: 32字节传输
-
-typedef struct packed {
-    logic [63:0]    reserver2;
-    logic [63:0]    reserver1;
-    logic [63-8:0]  reserved0;
-    logic [7:0]     size;
-    logic [63:0]    addr;
-} noc_req_mem_read_t;
-
-typedef struct packed {
-    logic [63:0]    reserver2;
-    logic [63:0]    reserver1;
-    logic [63:0]    reserved0;
-    logic [63:0]    data;
-} noc_resp_mem_read_t;
-
-typedef union packed {
-    logic [`RVGPU_CONST_CU_MAX_PAYLOAD_SIZE-1:0] payload_256b; // 256bit   
-    noc_req_mem_read_t req_mem_read;
-    noc_resp_mem_read_t resp_mem_read;
-} noc_payload_t;
 
 function automatic noc_payload_t build_noc_payload_request_mem_read(
     input logic [63:0] addr,

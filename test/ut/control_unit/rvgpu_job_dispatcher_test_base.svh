@@ -25,7 +25,7 @@ typedef struct packed {
 
 // Virtual interface types for task parameters
 typedef virtual job_dispatcher_if jd_vif_t;
-typedef virtual rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) noc_vif_t;
+typedef virtual rvgpu_internal_noc_if noc_vif_t;
 typedef virtual mmu_if #(.VA_WIDTH(48), .PA_WIDTH(48)) mmu_vif_t;
 typedef virtual clk_rst_if clk_rst_vif_t;
 
@@ -85,6 +85,7 @@ class rvgpu_job_dispatcher_test_base;
         // Initialize test headers
         for (int i = 0; i < 8; i++) begin
             test_headers[i] = '{
+                next_command: 64'h0,
                 payload_size: 16'h20 + (i * 16'h10),
                 flags: 16'h0000 + (i == 0 ? 16'h0001 : 16'h0000),  // 第一个header表示job结束
                 command_type: CMD_COMPUTE_JOB + (i % 3)
@@ -245,10 +246,11 @@ class rvgpu_job_dispatcher_test_base;
 
     // Send NOC read response
     task send_noc_read_response(input logic [255:0] data, input logic [1:0] status, input logic [7:0] transaction_id);
-        $display("@%0t: Sending NOC read response: status=%0d, id=%0d, data=0x%016x", $time, status, transaction_id, data);
+        $display("@%0t: Sending NOC read response: status=%0d, id=%0d, data=0x%h", $time, status, transaction_id, data);
+        clk_mgr.wait_clks(5);
         
         noc_if.m_resp_valid = 1'b1;
-        noc_if.m_resp_header = {8'h02, transaction_id, 4'h0, 4'h1, 8'h00};
+        noc_if.m_resp_header = build_noc_header_mem_response(transaction_id, NODE_CONTROL, NOC_NODE_CONTROL_JD);
         noc_if.m_resp_data = data;
         noc_if.m_resp_status = status;
         noc_if.m_resp_last = 1'b1;
@@ -257,15 +259,14 @@ class rvgpu_job_dispatcher_test_base;
         while (!noc_if.m_resp_ready) begin
             clk_mgr.wait_posedge();
         end
-        clk_mgr.delay_ns(1);
-        // clk_mgr.wait_posedge_and_delay_ns(1);  // 等待时钟上升沿并延迟1ns
+        clk_mgr.wait_posedge_and_delay_ns();
         
         noc_if.m_resp_valid = 1'b0;
         noc_if.m_resp_last = 1'b0;
     endtask
 
     // Wait for NOC request with handshake
-    task wait_for_noc_request(output logic [31:0] addr, output logic [15:0] size, input int timeout_cycles);
+    task wait_for_noc_request(output logic [63:0] addr, output logic [7:0] size, input int timeout_cycles);
         int cycle_count = 0;
         $display("@%0t: Waiting for NOC request", $time);
         
@@ -274,14 +275,15 @@ class rvgpu_job_dispatcher_test_base;
             cycle_count++;
         end
         
+        clk_mgr.delay_ns(1);
         if (cycle_count >= timeout_cycles) begin
             $display("@%0t: ERROR: NOC request timeout after %0d cycles", $time, timeout_cycles);
             `FAIL_IF(1)
         end else begin
-            addr = noc_if.m_req_data[63:32];
-            size = noc_if.m_req_data[31:16];
-            $display("@%0t: NOC request received after %0d cycles: addr=0x%08x, size=%0d", 
-                     $time, cycle_count, addr, size);
+            noc_payload_t noc_req = noc_if.m_req_data;
+            addr = noc_req.req_mem_read.addr;
+            size = noc_req.req_mem_read.size;
+            $display("@%0t: NOC request data: %s", $time, noc_request_mem_read_to_string(noc_if.m_req_header, noc_if.m_req_data));
             
             // 确保m_req_ready为1，允许握手完成
             noc_if.m_req_ready = 1'b1;
@@ -296,6 +298,8 @@ class rvgpu_job_dispatcher_test_base;
     task send_mmu_translation_response(input logic [47:0] paddr, input logic hit, input logic [1:0] status);
         $display("@%0t: Sending MMU translation response: paddr=0x%012x, hit=%0d, status=%0d", 
                  $time, paddr, hit, status);
+        // Delay cycles
+        clk_mgr.wait_clks(5);
         
         mmu_if.resp_valid = 1'b1;
         mmu_if.resp_paddr = paddr;
@@ -306,7 +310,7 @@ class rvgpu_job_dispatcher_test_base;
         while (!mmu_if.resp_ready) begin
             clk_mgr.wait_posedge();
         end
-        clk_mgr.delay_ns(1);
+        clk_mgr.wait_posedge_and_delay_ns();
         
         mmu_if.resp_valid = 1'b0;
     endtask
@@ -461,6 +465,7 @@ class rvgpu_job_dispatcher_test_base;
         logic [31:0] noc_addr;
         logic [15:0] noc_size;
         logic [63:0] payload_addr;
+        command_t cmd;
         
         $display("@%0t: Starting Job Dispatcher workflow simulation", $time);
         
@@ -469,7 +474,7 @@ class rvgpu_job_dispatcher_test_base;
         
         // 2. 直接进入MMU请求阶段（config在enable时已经生效）
         
-        // 3. Wait for Header fetch MMU request (重构后直接从Header fetch开始)
+        // 3. Wait for Header fetch MMU request
         wait_for_mmu_request(vaddr, read, write, 50);
         `FAIL_IF(vaddr !== package_addr[47:0])
         `FAIL_IF(read !== 1'b1)
@@ -481,34 +486,54 @@ class rvgpu_job_dispatcher_test_base;
         // 5. Wait for Header NOC request
         wait_for_noc_request(noc_addr, noc_size, 50);
         `FAIL_IF(noc_addr !== 32'h2000)
-        `FAIL_IF(noc_size !== 16'h8)
+        `FAIL_IF(noc_size !== NOC_SIZE_8B)
+
+        clk_mgr.wait_clks(2);
+        // 6. Send Header NOC response
+        // Resp Command Header
+        cmd.header.next_command = 64'h0;  // 设置next_command字段
+        cmd.header.payload_size = 16'h64;
+        cmd.header.flags = 16'h1;
+        cmd.header.command_type = CMD_COMPUTE_JOB;
+        cmd.prog.argument_size = 32'h10; // 示例参数
+        cmd.prog.work_dim = '{x: 8'd2, y: 8'd1, z: 8'd1, w: 8'd1};
+        cmd.prog.program_addr = 64'h10000000;
+
+        fork
+            wait_for_job_block_and_response(100);
+        join_none
+
+        fork
+            wait_for_job_completion(100);
+        join_none
+
+        send_noc_read_response(cmd, 2'b00, 8'h00);
+
+        $display("@%0t: Job Dispatcher workflow simulation completed", $time);
+    endtask
+
+    task wait_for_job_block_and_response(input int timeout_cycles);
+        int cycle_count = 0;
+        $display("@%0t: Waiting for Job Block and Response", $time);
         
-        // 6. Send Header NOC response - 修正数据格式
-        // 构造正确的header数据：{payload_size[15:0], flags[15:0], command_type[31:0]}
-        send_noc_read_response({192'h0, {test_headers[0].payload_size, test_headers[0].flags, test_headers[0].command_type}}, 2'b00, 8'h00);
+        while (!noc_if.m_req_valid && (cycle_count < timeout_cycles)) begin
+            clk_mgr.wait_posedge();
+            cycle_count++;
+        end
         
-        // 7. Wait for Payload fetch MMU request
-        wait_for_mmu_request(vaddr, read, write, 50);
-        payload_addr = package_addr + 8'h8;
-        `FAIL_IF(vaddr !== payload_addr[47:0])
-        `FAIL_IF(read !== 1'b1)
-        `FAIL_IF(write !== 1'b0)
-        
-        // 8. Send Payload fetch MMU response
-        send_mmu_translation_response(48'h2008, 1'b1, 2'b00);
-        
-        // 9. Wait for Payload NOC request
-        wait_for_noc_request(noc_addr, noc_size, 50);
-        `FAIL_IF(noc_addr !== 32'h2008)
-        `FAIL_IF(noc_size !== test_headers[0].payload_size)
-        
-        // 10. Send Payload NOC response
-        send_noc_read_response(test_payloads[0], 2'b00, 8'h01);
-        
-        // 11. Wait for completion
-        wait_for_job_completion(100);
-        
-        $display("@%0t: Job Dispatcher workflow simulation completed (optimized)", $time);
+        clk_mgr.delay_ns(1);
+        if (cycle_count >= timeout_cycles) begin
+            $display("@%0t: ERROR: NOC request timeout after %0d cycles", $time, timeout_cycles);
+            `FAIL_IF(1)
+        end else begin
+            noc_payload_t noc_req = noc_if.m_req_data;
+            $display("@%0t: NOC request data: %s", $time, noc_request_mem_read_to_string(noc_if.m_req_header, noc_if.m_req_data));
+            
+            // 确保m_req_ready为1，允许握手完成
+            noc_if.m_req_ready = 1'b1;
+        end
+
+        send_noc_read_response(256'h0, 2'b00, 8'h00);
     endtask
 
 endclass

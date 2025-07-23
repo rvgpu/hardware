@@ -23,7 +23,7 @@ typedef struct packed {
 
 // Virtual interface types for task parameters
 typedef virtual mmu_if #(.VA_WIDTH(48), .PA_WIDTH(48)) mmu_vif_t;
-typedef virtual rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) noc_vif_t;
+typedef virtual rvgpu_internal_noc_if noc_vif_t;
 typedef virtual clk_rst_if clk_rst_vif_t;
 
 // Base class for RVGPU MMU testing

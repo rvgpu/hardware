@@ -36,13 +36,13 @@
 //      * reserved0          [63:32]  ：保留
 //      * current_block_id   [31:0]   ：当前 block 的 ID
 //    - job_block_t 也是 256bit，便于一次 NOC 传输。
-//    - JD 会根据 command_t 的 work_dim，生成多个 job_block_t，分别下发给各 shader core。
+//    - JD 会根据 command_t 的 work_dim，生成多个 job_block_t，分别下发给各 GPC。
 //
 // 3. 调度流程
 //    - JD 先接收并解析 command_t。
 //    - 按照 work_dim 拆分出所有 block，生成对应 job_block_t。
-//    - 每个 job_block_t 作为一个调度单元，通过 NOC 下发给 shader core。
-//    - shader core 收到 job_block_t 后，进一步调度 warp。
+//    - 每个 job_block_t 作为一个调度单元，通过 NOC 下发给 GPC。
+//    - GPC 收到 job_block_t 后，进一步调度 warp。
 //
 // 这样实现了 coarse-grained（command）和 fine-grained（job_block）两层调度。
 //=============================================================================

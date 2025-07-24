@@ -16,17 +16,115 @@
 `ifndef RVGPU_GPC_TOP_SV
 `define RVGPU_GPC_TOP_SV
 
+`include "rvgpu_typedef.svh"
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_internal_noc_pkg.svh"
+`include "gpc_l15_cache_if.svh"
+`include "gpc_mmu_if.svh"
+`include "gpc_mmu_noc_if.svh"
+`include "gpc_l0_tlb_if.svh"
+`include "ldst_sm_if.svh"
+`include "gpc_block_tpc_if.svh"
 
 module rvgpu_gpc_top #(
-    parameter noc_config_t NOC_CONFIG = DEFAULT_NOC_CONFIG
+    parameter noc_config_t NOC_CONFIG = DEFAULT_NOC_CONFIG,
+    parameter int GPC_ID = 0,
+    parameter int NUM_TPC = 4,
+    parameter int NUM_SM_PER_TPC = 2
 ) (
     input  logic clk,
     input  logic rst_n,
     rvgpu_internal_noc_if.device noc_if
 );
-    // 空实现
+    // 内部接口声明
+    gpc_noc_adapter_if       noc_adapter_if();
+    gpc_block_scheduler_if   block_scheduler_if();
+    gpc_block_raster_if      block_raster_if();
+    gpc_block_tpc_if         block_tpc_if[NUM_TPC]();
+    gpc_l15_cache_if         l15_cache_if[NUM_TPC+3](); // NUM_TPC个TPC + Block Scheduler + Raster + NOC Adapter
+    gpc_mmu_if               gpc_mmu_if[NUM_TPC+1]();  // NUM_TPC个TPC + Block Scheduler
+    gpc_mmu_noc_if           gpc_mmu_noc_if();
+    gpc_l0_tlb_if            l0_tlb_if[NUM_TPC]();
+    
+    // 内部信号
+    logic [7:0] active_warps_count[NUM_TPC];  // 每个TPC的活跃warp数量
+    logic [7:0] sm_utilization[NUM_TPC];      // 每个TPC的SM利用率
+    
+    // NOC Adapter实例化
+    rvgpu_gpc_noc_adapter u_noc_adapter (
+        .clk(clk),
+        .rst_n(rst_n),
+        .noc_external_if(noc_if),
+        .scheduler_if(noc_adapter_if.noc_adapter),
+        .l15_cache_if(l15_cache_if[NUM_TPC+2].noc_adapter),
+        .mmu_if(gpc_mmu_noc_if.noc_adapter)
+    );
+    
+    // GPC MMU实例化
+    rvgpu_gpc_mmu #(
+        .TLB_ENTRIES(128),
+        .MAX_REQUESTS(16),
+        .GPC_ID(GPC_ID)
+    ) u_gpc_mmu (
+        .clk(clk),
+        .rst_n(rst_n),
+        .bs_if(gpc_mmu_if[NUM_TPC].gpc_mmu),
+        .tpc_if(gpc_mmu_if[0:NUM_TPC-1]),
+        .l0_tlb_if(l0_tlb_if),
+        .noc_if(gpc_mmu_noc_if.gpc_mmu)
+    );
+    
+    // Block Scheduler实例化
+    rvgpu_gpc_block_scheduler u_block_scheduler (
+        .clk(clk),
+        .rst_n(rst_n),
+        .noc_if(block_scheduler_if.scheduler),
+        .tpc_if(block_tpc_if),
+        .raster_if(block_raster_if.scheduler),
+        .l15_if(l15_cache_if[NUM_TPC].requester),
+        .tlb_if(gpc_mmu_if[NUM_TPC].requester)
+    );
+    
+    // L1.5 Cache实例化
+    rvgpu_gpc_l15_cache u_l15_cache (
+        .clk(clk),
+        .rst_n(rst_n),
+        .noc_if(l15_cache_if[NUM_TPC+2].cache),
+        .requester_if(l15_cache_if)
+    );
+    
+    // Raster Engine实例化
+    rvgpu_gpc_raster u_raster (
+        .clk(clk),
+        .rst_n(rst_n),
+        .raster_if(block_raster_if.raster),
+        .l15_if(l15_cache_if[NUM_TPC+1].requester)
+    );
+    
+    // TPC实例化
+    genvar i;
+    generate
+        for (i = 0; i < NUM_TPC; i++) begin : tpc_gen
+            rvgpu_tpc_top #(
+                .NUM_SM(NUM_SM_PER_TPC),
+                .MAX_WARPS_PER_SM(32),
+                .TPC_ID(i)
+            ) u_tpc (
+                .clk(clk),
+                .rst_n(rst_n),
+                .block_dispatch_if(block_tpc_if[i].tpc),
+                .l15_if(l15_cache_if[i].requester),
+                .tlb_if(l0_tlb_if[i].tpc),
+                .active_warps_count(active_warps_count[i]),
+                .sm_utilization(sm_utilization[i])
+            );
+        end
+    endgenerate
+    
+    // 接口连接
+    // NOC Adapter与Block Scheduler连接
+    assign noc_adapter_if.device = block_scheduler_if.noc_adapter;
+
 endmodule : rvgpu_gpc_top
 
 `endif // RVGPU_GPC_TOP_SV 

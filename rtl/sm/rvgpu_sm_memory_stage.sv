@@ -50,7 +50,7 @@ module rvgpu_sm_memory_stage #(
     output logic [63:0]                         ldst_req_addr[THREAD_COUNT],
     output logic [31:0]                         ldst_req_data[THREAD_COUNT],
     output logic [2:0]                          ldst_req_size,
-    output logic                                ldst_req_is_write,
+    output logic                                ldst_req_is_load,
     input  logic                                ldst_req_ready,
     
     input  logic                                ldst_resp_valid,
@@ -223,7 +223,7 @@ module rvgpu_sm_memory_stage #(
     assign ldst_req_addr = mem_addr;
     assign ldst_req_data = store_data;
     assign ldst_req_size = mem_size;
-    assign ldst_req_is_write = exec_mem_is_store;
+    assign ldst_req_is_load = exec_mem_is_load;
     
     // LDST响应准备信号
     assign ldst_resp_ready = (state == WAIT_RESP);

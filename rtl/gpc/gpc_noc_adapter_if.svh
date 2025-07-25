@@ -37,28 +37,6 @@ interface gpc_noc_adapter_if;
         output job_ready
     );
     
-    // 任务和函数
-    // NOC Adapter使用的任务
-    task send_job(
-        input job_block_t block
-    );
-        job_valid = 1'b1;
-        job_block = block;
-        
-        @(posedge job_ready);
-        job_valid = 1'b0;
-    endtask
-    
-    // Block Scheduler使用的任务
-    task receive_job(
-        output job_block_t block
-    );
-        job_ready = 1'b1;
-        @(posedge job_valid);
-        block = job_block;
-        job_ready = 1'b0;
-    endtask
-
 endinterface : gpc_noc_adapter_if
 
 `endif // GPC_NOC_ADAPTER_IF_SVH 

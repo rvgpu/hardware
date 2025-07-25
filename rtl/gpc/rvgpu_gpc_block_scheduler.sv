@@ -181,7 +181,7 @@ module rvgpu_gpc_block_scheduler #(
                     // 请求GPC MMU进行地址转换
                     tlb_if.req_valid <= 1'b1;
                     tlb_if.req_vaddr <= current_job.arglist_ptr[38:0];
-                    tlb_if.req_type <= gpc_mmu_if::MMU_READ;
+                    tlb_if.req_type <= MMU_READ;
                     tlb_if.req_warp_id <= '0;
                     tlb_if.req_source_id <= '0;
                     
@@ -211,7 +211,7 @@ module rvgpu_gpc_block_scheduler #(
                     l15_if.req_is_read <= 1'b1;
                     l15_if.req_paddr <= arglist_paddr;
                     l15_if.req_size <= 5; // 32字节
-                    l15_if.req_type <= gpc_l15_cache_if::L15_CACHE_NORMAL;
+                    l15_if.req_type <= L15_CACHE_NORMAL;
                     l15_if.req_data <= '0;
                     l15_if.req_mask <= '0;
                     l15_if.req_id <= '0;

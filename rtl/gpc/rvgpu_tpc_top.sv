@@ -83,7 +83,7 @@ module rvgpu_tpc_top #(
         next_sm_id = '0;
         
         // 轮询查找可用的SM
-        for (int i = 0; i < NUM_SM; i++) begin
+        for (int i = 0; i < NUM_SM; i++) begin : sm_search
             int sm_idx = (round_robin_counter + i) % NUM_SM;
             if (sm_available[sm_idx]) begin
                 next_sm_id = sm_idx[$clog2(NUM_SM)-1:0];
@@ -100,10 +100,9 @@ module rvgpu_tpc_top #(
         if (!rst_n) begin
             round_robin_counter <= '0;
             block_dispatch_if.warp_ready <= 1'b0;
-            
-            for (int i = 0; i < NUM_SM; i++) begin
-                sm_dispatch_if[i].warp_valid <= 1'b0;
-            end
+            // 复位所有SM接口
+            sm_dispatch_if[0].warp_valid <= 1'b0;
+            sm_dispatch_if[1].warp_valid <= 1'b0;
         end else begin
             // 默认状态
             block_dispatch_if.warp_ready <= 1'b0;
@@ -111,14 +110,28 @@ module rvgpu_tpc_top #(
             // 处理来自Block Scheduler的任务
             if (block_dispatch_if.warp_valid && sm_available[next_sm_id]) begin
                 // 将任务分发给选中的SM
-                sm_dispatch_if[next_sm_id].warp_valid <= 1'b1;
-                sm_dispatch_if[next_sm_id].warp_id <= block_dispatch_if.warp_id;
-                sm_dispatch_if[next_sm_id].block_id <= block_dispatch_if.block_id;
-                sm_dispatch_if[next_sm_id].program_addr <= block_dispatch_if.program_addr;
-                sm_dispatch_if[next_sm_id].arglist_ptr <= block_dispatch_if.arglist_ptr;
-                sm_dispatch_if[next_sm_id].argument_size <= block_dispatch_if.argument_size;
-                sm_dispatch_if[next_sm_id].thread_mask <= block_dispatch_if.thread_mask;
-                sm_dispatch_if[next_sm_id].arglist_data <= block_dispatch_if.arglist_data;
+                case (next_sm_id)
+                    0: begin
+                        sm_dispatch_if[0].warp_valid <= 1'b1;
+                        sm_dispatch_if[0].warp_id <= block_dispatch_if.warp_id;
+                        sm_dispatch_if[0].block_id <= block_dispatch_if.block_id;
+                        sm_dispatch_if[0].program_addr <= block_dispatch_if.program_addr;
+                        sm_dispatch_if[0].arglist_ptr <= block_dispatch_if.arglist_ptr;
+                        sm_dispatch_if[0].argument_size <= block_dispatch_if.argument_size;
+                        sm_dispatch_if[0].thread_mask <= block_dispatch_if.thread_mask;
+                        sm_dispatch_if[0].arglist_data <= block_dispatch_if.arglist_data;
+                    end
+                    1: begin
+                        sm_dispatch_if[1].warp_valid <= 1'b1;
+                        sm_dispatch_if[1].warp_id <= block_dispatch_if.warp_id;
+                        sm_dispatch_if[1].block_id <= block_dispatch_if.block_id;
+                        sm_dispatch_if[1].program_addr <= block_dispatch_if.program_addr;
+                        sm_dispatch_if[1].arglist_ptr <= block_dispatch_if.arglist_ptr;
+                        sm_dispatch_if[1].argument_size <= block_dispatch_if.argument_size;
+                        sm_dispatch_if[1].thread_mask <= block_dispatch_if.thread_mask;
+                        sm_dispatch_if[1].arglist_data <= block_dispatch_if.arglist_data;
+                    end
+                endcase
                 
                 // 确认接收任务
                 block_dispatch_if.warp_ready <= 1'b1;
@@ -128,11 +141,12 @@ module rvgpu_tpc_top #(
             end
             
             // 清除已完成的分发
-            for (int i = 0; i < NUM_SM; i++) begin
-                if (sm_dispatch_if[i].warp_valid && sm_dispatch_if[i].warp_ready) begin
-                    sm_dispatch_if[i].warp_valid <= 1'b0;
-                end
-            end
+            case (0)
+                0: if (sm_dispatch_if[0].warp_valid && sm_dispatch_if[0].warp_ready) sm_dispatch_if[0].warp_valid <= 1'b0;
+            endcase
+            case (1)
+                1: if (sm_dispatch_if[1].warp_valid && sm_dispatch_if[1].warp_ready) sm_dispatch_if[1].warp_valid <= 1'b0;
+            endcase
         end
     end
     
@@ -142,14 +156,14 @@ module rvgpu_tpc_top #(
     
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            for (int i = 0; i < NUM_SM; i++) begin
+            for (int i = 0; i < NUM_SM; i++) begin : sm_init
                 sm_states[i] <= SM_IDLE;
                 sm_active_warps[i] <= '0;
                 sm_pending_requests[i] <= '0;
                 sm_available[i] <= 1'b1;
             end
         end else begin
-            for (int i = 0; i < NUM_SM; i++) begin
+            for (int i = 0; i < NUM_SM; i++) begin : sm_update
                 // 更新SM状态（这里需要从SM获取实际状态）
                 // 简化实现：基于活跃warp数判断状态
                 if (sm_active_warps[i] == 0) begin
@@ -165,19 +179,38 @@ module rvgpu_tpc_top #(
                 
                 // TODO: 从实际SM模块获取这些状态
                 // 这里是占位符实现
-                if (sm_dispatch_if[i].warp_valid && sm_dispatch_if[i].warp_ready) begin
-                    sm_active_warps[i] <= sm_active_warps[i] + 1;
-                end
+                case (i)
+                    0: if (sm_dispatch_if[0].warp_valid && sm_dispatch_if[0].warp_ready) begin
+                        sm_active_warps[0] <= sm_active_warps[0] + 1;
+                    end
+                    1: if (sm_dispatch_if[1].warp_valid && sm_dispatch_if[1].warp_ready) begin
+                        sm_active_warps[1] <= sm_active_warps[1] + 1;
+                    end
+                endcase
                 
                 // 处理SM完成通知
-                if (sm_dispatch_if[i].complete_valid) begin
-                    if (sm_active_warps[i] > 0) begin
-                        sm_active_warps[i] <= sm_active_warps[i] - 1;
+                case (i)
+                    0: begin
+                        if (sm_dispatch_if[0].complete_valid) begin
+                            if (sm_active_warps[0] > 0) begin
+                                sm_active_warps[0] <= sm_active_warps[0] - 1;
+                            end
+                            sm_dispatch_if[0].complete_ready <= 1'b1;
+                        end else begin
+                            sm_dispatch_if[0].complete_ready <= 1'b0;
+                        end
                     end
-                    sm_dispatch_if[i].complete_ready <= 1'b1;
-                end else begin
-                    sm_dispatch_if[i].complete_ready <= 1'b0;
-                end
+                    1: begin
+                        if (sm_dispatch_if[1].complete_valid) begin
+                            if (sm_active_warps[1] > 0) begin
+                                sm_active_warps[1] <= sm_active_warps[1] - 1;
+                            end
+                            sm_dispatch_if[1].complete_ready <= 1'b1;
+                        end else begin
+                            sm_dispatch_if[1].complete_ready <= 1'b0;
+                        end
+                    end
+                endcase
             end
         end
     end
@@ -197,27 +230,49 @@ module rvgpu_tpc_top #(
             l15_if.req_valid <= 1'b0;
             
             // 轮询检查每个SM的缓存请求
-            for (int i = 0; i < NUM_SM; i++) begin
+            for (int i = 0; i < NUM_SM; i++) begin : cache_arb
                 int sm_idx = (cache_arb_counter + i) % NUM_SM;
-                if (sm_l15_if[sm_idx].req_valid) begin
-                    // 转发请求到L1.5 Cache
-                    l15_if.req_valid <= 1'b1;
-                    l15_if.req_is_read <= sm_l15_if[sm_idx].req_is_read;
-                    l15_if.req_paddr <= sm_l15_if[sm_idx].req_paddr;
-                    l15_if.req_size <= sm_l15_if[sm_idx].req_size;
-                    l15_if.req_type <= sm_l15_if[sm_idx].req_type;
-                    l15_if.req_data <= sm_l15_if[sm_idx].req_data;
-                    l15_if.req_mask <= sm_l15_if[sm_idx].req_mask;
-                    l15_if.req_id <= {sm_idx[$clog2(NUM_SM)-1:0], sm_l15_if[sm_idx].req_id[31-$clog2(NUM_SM):0]};
-                    
-                    // 确认SM请求
-                    sm_l15_if[sm_idx].req_ready <= l15_if.req_ready;
-                    
-                    if (l15_if.req_ready) begin
-                        cache_arb_counter <= (cache_arb_counter + 1) % NUM_SM;
+                
+                case (sm_idx)
+                    0: if (sm_l15_if[0].req_valid) begin
+                        // 转发请求到L1.5 Cache
+                        l15_if.req_valid <= 1'b1;
+                        l15_if.req_is_read <= sm_l15_if[0].req_is_read;
+                        l15_if.req_paddr <= sm_l15_if[0].req_paddr;
+                        l15_if.req_size <= sm_l15_if[0].req_size;
+                        l15_if.req_type <= sm_l15_if[0].req_type;
+                        l15_if.req_data <= sm_l15_if[0].req_data;
+                        l15_if.req_mask <= sm_l15_if[0].req_mask;
+                        l15_if.req_id <= {1'b0, sm_l15_if[0].req_id[30:0]};
+                        
+                        // 确认SM请求
+                        sm_l15_if[0].req_ready <= l15_if.req_ready;
+                        
+                        if (l15_if.req_ready) begin
+                            cache_arb_counter <= (cache_arb_counter + 1) % NUM_SM;
+                        end
+                        break;
                     end
-                    break;
-                end
+                    1: if (sm_l15_if[1].req_valid) begin
+                        // 转发请求到L1.5 Cache
+                        l15_if.req_valid <= 1'b1;
+                        l15_if.req_is_read <= sm_l15_if[1].req_is_read;
+                        l15_if.req_paddr <= sm_l15_if[1].req_paddr;
+                        l15_if.req_size <= sm_l15_if[1].req_size;
+                        l15_if.req_type <= sm_l15_if[1].req_type;
+                        l15_if.req_data <= sm_l15_if[1].req_data;
+                        l15_if.req_mask <= sm_l15_if[1].req_mask;
+                        l15_if.req_id <= {1'b1, sm_l15_if[1].req_id[30:0]};
+                        
+                        // 确认SM请求
+                        sm_l15_if[1].req_ready <= l15_if.req_ready;
+                        
+                        if (l15_if.req_ready) begin
+                            cache_arb_counter <= (cache_arb_counter + 1) % NUM_SM;
+                        end
+                        break;
+                    end
+                endcase
             end
         end
     end
@@ -227,21 +282,41 @@ module rvgpu_tpc_top #(
         // 根据响应ID的高位确定目标SM
         logic [$clog2(NUM_SM)-1:0] target_sm = l15_if.resp_id[31:31-$clog2(NUM_SM)+1];
         
-        for (int i = 0; i < NUM_SM; i++) begin
-            if (i == target_sm && l15_if.resp_valid) begin
-                sm_l15_if[i].resp_valid = 1'b1;
-                sm_l15_if[i].resp_data = l15_if.resp_data;
-                sm_l15_if[i].resp_error = l15_if.resp_error;
-                sm_l15_if[i].resp_id = {l15_if.resp_id[31-$clog2(NUM_SM):0], {$clog2(NUM_SM){1'b0}}};
-            end else begin
-                sm_l15_if[i].resp_valid = 1'b0;
-                sm_l15_if[i].resp_data = '0;
-                sm_l15_if[i].resp_error = 1'b0;
-                sm_l15_if[i].resp_id = '0;
-            end
+        // 默认值
+        sm_l15_if[0].resp_valid = 1'b0;
+        sm_l15_if[0].resp_data = '0;
+        sm_l15_if[0].resp_error = 1'b0;
+        sm_l15_if[0].resp_id = '0;
+        
+        sm_l15_if[1].resp_valid = 1'b0;
+        sm_l15_if[1].resp_data = '0;
+        sm_l15_if[1].resp_error = 1'b0;
+        sm_l15_if[1].resp_id = '0;
+        
+        // 根据target_sm分发响应
+        if (l15_if.resp_valid) begin
+            case (target_sm)
+                0: begin
+                    sm_l15_if[0].resp_valid = 1'b1;
+                    sm_l15_if[0].resp_data = l15_if.resp_data;
+                    sm_l15_if[0].resp_error = l15_if.resp_error;
+                    sm_l15_if[0].resp_id = {l15_if.resp_id[30:0], 1'b0};
+                end
+                1: begin
+                    sm_l15_if[1].resp_valid = 1'b1;
+                    sm_l15_if[1].resp_data = l15_if.resp_data;
+                    sm_l15_if[1].resp_error = l15_if.resp_error;
+                    sm_l15_if[1].resp_id = {l15_if.resp_id[30:0], 1'b0};
+                end
+            endcase
         end
         
-        l15_if.resp_ready = sm_l15_if[target_sm].resp_ready;
+        // 根据target_sm设置resp_ready
+        case (target_sm)
+            0: l15_if.resp_ready = sm_l15_if[0].resp_ready;
+            1: l15_if.resp_ready = sm_l15_if[1].resp_ready;
+            default: l15_if.resp_ready = 1'b0;
+        endcase
     end
     
     // =========================================================================
@@ -304,7 +379,7 @@ module rvgpu_tpc_top #(
         total_active_warps = '0;
         total_max_warps = NUM_SM * MAX_WARPS_PER_SM;
         
-        for (int i = 0; i < NUM_SM; i++) begin
+        for (int i = 0; i < NUM_SM; i++) begin : stats_calc
             total_active_warps += sm_active_warps[i];
         end
         

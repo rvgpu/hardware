@@ -26,7 +26,8 @@ module rvgpu_sm #(
     parameter int WARP_COUNT = 32,              // 每个SM支持的warp数量
     parameter int MAX_THREAD_PER_WARP = 32,     // 每个warp的最大线程数
     parameter int MAX_ACTIVE_WARPS = 16,        // 同时活跃的最大warp数量
-    parameter int NUM_CUDA_CORES = 4            // CUDA Core数量
+    parameter int NUM_CUDA_CORES = 4,           // CUDA Core数量
+    parameter int THREAD_COUNT = 1024           // 每个SM的总线程数
 ) (
     input  logic clk,
     input  logic rst_n,
@@ -143,13 +144,12 @@ module rvgpu_sm #(
     logic [63:0] ldst_req_addr[NUM_CUDA_CORES][MAX_THREAD_PER_WARP];
     logic [31:0] ldst_req_data[NUM_CUDA_CORES][MAX_THREAD_PER_WARP];
     logic [2:0] ldst_req_size[NUM_CUDA_CORES];
-    logic ldst_req_is_write[NUM_CUDA_CORES];
+    logic ldst_req_is_load[NUM_CUDA_CORES];
     logic ldst_req_ready[NUM_CUDA_CORES];
     
     logic ldst_resp_valid[NUM_CUDA_CORES];
-    logic [$clog2(WARP_COUNT)-1:0] ldst_resp_warp_id[NUM_CUDA_CORES];
-    logic [MAX_THREAD_PER_WARP-1:0] ldst_resp_mask[NUM_CUDA_CORES];
-    logic [31:0] ldst_resp_data[NUM_CUDA_CORES][MAX_THREAD_PER_WARP];
+    logic [31:0] ldst_resp_warp_id[NUM_CUDA_CORES];
+    logic [MAX_THREAD_PER_WARP-1:0] ldst_resp_data[NUM_CUDA_CORES];
     logic ldst_resp_ready[NUM_CUDA_CORES];
     
     // PC管理
@@ -168,7 +168,7 @@ module rvgpu_sm #(
     logic [63:0] l1_data_req_addr[NUM_CUDA_CORES][THREAD_COUNT];
     logic [31:0] l1_data_req_data[NUM_CUDA_CORES][THREAD_COUNT];
     logic [2:0] l1_data_req_size[NUM_CUDA_CORES];
-    logic l1_data_req_is_write[NUM_CUDA_CORES];
+    logic l1_data_req_is_load[NUM_CUDA_CORES];
     logic l1_data_req_is_shared[NUM_CUDA_CORES];
     logic l1_data_req_ready[NUM_CUDA_CORES];
     
@@ -237,7 +237,7 @@ module rvgpu_sm #(
         .req_addr(l1_data_req_addr),
         .req_data(l1_data_req_data),
         .req_size(l1_data_req_size),
-        .req_is_write(l1_data_req_is_write),
+        .req_is_load(l1_data_req_is_load),
         .req_is_shared(l1_data_req_is_shared),
         .req_ready(l1_data_req_ready),
         
@@ -496,7 +496,7 @@ module rvgpu_sm #(
                 .l1_data_req_addr(l1_data_req_addr[i]),
                 .l1_data_req_data(l1_data_req_data[i]),
                 .l1_data_req_size(l1_data_req_size[i]),
-                .l1_data_req_is_write(l1_data_req_is_write[i]),
+                .l1_data_req_is_load(l1_data_req_is_load[i]),
                 .l1_data_req_is_shared(l1_data_req_is_shared[i]),
                 .l1_data_req_ready(l1_data_req_ready[i]),
                 .l1_data_resp_valid(l1_data_resp_valid[i]),
@@ -533,7 +533,6 @@ module rvgpu_sm #(
         ldst_if.req_addr = '0;
         ldst_if.req_data = '0;
         ldst_if.req_size = '0;
-        ldst_if.req_is_write = 1'b0;
         
         for (int i = 0; i < NUM_CUDA_CORES; i++) begin
             ldst_req_ready[i] = 1'b0;
@@ -548,7 +547,6 @@ module rvgpu_sm #(
                 ldst_if.req_addr = ldst_req_addr[i];
                 ldst_if.req_data = ldst_req_data[i];
                 ldst_if.req_size = ldst_req_size[i];
-                ldst_if.req_is_write = ldst_req_is_write[i];
                 ldst_req_ready[i] = ldst_if.req_ready;
                 break;
             end
@@ -558,7 +556,6 @@ module rvgpu_sm #(
         for (int i = 0; i < NUM_CUDA_CORES; i++) begin
             ldst_resp_valid[i] = ldst_if.resp_valid;
             ldst_resp_warp_id[i] = ldst_if.resp_warp_id;
-            ldst_resp_mask[i] = ldst_if.resp_mask;
             ldst_resp_data[i] = ldst_if.resp_data;
         end
         
@@ -596,8 +593,6 @@ module rvgpu_sm #(
             // 新warp分配
             if (block_dispatch_if.warp_valid && warp_alloc_ready) begin
                 warp_valid[warp_alloc_id] <= 1'b1;
-                warp_pc[warp_alloc_id] <= block_dispatch_if.warp_pc;
-                warp_active_mask[warp_alloc_id] <= block_dispatch_if.warp_mask;
             end
             
             // Warp完成处理

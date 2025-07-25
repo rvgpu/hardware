@@ -41,7 +41,7 @@ module rvgpu_sm_l1_data_cache #(
     input  logic [63:0]                         req_addr[4][THREAD_COUNT],
     input  logic [31:0]                         req_data[4][THREAD_COUNT],
     input  logic [2:0]                          req_size[4],
-    input  logic                                req_is_write[4],
+    input  logic                                req_is_load[4], // 1=共享内存访问，0=全局内存访问
     input  logic                                req_is_shared[4], // 1=共享内存访问，0=全局内存访问
     output logic                                req_ready[4],
     
@@ -108,10 +108,10 @@ module rvgpu_sm_l1_data_cache #(
         logic                           valid;
         logic [$clog2(WARP_COUNT)-1:0]  warp_id;
         logic [THREAD_COUNT-1:0]        mask;
-        logic [63:0]                    addr[THREAD_COUNT];
-        logic [31:0]                    data[THREAD_COUNT];
+        logic [THREAD_COUNT-1:0][63:0]  addr;
+        logic [THREAD_COUNT-1:0][31:0]  data;
         logic [2:0]                     size;
-        logic                           is_write;
+        logic                           is_load; // 1=共享内存访问，0=全局内存访问
         logic                           is_shared;
         logic [1:0]                     source_core; // 来源CUDA Core
     } cache_req_t;
@@ -173,7 +173,7 @@ module rvgpu_sm_l1_data_cache #(
     
     always_comb begin
         arbiter_grant = 2'b00;
-        for (int i = 0; i < 4; i++) begin
+        for (int i = 0; i < 4; i++) begin : arbiter_loop
             logic [1:0] idx = (last_grant + 1 + i) % 4;
             if (req_valid[idx] && req_ready[idx]) begin
                 arbiter_grant = idx;
@@ -187,7 +187,7 @@ module rvgpu_sm_l1_data_cache #(
         if (!rst_n) begin
             req_queue_size <= '0;
             last_grant <= '0;
-            for (int i = 0; i < 4; i++) begin
+            for (int i = 0; i < 4; i++) begin : ready_init
                 req_ready[i] <= 1'b1;
             end
         end else begin
@@ -197,10 +197,16 @@ module rvgpu_sm_l1_data_cache #(
                 new_req.valid = 1'b1;
                 new_req.warp_id = req_warp_id[arbiter_grant];
                 new_req.mask = req_mask[arbiter_grant];
-                new_req.addr = req_addr[arbiter_grant];
-                new_req.data = req_data[arbiter_grant];
+                // 修复数组维度不兼容问题
+                for (int t = 0; t < THREAD_COUNT; t++) begin : addr_copy
+                    new_req.addr[t] = req_addr[arbiter_grant][t];
+                end
+                // 修复数组维度不兼容问题
+                for (int t = 0; t < THREAD_COUNT; t++) begin : data_copy
+                    new_req.data[t] = req_data[arbiter_grant][t];
+                end
                 new_req.size = req_size[arbiter_grant];
-                new_req.is_write = req_is_write[arbiter_grant];
+                new_req.is_load = req_is_load[arbiter_grant];
                 new_req.is_shared = req_is_shared[arbiter_grant];
                 new_req.source_core = arbiter_grant;
                 
@@ -210,7 +216,7 @@ module rvgpu_sm_l1_data_cache #(
             end
             
             // 更新ready信号
-            for (int i = 0; i < 4; i++) begin
+            for (int i = 0; i < 4; i++) begin : ready_update
                 req_ready[i] <= (req_queue_size < 15);
             end
         end
@@ -224,8 +230,8 @@ module rvgpu_sm_l1_data_cache #(
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             // 初始化共享内存
-            for (int bank = 0; bank < SHARED_MEM_BANKS; bank++) begin
-                for (int addr = 0; addr < SHARED_MEM_BANK_SIZE/4; addr++) begin
+            for (int bank = 0; bank < SHARED_MEM_BANKS; bank++) begin : bank_init
+                for (int addr = 0; addr < SHARED_MEM_BANK_SIZE/4; addr++) begin : addr_init
                     shared_memory[bank][addr] <= '0;
                 end
             end
@@ -235,7 +241,7 @@ module rvgpu_sm_l1_data_cache #(
                 cache_req_t current_req = req_queue[0];
                 
                 // 并行处理所有活跃线程的共享内存访问
-                for (int t = 0; t < THREAD_COUNT; t++) begin
+                for (int t = 0; t < THREAD_COUNT; t++) begin : thread_shared
                     if (current_req.mask[t]) begin
                         logic [$clog2(SHARED_MEM_BANKS)-1:0] bank_id;
                         logic [SHARED_MEM_ADDR_WIDTH-$clog2(SHARED_MEM_BANKS)-3:0] bank_offset;
@@ -243,7 +249,7 @@ module rvgpu_sm_l1_data_cache #(
                         bank_id = get_shared_bank(current_req.addr[t]);
                         bank_offset = get_shared_offset(current_req.addr[t]);
                         
-                        if (current_req.is_write) begin
+                        if (!current_req.is_load) begin
                             shared_memory[bank_id][bank_offset] <= current_req.data[t];
                         end
                     end
@@ -271,7 +277,7 @@ module rvgpu_sm_l1_data_cache #(
             cache_tag = get_cache_tag(req_queue[0].addr[0]);
             
             // 并行查找所有路
-            for (int way = 0; way < ASSOCIATIVITY; way++) begin
+            for (int way = 0; way < ASSOCIATIVITY; way++) begin : way_search
                 if (data_cache[cache_index][way].valid && 
                     data_cache[cache_index][way].tag == cache_tag) begin
                     cache_hit = 1'b1;
@@ -311,8 +317,8 @@ module rvgpu_sm_l1_data_cache #(
             total_requests <= '0;
             cache_hits <= '0;
             
-            for (int i = 0; i < 4; i++) begin
-                for (int t = 0; t < THREAD_COUNT; t++) begin
+            for (int i = 0; i < 4; i++) begin : response_init_outer
+                for (int t = 0; t < THREAD_COUNT; t++) begin : response_init
                     response_data[i][t] <= '0;
                 end
                 response_mask[i] <= '0;
@@ -337,7 +343,7 @@ module rvgpu_sm_l1_data_cache #(
                 
                 CACHE_SHARED_ACCESS: begin
                     // 共享内存访问（读取）
-                    for (int t = 0; t < THREAD_COUNT; t++) begin
+                    for (int t = 0; t < THREAD_COUNT; t++) begin : shared_access_read
                         if (current_processing_req.mask[t]) begin
                             logic [$clog2(SHARED_MEM_BANKS)-1:0] bank_id;
                             logic [SHARED_MEM_ADDR_WIDTH-$clog2(SHARED_MEM_BANKS)-3:0] bank_offset;
@@ -345,7 +351,7 @@ module rvgpu_sm_l1_data_cache #(
                             bank_id = get_shared_bank(current_processing_req.addr[t]);
                             bank_offset = get_shared_offset(current_processing_req.addr[t]);
                             
-                            if (!current_processing_req.is_write) begin
+                            if (!current_processing_req.is_load) begin
                                 response_data[current_processing_req.source_core][t] <= 
                                     shared_memory[bank_id][bank_offset];
                             end
@@ -368,7 +374,7 @@ module rvgpu_sm_l1_data_cache #(
                 
                 CACHE_DATA_HIT: begin
                     // 从缓存读取数据
-                    for (int t = 0; t < THREAD_COUNT; t++) begin
+                    for (int t = 0; t < THREAD_COUNT; t++) begin : hit_data_read
                         if (current_processing_req.mask[t]) begin
                             // 简化：从缓存行中提取32位数据
                             logic [OFFSET_WIDTH-1:0] offset = current_processing_req.addr[t][OFFSET_WIDTH-1:0];
@@ -388,16 +394,16 @@ module rvgpu_sm_l1_data_cache #(
                         l15_req_valid <= 1'b1;
                         l15_req_paddr <= {current_processing_req.addr[0][63:OFFSET_WIDTH], {OFFSET_WIDTH{1'b0}}};
                         l15_req_size <= 4'h6; // 128字节
-                        l15_req_is_read <= !current_processing_req.is_write;
+                        l15_req_is_read <= !current_processing_req.is_load;
                         l15_req_id <= next_req_id;
                         next_req_id <= next_req_id + 1;
                         
-                        if (!current_processing_req.is_write) begin
+                        if (!current_processing_req.is_load) begin
                             l15_req_data <= '0;
                             l15_req_mask <= '0;
                         end else begin
                             // 构造写数据
-                            for (int t = 0; t < THREAD_COUNT; t++) begin
+                            for (int t = 0; t < THREAD_COUNT; t++) begin : write_data_construct
                                 if (current_processing_req.mask[t]) begin
                                     logic [OFFSET_WIDTH-1:0] offset = current_processing_req.addr[t][OFFSET_WIDTH-1:0];
                                     l15_req_data[offset*8 +: 32] <= current_processing_req.data[t];
@@ -425,11 +431,11 @@ module rvgpu_sm_l1_data_cache #(
                         data_cache[cache_index][replace_way].valid <= 1'b1;
                         data_cache[cache_index][replace_way].tag <= cache_tag;
                         data_cache[cache_index][replace_way].data <= l15_resp_data[LINE_SIZE*8-1:0];
-                        data_cache[cache_index][replace_way].dirty <= current_processing_req.is_write;
+                        data_cache[cache_index][replace_way].dirty <= current_processing_req.is_load;
                         
                         // 提取响应数据
-                        if (!current_processing_req.is_write) begin
-                            for (int t = 0; t < THREAD_COUNT; t++) begin
+                        if (!current_processing_req.is_load) begin
+                            for (int t = 0; t < THREAD_COUNT; t++) begin : resp_data_extract
                                 if (current_processing_req.mask[t]) begin
                                     logic [OFFSET_WIDTH-1:0] offset = current_processing_req.addr[t][OFFSET_WIDTH-1:0];
                                     response_data[current_processing_req.source_core][t] <= 
@@ -466,7 +472,7 @@ module rvgpu_sm_l1_data_cache #(
     
     // 响应信号
     always_comb begin
-        for (int i = 0; i < 4; i++) begin
+        for (int i = 0; i < 4; i++) begin : resp_output
             resp_valid[i] = response_valid_reg[i];
             resp_warp_id[i] = response_warp_id[i];
             resp_mask[i] = response_mask[i];

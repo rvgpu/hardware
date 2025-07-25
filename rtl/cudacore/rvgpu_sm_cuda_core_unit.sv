@@ -70,21 +70,22 @@ module rvgpu_sm_cuda_core_unit #(
     output logic [31:0]                         reg_write_data[THREAD_COUNT],
     output logic [THREAD_COUNT-1:0]             reg_write_mask,
     
-    // LDST单元接口
-    output logic                                ldst_req_valid,
-    output logic [$clog2(WARP_COUNT)-1:0]      ldst_req_warp_id,
-    output logic [THREAD_COUNT-1:0]             ldst_req_mask,
-    output logic [63:0]                         ldst_req_addr[THREAD_COUNT],
-    output logic [31:0]                         ldst_req_data[THREAD_COUNT],
-    output logic [2:0]                          ldst_req_size,
-    output logic                                ldst_req_is_write,
-    input  logic                                ldst_req_ready,
+    // L1 Data Cache接口
+    output logic                                l1_data_req_valid,
+    output logic [$clog2(WARP_COUNT)-1:0]      l1_data_req_warp_id,
+    output logic [THREAD_COUNT-1:0]             l1_data_req_mask,
+    output logic [63:0]                         l1_data_req_addr[THREAD_COUNT],
+    output logic [31:0]                         l1_data_req_data[THREAD_COUNT],
+    output logic [2:0]                          l1_data_req_size,
+    output logic                                l1_data_req_is_load,
+    output logic                                l1_data_req_is_shared,
+    input  logic                                l1_data_req_ready,
     
-    input  logic                                ldst_resp_valid,
-    input  logic [$clog2(WARP_COUNT)-1:0]      ldst_resp_warp_id,
-    input  logic [THREAD_COUNT-1:0]             ldst_resp_mask,
-    input  logic [31:0]                         ldst_resp_data[THREAD_COUNT],
-    output logic                                ldst_resp_ready,
+    input  logic                                l1_data_resp_valid,
+    input  logic [$clog2(WARP_COUNT)-1:0]      l1_data_resp_warp_id,
+    input  logic [THREAD_COUNT-1:0]             l1_data_resp_mask,
+    input  logic [31:0]                         l1_data_resp_data[THREAD_COUNT],
+    output logic                                l1_data_resp_ready,
     
     // 完成信号
     output logic                                warp_complete,
@@ -375,17 +376,17 @@ module rvgpu_sm_cuda_core_unit #(
                     // 处理内存访问
                     if (current_is_load) begin
                         // 等待LDST响应
-                        if (ldst_resp_valid && ldst_resp_warp_id == current_warp_id) begin
+                        if (l1_data_resp_valid && l1_data_resp_warp_id == current_warp_id) begin
                             for (int t = 0; t < THREAD_COUNT; t++) begin
-                                if (ldst_resp_mask[t]) begin
-                                    exec_result[t] <= ldst_resp_data[t];
+                                if (l1_data_resp_mask[t]) begin
+                                    exec_result[t] <= l1_data_resp_data[t];
                                 end
                             end
                             state <= WRITEBACK;
                         end
                     end else begin
                         // Store指令，等待LDST接受
-                        if (ldst_req_ready) begin
+                        if (l1_data_req_ready) begin
                             state <= WRITEBACK;
                         end
                     end
@@ -418,20 +419,21 @@ module rvgpu_sm_cuda_core_unit #(
     assign reg_write_data = exec_result;
     assign reg_write_mask = current_active_mask;
     
-    // LDST请求
-    assign ldst_req_valid = (state == MEMORY) && (current_is_load || current_is_store);
-    assign ldst_req_warp_id = current_warp_id;
-    assign ldst_req_mask = current_active_mask;
+    // L1 Data Cache请求
+    assign l1_data_req_valid = (state == MEMORY) && (current_is_load || current_is_store);
+    assign l1_data_req_warp_id = current_warp_id;
+    assign l1_data_req_mask = current_active_mask;
     // 简化地址计算
     always_comb begin
         for (int t = 0; t < THREAD_COUNT; t++) begin
-            ldst_req_addr[t] = exec_result[t]; // 执行阶段已计算地址
-            ldst_req_data[t] = src2_data[t];   // Store数据
+            l1_data_req_addr[t] = exec_result[t]; // 执行阶段已计算地址
+            l1_data_req_data[t] = src2_data[t];   // Store数据
         end
     end
-    assign ldst_req_size = 3'b010; // 32位
-    assign ldst_req_is_write = current_is_store;
-    assign ldst_resp_ready = (state == MEMORY);
+    assign l1_data_req_size = 3'b010; // 32位
+    assign l1_data_req_is_load = current_is_store;
+    assign l1_data_req_is_shared = 1'b0; // 简化，非共享
+    assign l1_data_resp_ready = (state == MEMORY);
     
     // 完成信号
     assign warp_complete = (state == COMPLETE);

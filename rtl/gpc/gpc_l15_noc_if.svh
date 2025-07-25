@@ -13,29 +13,14 @@
 // limitations under the License.
 //=============================================================================
 
-`ifndef GPC_L15_CACHE_IF_SVH
-`define GPC_L15_CACHE_IF_SVH
+`ifndef GPC_L15_NOC_IF_SVH
+`define GPC_L15_NOC_IF_SVH
 
 `include "rvgpu_typedef.svh"
 
-// 访问类型定义
-typedef enum logic [3:0] {
-    L15_CACHE_NORMAL      = 4'b0000,     // 普通读写
-    L15_CACHE_ATOMIC_ADD  = 4'b0001,     // 原子加
-    L15_CACHE_ATOMIC_AND  = 4'b0010,     // 原子与
-    L15_CACHE_ATOMIC_OR   = 4'b0011,     // 原子或
-    L15_CACHE_ATOMIC_XOR  = 4'b0100,     // 原子异或
-    L15_CACHE_ATOMIC_CAS  = 4'b0101,     // 原子比较和交换
-    L15_CACHE_ATOMIC_EXCH = 4'b0110,     // 原子交换
-    L15_CACHE_FENCE       = 4'b0111,     // 内存屏障
-    L15_CACHE_PREFETCH    = 4'b1000,     // 预取
-    L15_CACHE_FLUSH       = 4'b1001,     // 刷新
-    L15_CACHE_INVALIDATE  = 4'b1010      // 缓存失效
-} l15_cache_access_type_e;
-
-// L1.5缓存请求者接口
-interface gpc_l15_cache_if;
-    // 请求通道
+// NOC适配器和L1.5缓存之间的接口
+interface gpc_l15_noc_if;
+    // NOC适配器 -> L1.5缓存 请求信号
     logic                req_valid;      // 请求有效
     logic                req_is_read;    // 1=读请求, 0=写请求
     logic [3:0]          req_size;       // 访问大小
@@ -44,19 +29,21 @@ interface gpc_l15_cache_if;
     logic [1023:0]       req_data;       // 写数据
     logic [127:0]        req_mask;       // 写掩码
     logic [31:0]         req_id;         // 请求ID
-    logic                req_ready;      // 缓存准备好接收请求
-    // 响应通道
+    logic                req_ready;      // L1.5缓存准备好接收请求
+
+    // L1.5缓存 -> NOC适配器 响应信号
     logic                resp_valid;     // 响应有效
     logic [1023:0]       resp_data;      // 读数据
     logic                resp_error;     // 错误标志
     logic [31:0]         resp_id;        // 响应ID
-    logic                resp_ready;     // 请求者准备好接收响应
+    logic                resp_ready;     // NOC适配器准备好接收响应
+
     // 控制信号
     logic                flush;          // 刷新请求
-    // 状态信号
-    logic [7:0]          pending_count;  // 未完成请求数量
-    // requester视角（发请求，收响应）
-    modport requester (
+    logic [7:0]          pending_count;  // 未完成请求数
+
+    // NOC适配器视角（发请求，收响应）
+    modport noc_adapter (
         output req_valid, req_is_read, req_size, req_type, req_paddr, req_data, req_mask, req_id,
         input  req_ready,
         input  resp_valid, resp_data, resp_error, resp_id,
@@ -64,7 +51,8 @@ interface gpc_l15_cache_if;
         output flush,
         input  pending_count
     );
-    // cache视角（收请求，发响应）
+
+    // L1.5 Cache视角（收请求，发响应）
     modport cache (
         input  req_valid, req_is_read, req_size, req_type, req_paddr, req_data, req_mask, req_id,
         output req_ready,
@@ -74,6 +62,6 @@ interface gpc_l15_cache_if;
         output pending_count
     );
     
-endinterface : gpc_l15_cache_if
+endinterface : gpc_l15_noc_if
 
-`endif // GPC_L15_CACHE_IF_SVH 
+`endif // GPC_L15_NOC_IF_SVH 

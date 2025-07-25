@@ -57,75 +57,63 @@ module rvgpu_gpc_l15_data_array #(
     
     // SRAM接口
     rvgpu_sram_if #(
-        .ADDR_WIDTH(INDEX_WIDTH + $clog2(ASSOCIATIVITY)),
-        .DATA_WIDTH(LINE_SIZE * 8)
+        .WIDTH(LINE_SIZE * 8),
+        .HEIGHT(NUM_SETS * ASSOCIATIVITY)
     ) sram_if();
+    
+    // 连接时钟
+    assign sram_if.clk = clk;
     
     // 地址分解
     assign read_index = read_addr[ADDR_WIDTH-TAG_WIDTH-1:$clog2(LINE_SIZE)];
     assign write_index = write_addr[ADDR_WIDTH-TAG_WIDTH-1:$clog2(LINE_SIZE)];
     
-    // 读写控制逻辑
-    always_ff @(posedge clk or negedge rst_n) begin
+    // 内部信号
+    logic read_ready;
+    logic write_ready;
+    
+    // 主状态机
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             read_ready <= 1'b0;
             write_ready <= 1'b0;
-            read_resp_valid <= 1'b0;
-            sram_if.req_valid <= 1'b0;
+            sram_if.ce <= 1'b0;
+            sram_if.we <= 1'b0;
+            sram_if.addr <= '0;
+            sram_if.wdata <= '0;
+            sram_if.wmask <= '0;
         end else begin
-            // 默认状态
+            // 默认情况下，禁用SRAM
+            sram_if.ce <= 1'b0;
             read_ready <= 1'b0;
             write_ready <= 1'b0;
-            read_resp_valid <= 1'b0;
             
-            // 处理读请求
-            if (read_valid && !sram_if.req_valid) begin
-                sram_if.req_valid <= 1'b1;
-                sram_if.req_addr <= {read_way, read_index};
-                sram_if.req_write <= 1'b0;
-                sram_if.req_wdata <= '0;
-                sram_if.req_wmask <= '0;
+            if (read_valid) begin
+                sram_if.ce <= 1'b1;
+                sram_if.we <= 1'b0;
+                sram_if.addr <= {read_way, read_index};
                 read_ready <= 1'b1;
-            end
-            
-            // 处理写请求
-            else if (write_valid && !sram_if.req_valid) begin
-                sram_if.req_valid <= 1'b1;
-                sram_if.req_addr <= {write_way, write_index};
-                sram_if.req_write <= 1'b1;
-                sram_if.req_wdata <= write_data;
-                
-                // 生成字节掩码
+            end else if (write_valid) begin
+                sram_if.ce <= 1'b1;
+                sram_if.we <= 1'b1;
+                sram_if.addr <= {write_way, write_index};
+                sram_if.wdata <= write_data;
                 for (int i = 0; i < LINE_SIZE; i++) begin
-                    sram_if.req_wmask[i*8 +: 8] <= {8{write_mask[i]}};
+                    sram_if.wmask[i] <= write_mask[i] ? '1 : '0;
                 end
-                
                 write_ready <= 1'b1;
-            end
-            
-            // 处理SRAM响应
-            if (sram_if.resp_valid) begin
-                sram_if.req_valid <= 1'b0;
-                
-                if (!sram_if.req_write) begin
-                    // 读响应
-                    read_resp_valid <= 1'b1;
-                    read_data <= sram_if.resp_rdata;
-                end
             end
         end
     end
     
     // 实例化SRAM
-    rvgpu_sram_sp_sim #(
-        .ADDR_WIDTH(INDEX_WIDTH + $clog2(ASSOCIATIVITY)),
-        .DATA_WIDTH(LINE_SIZE * 8)
+    rvgpu_sram_sp #(
+        .WIDTH(LINE_SIZE * 8),
+        .HEIGHT(NUM_SETS * ASSOCIATIVITY)
     ) u_sram (
-        .clk(clk),
-        .rst_n(rst_n),
         .sram_if(sram_if)
     );
 
-endmodule : rvgpu_gpc_l1_data_array
+endmodule : rvgpu_gpc_l15_data_array
 
 `endif // RVGPU_GPC_L1_DATA_ARRAY_SV 

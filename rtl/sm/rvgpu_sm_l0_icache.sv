@@ -18,7 +18,7 @@
 
 `include "rvgpu_typedef.svh"
 `include "gpc_l0_tlb_if.svh"
-`include "gpc_l1_cache_if.svh"
+`include "gpc_l15_cache_if.svh"
 
 // SM L0 ICache模块
 // 提供快速的指令获取，减少指令获取延迟
@@ -121,10 +121,13 @@ module rvgpu_sm_l0_icache #(
         end
     end
     
+    // LRU最小值
+    logic [1:0] min_lru;
+    
     // 替换策略 (LRU)
     always_comb begin
         replace_way = '0;
-        logic [1:0] min_lru = '1;
+        min_lru = '1;
         
         for (int i = 0; i < ASSOCIATIVITY; i++) begin
             if (!cache[current_set][i].valid) begin
@@ -188,7 +191,7 @@ module rvgpu_sm_l0_icache #(
                     // 请求TLB进行地址转换
                     tlb_req_valid <= 1'b1;
                     tlb_req_vaddr <= current_vaddr[38:0];
-                    tlb_req_type <= gpc_l0_tlb_if::TLB_EXECUTE;
+                    tlb_req_type <= TLB_EXECUTE;
                     tlb_req_warp_id <= current_warp_id;
                     
                     if (tlb_req_ready) begin

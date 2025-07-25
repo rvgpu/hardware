@@ -104,7 +104,7 @@ module rvgpu_gpc_l15_write_buffer #(
         enq_hit = 1'b0;
         enq_hit_index = '0;
         
-        for (int i = 0; i < BUFFER_ENTRIES; i++) begin
+        for (int i = 0; i < BUFFER_ENTRIES; i++) begin : enq_search
             if (wb[i].valid && addr_match(wb[i].addr, enq_addr)) begin
                 enq_hit = 1'b1;
                 enq_hit_index = i[$clog2(BUFFER_ENTRIES)-1:0];
@@ -119,7 +119,7 @@ module rvgpu_gpc_l15_write_buffer #(
         lookup_data = '0;
         lookup_mask = '0;
         
-        for (int i = 0; i < BUFFER_ENTRIES; i++) begin
+        for (int i = 0; i < BUFFER_ENTRIES; i++) begin : lookup_search
             if (wb[i].valid && addr_match(wb[i].addr, lookup_addr)) begin
                 lookup_hit = 1'b1;
                 lookup_data = wb[i].data;
@@ -132,7 +132,7 @@ module rvgpu_gpc_l15_write_buffer #(
     // 写缓冲分配逻辑
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            for (int i = 0; i < BUFFER_ENTRIES; i++) begin
+            for (int i = 0; i < BUFFER_ENTRIES; i++) begin : wb_init
                 wb[i].valid <= 1'b0;
                 wb[i].pending <= 1'b0;
                 wb[i].dirty <= 1'b0;
@@ -150,7 +150,7 @@ module rvgpu_gpc_l15_write_buffer #(
             if (enq_valid && enq_ready) begin
                 if (enq_hit) begin
                     // 命中现有写缓冲条目，合并写请求
-                    for (int i = 0; i < LINE_SIZE; i++) begin
+                    for (int i = 0; i < LINE_SIZE; i++) begin : data_merge
                         if (enq_mask[i]) begin
                             wb[enq_hit_index].data[i*8 +: 8] <= enq_data[i*8 +: 8];
                             wb[enq_hit_index].mask[i] <= 1'b1;
@@ -183,7 +183,7 @@ module rvgpu_gpc_l15_write_buffer #(
             // 处理响应发送
             if (resp_valid && resp_ready) begin
                 // 找到已完成的写缓冲条目
-                for (int i = 0; i < BUFFER_ENTRIES; i++) begin
+                for (int i = 0; i < BUFFER_ENTRIES; i++) begin : resp_cleanup
                     if (wb[i].valid && !wb[i].pending && !wb[i].dirty) begin
                         wb[i].valid <= 1'b0;
                         entry_count <= entry_count - 1;
@@ -203,7 +203,7 @@ module rvgpu_gpc_l15_write_buffer #(
             // 处理刷新请求
             if (flush) begin
                 // 将所有非挂起的脏条目标记为待写回
-                for (int i = 0; i < BUFFER_ENTRIES; i++) begin
+                for (int i = 0; i < BUFFER_ENTRIES; i++) begin : flush_mark
                     if (wb[i].valid && !wb[i].pending && wb[i].dirty) begin
                         wb[i].pending <= 1'b1;
                     end
@@ -223,7 +223,7 @@ module rvgpu_gpc_l15_write_buffer #(
         wb_mask = '0;
         
         // 寻找脏且未挂起的写缓冲条目
-        for (int i = 0; i < BUFFER_ENTRIES; i++) begin
+        for (int i = 0; i < BUFFER_ENTRIES; i++) begin : wb_search
             int idx = (next_wb_index + i) % BUFFER_ENTRIES;
             if (wb[idx].valid && !wb[idx].pending && wb[idx].dirty) begin
                 wb_valid = 1'b1;
@@ -242,7 +242,7 @@ module rvgpu_gpc_l15_write_buffer #(
         resp_id = '0;
         
         // 寻找已完成的写缓冲条目
-        for (int i = 0; i < BUFFER_ENTRIES; i++) begin
+        for (int i = 0; i < BUFFER_ENTRIES; i++) begin : resp_search
             if (wb[i].valid && !wb[i].pending && !wb[i].dirty) begin
                 resp_valid = 1'b1;
                 resp_id = wb[i].last_id;
@@ -251,6 +251,6 @@ module rvgpu_gpc_l15_write_buffer #(
         end
     end
 
-endmodule : rvgpu_gpc_l1_write_buffer
+endmodule : rvgpu_gpc_l15_write_buffer
 
 `endif // RVGPU_GPC_L1_WRITE_BUFFER_SV 

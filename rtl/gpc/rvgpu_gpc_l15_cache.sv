@@ -17,7 +17,8 @@
 `define RVGPU_GPC_L1_CACHE_SV
 
 `include "rvgpu_typedef.svh"
-`include "gpc_l1_cache_if.svh"
+`include "gpc_l15_cache_if.svh"
+`include "gpc_l15_noc_if.svh"
 
 // L1 Cache控制器模块
 // 集成Tag数组、数据数组、MSHR、RRIP替换策略和写缓冲
@@ -34,7 +35,7 @@ module rvgpu_gpc_l15_cache #(
     input  logic rst_n,
     
     // NOC接口 (连接到L2 Cache)
-    gpc_l15_cache_if.cache noc_if,
+    gpc_l15_noc_if.cache noc_if,
     
     // 请求者接口数组 (TPC、Block Scheduler、Raster等)
     gpc_l15_cache_if.cache requester_if[NUM_REQUESTERS]
@@ -168,7 +169,7 @@ module rvgpu_gpc_l15_cache #(
             
             if (state == IDLE) begin
                 // 从当前指针开始轮询
-                for (int i = 0; i < NUM_REQUESTERS; i++) begin
+                for (int i = 0; i < NUM_REQUESTERS; i++) begin : arbiter_loop
                     logic [$clog2(NUM_REQUESTERS)-1:0] idx = (arbiter_ptr + i) % NUM_REQUESTERS;
                     if (req_valid_array[idx]) begin
                         req_grant_array[idx] <= 1'b1;
@@ -183,12 +184,12 @@ module rvgpu_gpc_l15_cache #(
     // 准备就绪信号
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            for (int i = 0; i < NUM_REQUESTERS; i++) begin
+            for (int i = 0; i < NUM_REQUESTERS; i++) begin : ready_init
                 requester_if[i].req_ready <= 1'b0;
             end
         end else begin
             // 根据授权信号设置准备就绪
-            for (int i = 0; i < NUM_REQUESTERS; i++) begin
+            for (int i = 0; i < NUM_REQUESTERS; i++) begin : ready_set
                 requester_if[i].req_ready <= req_grant_array[i] && (state == IDLE);
             end
         end
@@ -235,11 +236,15 @@ module rvgpu_gpc_l15_cache #(
             rrip_replace_valid <= 1'b0;
             
             // 初始化NOC接口
-            noc_if.req_valid <= 1'b0;
-            noc_if.resp_ready <= 1'b0;
+            // 只允许驱动req_ready和resp_*信号
+            noc_if.req_ready <= 1'b0;
+            noc_if.resp_valid <= 1'b0;
+            noc_if.resp_data <= '0;
+            noc_if.resp_error <= 1'b0;
+            noc_if.resp_id <= '0;
             
             // 初始化响应接口
-            for (int i = 0; i < NUM_REQUESTERS; i++) begin
+            for (int i = 0; i < NUM_REQUESTERS; i++) begin : resp_init
                 requester_if[i].resp_valid <= 1'b0;
             end
         end else begin
@@ -261,14 +266,14 @@ module rvgpu_gpc_l15_cache #(
             case (state)
                 IDLE: begin
                     // 重置响应信号
-                    for (int i = 0; i < NUM_REQUESTERS; i++) begin
+                    for (int i = 0; i < NUM_REQUESTERS; i++) begin : resp_reset
                         requester_if[i].resp_valid <= 1'b0;
                     end
                     
                     // 检查是否有请求
                     if (req_grant_array != '0) begin
                         // 确定当前请求者
-                        for (int i = 0; i < NUM_REQUESTERS; i++) begin
+                        for (int i = 0; i < NUM_REQUESTERS; i++) begin : req_check
                             if (req_grant_array[i]) begin
                                 current_requester <= i[$clog2(NUM_REQUESTERS)-1:0];
                                 current_addr <= requester_if[i].req_paddr;
@@ -306,9 +311,9 @@ module rvgpu_gpc_l15_cache #(
                                     if (wb_wb_valid) begin
                                         state <= DATA_WRITE;
                                     end
-                                }
-                            }
-                        }
+                                end
+                            end
+                        end
                     end
                 end
                 
@@ -326,12 +331,12 @@ module rvgpu_gpc_l15_cache #(
                                 // 读请求，读取数据
                                 data_read_valid <= 1'b1;
                                 state <= DATA_READ;
-                            } else begin
+                            end else begin
                                 // 写请求，写入数据
                                 data_write_valid <= 1'b1;
                                 state <= DATA_WRITE;
-                            }
-                        } else begin
+                            end
+                        end else begin
                             // 未命中，检查MSHR
                             mshr_alloc_valid <= 1'b1;
                             state <= MSHR_ALLOC;
@@ -366,18 +371,18 @@ module rvgpu_gpc_l15_cache #(
                         if (mshr_alloc_hit) begin
                             // 已经有相同地址的MSHR条目
                             state <= MSHR_WAIT;
-                        } else if (!mshr_full) begin
+                        end else if (!mshr_full) begin
                             // 分配新MSHR条目，需要从L2获取数据
                             state <= NOC_REQ;
-                        } else begin
+                        end else begin
                             // MSHR已满，尝试写缓冲
                             if (!current_is_read) begin
                                 wb_enq_valid <= 1'b1;
                                 state <= WB_ALLOC;
-                            } else {
+                            end else begin
                                 // 读请求且MSHR已满，需要等待
                                 state <= IDLE;
-                            }
+                            end
                         end
                     end
                 end
@@ -392,42 +397,28 @@ module rvgpu_gpc_l15_cache #(
                         if (wb_enq_hit || !wb_full) begin
                             // 成功分配写缓冲
                             state <= RESP_SEND;
-                        end else {
+                        end else begin
                             // 写缓冲已满，需要等待
                             state <= IDLE;
-                        }
+                        end
                     end
                 end
                 
                 NOC_REQ: begin
-                    // 发送请求到NOC (L2 Cache)
-                    noc_if.req_valid <= 1'b1;
-                    noc_if.req_is_read <= mshr_req_is_read;
-                    noc_if.req_paddr <= mshr_req_addr;
-                    noc_if.req_size <= 6; // 64字节
-                    noc_if.req_type <= gpc_l1_cache_if::CACHE_NORMAL;
-                    noc_if.req_data <= '0;
-                    noc_if.req_mask <= '1;
-                    noc_if.req_id <= mshr_req_index; // 使用MSHR索引作为ID
-                    
+                    // 如需主动发起NOC请求，请使用独立的requester接口
+                    // 此处不允许驱动noc_if.req_*信号
                     if (noc_if.req_ready) begin
-                        noc_if.req_valid <= 1'b0;
                         state <= NOC_WAIT;
                     end
                 end
                 
                 NOC_WAIT: begin
                     // 等待NOC响应
-                    noc_if.resp_ready <= 1'b1;
-                    
                     if (noc_if.resp_valid) begin
-                        noc_if.resp_ready <= 1'b0;
-                        
                         // 完成MSHR请求
                         mshr_complete_valid <= 1'b1;
                         mshr_complete_index <= noc_if.resp_id[$clog2(MSHR_ENTRIES)-1:0];
                         mshr_complete_data <= noc_if.resp_data;
-                        
                         if (mshr_complete_ready) begin
                             // 更新缓存
                             // 获取替换路

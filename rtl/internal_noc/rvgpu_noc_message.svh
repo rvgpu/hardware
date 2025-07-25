@@ -17,7 +17,6 @@
 `define RVGPU_NOC_MESSAGE_SVH
 
 `include "rvgpu_typedef.svh"
-`include "rvgpu_constant.svh"
 
 `ifndef RVGPU_INTERNAL_NOC_PKG_SVH
 `error "Do not include rvgpu_noc_message.svh directly! Please include rvgpu_internal_noc_pkg.svh instead."
@@ -33,8 +32,16 @@ typedef enum l8_t {
     MSG_COMPUTE_RESP        = 8'h11,    // 计算响应
     MSG_SYNC_REQ            = 8'h30,    // 同步请求
     MSG_SYNC_RESP           = 8'h31,    // 同步响应
+    MSG_MMU_REQ             = 8'h40,    // MMU请求
+    MSG_MMU_RESP            = 8'h41,    // MMU响应
+    MSG_CACHE_INVALIDATE    = 8'h42,    // 缓存无效化
+    MSG_CACHE_FLUSH         = 8'h43,    // 缓存刷新
+    MSG_CONFIG_REQ          = 8'h44,    // 配置请求
+    MSG_CONFIG_RESP         = 8'h45,    // 配置响应
     MSG_STATUS              = 8'h50,    // 状态报告
-    MSG_ERROR               = 8'h51     // 错误报告
+    MSG_ERROR               = 8'h51,    // 错误报告
+    MSG_DEBUG_REQ           = 8'h60,    // 调试请求
+    MSG_DEBUG_RESP          = 8'h61     // 调试响应
 } noc_msg_type_t;
     
 // 节点ID定义 - GPU内部节点
@@ -149,6 +156,30 @@ function automatic noc_header_t build_noc_header_jobblock_dispatch(
     input noc_node_id_t     dst_node
 );
     return build_noc_header(MSG_COMPUTE_REQ, trans_id, NODE_CONTROL, dst_node, NOC_NODE_CONTROL_JD);
+endfunction
+
+function automatic noc_header_t build_noc_header_mmu_request(
+    input noc_trans_id_t    trans_id,
+    input noc_node_id_t     src_node,
+    input noc_local_addr_t  local_addr = NOC_NODE_CONTROL_MMU
+);
+    return build_noc_header(MSG_MMU_REQ, trans_id, src_node, NODE_CONTROL, local_addr);
+endfunction
+
+function automatic noc_header_t build_noc_header_mmu_response(
+    input noc_trans_id_t    trans_id,
+    input noc_node_id_t     dst_node,
+    input noc_local_addr_t  local_addr = 8'h00
+);
+    return build_noc_header(MSG_MMU_RESP, trans_id, NODE_CONTROL, dst_node, local_addr);
+endfunction
+
+function automatic noc_header_t build_noc_header_cache_invalidate(
+    input noc_trans_id_t    trans_id,
+    input noc_node_id_t     src_node,
+    input noc_node_id_t     dst_node
+);
+    return build_noc_header(MSG_CACHE_INVALIDATE, trans_id, src_node, dst_node, 8'h00);
 endfunction
     
 // 解析NOC header

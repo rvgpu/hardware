@@ -19,6 +19,7 @@
 `include "rvgpu_l2cache_pkg.svh"
 `include "rvgpu_l2cache_if.svh"
 `include "rvgpu_sram_if.svh"
+`include "rvgpu_debug.svh"
 
 `ifndef RVGPU_L2CACHE_PKG_IMPORTED
 `define RVGPU_L2CACHE_PKG_IMPORTED

@@ -73,10 +73,10 @@ module rvgpu_gpc_l15_mshr #(
         logic                 is_read;
         logic                 pending;
         logic [MAX_REQUESTS-1:0] valid_reqs;
-        logic [ID_WIDTH-1:0]   req_ids[MAX_REQUESTS];
-        logic [3:0]            req_sizes[MAX_REQUESTS];
-        logic [63:0]           req_masks[MAX_REQUESTS];
-        logic [511:0]          req_data[MAX_REQUESTS];
+        logic [MAX_REQUESTS-1:0][ID_WIDTH-1:0]   req_ids;
+        logic [MAX_REQUESTS-1:0][3:0]            req_sizes;
+        logic [MAX_REQUESTS-1:0][63:0]           req_masks;
+        logic [MAX_REQUESTS-1:0][511:0]          req_data;
     } mshr_entry_t;
     
     // MSHR表
@@ -105,7 +105,7 @@ module rvgpu_gpc_l15_mshr #(
         alloc_hit = 1'b0;
         alloc_hit_index = '0;
         
-        for (int i = 0; i < MSHR_ENTRIES; i++) begin
+        for (int i = 0; i < MSHR_ENTRIES; i++) begin : alloc_search
             if (mshr[i].valid && addr_match(mshr[i].addr, alloc_addr)) begin
                 alloc_hit = 1'b1;
                 alloc_hit_index = i[$clog2(MSHR_ENTRIES)-1:0];
@@ -116,9 +116,9 @@ module rvgpu_gpc_l15_mshr #(
     
     // 查找可用请求槽位
     always_comb begin
-        for (int i = 0; i < MSHR_ENTRIES; i++) begin
+        for (int i = 0; i < MSHR_ENTRIES; i++) begin : slot_search
             next_req_slot[i] = '0;
-            for (int j = 0; j < MAX_REQUESTS; j++) begin
+            for (int j = 0; j < MAX_REQUESTS; j++) begin : slot_find
                 if (!mshr[i].valid_reqs[j]) begin
                     next_req_slot[i] = (1 << j);
                     break;
@@ -130,7 +130,7 @@ module rvgpu_gpc_l15_mshr #(
     // MSHR分配逻辑
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            for (int i = 0; i < MSHR_ENTRIES; i++) begin
+            for (int i = 0; i < MSHR_ENTRIES; i++) begin : mshr_init
                 mshr[i].valid <= 1'b0;
                 mshr[i].pending <= 1'b0;
                 mshr[i].valid_reqs <= '0;
@@ -150,7 +150,7 @@ module rvgpu_gpc_l15_mshr #(
                     // 命中现有MSHR条目，添加到请求列表
                     if (|next_req_slot[alloc_hit_index]) begin
                         // 找到第一个空闲槽位
-                        for (int j = 0; j < MAX_REQUESTS; j++) begin
+                        for (int j = 0; j < MAX_REQUESTS; j++) begin : slot_alloc
                             if (next_req_slot[alloc_hit_index][j]) begin
                                 mshr[alloc_hit_index].valid_reqs[j] <= 1'b1;
                                 mshr[alloc_hit_index].req_ids[j] <= alloc_id;
@@ -187,7 +187,7 @@ module rvgpu_gpc_l15_mshr #(
             // 处理响应发送
             if (resp_valid && resp_ready) begin
                 // 找到第一个有效请求
-                for (int j = 0; j < MAX_REQUESTS; j++) begin
+                for (int j = 0; j < MAX_REQUESTS; j++) begin : resp_send
                     if (mshr[req_index].valid_reqs[j]) begin
                         mshr[req_index].valid_reqs[j] <= 1'b0;
                         break;
@@ -222,7 +222,7 @@ module rvgpu_gpc_l15_mshr #(
         req_index = next_req_index;
         
         // 寻找有效但未处理的MSHR条目
-        for (int i = 0; i < MSHR_ENTRIES; i++) begin
+        for (int i = 0; i < MSHR_ENTRIES; i++) begin : req_search
             int idx = (next_req_index + i) % MSHR_ENTRIES;
             if (mshr[idx].valid && !mshr[idx].pending) begin
                 req_valid = 1'b1;
@@ -242,10 +242,10 @@ module rvgpu_gpc_l15_mshr #(
         resp_error = 1'b0;
         
         // 寻找完成的MSHR条目
-        for (int i = 0; i < MSHR_ENTRIES; i++) begin
+        for (int i = 0; i < MSHR_ENTRIES; i++) begin : resp_search
             if (mshr[i].valid && !mshr[i].pending) begin
                 // 找到第一个有效请求
-                for (int j = 0; j < MAX_REQUESTS; j++) begin
+                for (int j = 0; j < MAX_REQUESTS; j++) begin : req_find
                     if (mshr[i].valid_reqs[j]) begin
                         resp_valid = 1'b1;
                         resp_id = mshr[i].req_ids[j];
@@ -262,6 +262,6 @@ module rvgpu_gpc_l15_mshr #(
         end
     end
 
-endmodule : rvgpu_gpc_l1_mshr
+endmodule : rvgpu_gpc_l15_mshr
 
 `endif // RVGPU_GPC_L1_MSHR_SV 

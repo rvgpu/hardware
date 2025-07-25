@@ -131,6 +131,6 @@ module rvgpu_gpc_l15_rrip #(
     // 在实际实现中，这应该是时序逻辑的一部分
     // 为了简化，我们在这里省略了这部分逻辑
 
-endmodule : rvgpu_gpc_l1_rrip
+endmodule : rvgpu_gpc_l15_rrip
 
 `endif // RVGPU_GPC_L1_RRIP_SV 

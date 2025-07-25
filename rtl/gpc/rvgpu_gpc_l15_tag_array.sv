@@ -143,6 +143,6 @@ module rvgpu_gpc_l15_tag_array #(
         end
     end
 
-endmodule : rvgpu_gpc_l1_tag_array
+endmodule : rvgpu_gpc_l15_tag_array
 
 `endif // RVGPU_GPC_L1_TAG_ARRAY_SV 

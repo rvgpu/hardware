@@ -85,6 +85,7 @@ module rvgpu_sm_tensor_core #(
     logic [31:0] conv_result[THREAD_COUNT][MATRIX_SIZE][MATRIX_SIZE];
     logic [31:0] act_result[THREAD_COUNT][MATRIX_SIZE][MATRIX_SIZE];
     logic [31:0] pool_result[THREAD_COUNT][MATRIX_SIZE][MATRIX_SIZE];
+    logic [31:0] norm_result[THREAD_COUNT][MATRIX_SIZE][MATRIX_SIZE];
     
     // 指令解码
     always_comb begin
@@ -117,17 +118,19 @@ module rvgpu_sm_tensor_core #(
     
     // 矩阵乘加运算
     always_comb begin
-        for (int t = 0; t < THREAD_COUNT; t++) begin
+        // 使用静态变量避免自动变量引用问题
+        static int t, i, j, k;
+        for (t = 0; t < THREAD_COUNT; t++) begin
             // 只处理活跃线程
             if (active_mask[t]) begin
                 // 执行矩阵乘法 D = A*B + C
-                for (int i = 0; i < MATRIX_SIZE; i++) begin
-                    for (int j = 0; j < MATRIX_SIZE; j++) begin
+                for (i = 0; i < MATRIX_SIZE; i++) begin
+                    for (j = 0; j < MATRIX_SIZE; j++) begin
                         // 初始化为C矩阵的值
                         mmad_result[t][i][j] = matrix_c[t][i][j];
                         
                         // 执行矩阵乘法累加
-                        for (int k = 0; k < MATRIX_SIZE; k++) begin
+                        for (k = 0; k < MATRIX_SIZE; k++) begin
                             // FP16乘法转换为FP32
                             logic [31:0] a_fp32 = {16'b0, matrix_a[t][i][k]};
                             logic [31:0] b_fp32 = {16'b0, matrix_b[t][k][j]};
@@ -137,8 +140,8 @@ module rvgpu_sm_tensor_core #(
                 end
             end else begin
                 // 非活跃线程结果为0
-                for (int i = 0; i < MATRIX_SIZE; i++) begin
-                    for (int j = 0; j < MATRIX_SIZE; j++) begin
+                for (i = 0; i < MATRIX_SIZE; i++) begin
+                    for (j = 0; j < MATRIX_SIZE; j++) begin
                         mmad_result[t][i][j] = '0;
                     end
                 end
@@ -148,18 +151,20 @@ module rvgpu_sm_tensor_core #(
     
     // 卷积运算 (简化实现)
     always_comb begin
-        for (int t = 0; t < THREAD_COUNT; t++) begin
+        // 使用静态变量避免自动变量引用问题
+        static int t, i, j;
+        for (t = 0; t < THREAD_COUNT; t++) begin
             // 只处理活跃线程
             if (active_mask[t]) begin
                 // 简化实现：将卷积视为特殊的矩阵乘法
-                for (int i = 0; i < MATRIX_SIZE; i++) begin
-                    for (int j = 0; j < MATRIX_SIZE; j++) begin
+                for (i = 0; i < MATRIX_SIZE; i++) begin
+                    for (j = 0; j < MATRIX_SIZE; j++) begin
                         conv_result[t][i][j] = mmad_result[t][i][j]; // 简化实现
                     end
                 end
             end else begin
-                for (int i = 0; i < MATRIX_SIZE; i++) begin
-                    for (int j = 0; j < MATRIX_SIZE; j++) begin
+                for (i = 0; i < MATRIX_SIZE; i++) begin
+                    for (j = 0; j < MATRIX_SIZE; j++) begin
                         conv_result[t][i][j] = '0;
                     end
                 end
@@ -169,11 +174,13 @@ module rvgpu_sm_tensor_core #(
     
     // 激活函数 (ReLU, Sigmoid, Tanh)
     always_comb begin
-        for (int t = 0; t < THREAD_COUNT; t++) begin
+        // 使用静态变量避免自动变量引用问题
+        static int t, i, j;
+        for (t = 0; t < THREAD_COUNT; t++) begin
             // 只处理活跃线程
             if (active_mask[t]) begin
-                for (int i = 0; i < MATRIX_SIZE; i++) begin
-                    for (int j = 0; j < MATRIX_SIZE; j++) begin
+                for (i = 0; i < MATRIX_SIZE; i++) begin
+                    for (j = 0; j < MATRIX_SIZE; j++) begin
                         // 根据激活函数类型选择
                         case (tensor_op)
                             TENSOR_RELU: begin
@@ -201,8 +208,8 @@ module rvgpu_sm_tensor_core #(
                     end
                 end
             end else begin
-                for (int i = 0; i < MATRIX_SIZE; i++) begin
-                    for (int j = 0; j < MATRIX_SIZE; j++) begin
+                for (i = 0; i < MATRIX_SIZE; i++) begin
+                    for (j = 0; j < MATRIX_SIZE; j++) begin
                         act_result[t][i][j] = '0;
                     end
                 end
@@ -212,39 +219,100 @@ module rvgpu_sm_tensor_core #(
     
     // 池化操作 (最大池化和平均池化)
     always_comb begin
-        for (int t = 0; t < THREAD_COUNT; t++) begin
+        // 使用静态变量避免自动变量引用问题
+        static int t, i, j, ki, kj;
+        for (t = 0; t < THREAD_COUNT; t++) begin
             // 只处理活跃线程
             if (active_mask[t]) begin
-                for (int i = 0; i < MATRIX_SIZE/2; i++) begin
-                    for (int j = 0; j < MATRIX_SIZE/2; j++) begin
+                // 最大池化
+                for (i = 0; i < MATRIX_SIZE/2; i++) begin
+                    for (j = 0; j < MATRIX_SIZE/2; j++) begin
                         // 2x2池化窗口
-                        logic [31:0] val1 = matrix_c[t][i*2][j*2];
-                        logic [31:0] val2 = matrix_c[t][i*2][j*2+1];
-                        logic [31:0] val3 = matrix_c[t][i*2+1][j*2];
-                        logic [31:0] val4 = matrix_c[t][i*2+1][j*2+1];
+                        logic [31:0] max_val = 32'h80000000; // 最小FP32值
+                        logic [31:0] sum_val = '0;
                         
-                        if (tensor_op == TENSOR_POOL_MAX) begin
-                            // 最大池化
-                            logic [31:0] max12 = ($signed(val1) > $signed(val2)) ? val1 : val2;
-                            logic [31:0] max34 = ($signed(val3) > $signed(val4)) ? val3 : val4;
-                            pool_result[t][i][j] = ($signed(max12) > $signed(max34)) ? max12 : max34;
-                        end else begin
-                            // 平均池化
-                            pool_result[t][i][j] = (val1 + val2 + val3 + val4) / 4;
+                        // 计算2x2窗口内的最大值和总和
+                        for (ki = 0; ki < 2; ki++) begin
+                            for (kj = 0; kj < 2; kj++) begin
+                                logic [31:0] window_val = act_result[t][i*2+ki][j*2+kj];
+                                
+                                // 最大池化
+                                if ($signed(window_val) > $signed(max_val)) begin
+                                    max_val = window_val;
+                                end
+                                
+                                // 平均池化
+                                sum_val = sum_val + window_val;
+                            end
                         end
                         
-                        // 填充剩余位置为0
-                        if (i*2+1 < MATRIX_SIZE && j*2+1 < MATRIX_SIZE) begin
-                            pool_result[t][i*2+1][j*2] = '0;
-                            pool_result[t][i*2][j*2+1] = '0;
-                            pool_result[t][i*2+1][j*2+1] = '0;
-                        end
+                        // 根据池化类型选择结果
+                        case (tensor_op)
+                            TENSOR_POOL_MAX: begin
+                                pool_result[t][i][j] = max_val;
+                            end
+                            
+                            TENSOR_POOL_AVG: begin
+                                pool_result[t][i][j] = sum_val >> 2; // 除以4
+                            end
+                            
+                            default: begin
+                                pool_result[t][i][j] = max_val;
+                            end
+                        endcase
                     end
                 end
             end else begin
-                for (int i = 0; i < MATRIX_SIZE; i++) begin
-                    for (int j = 0; j < MATRIX_SIZE; j++) begin
+                // 非活跃线程结果为0
+                for (i = 0; i < MATRIX_SIZE; i++) begin
+                    for (j = 0; j < MATRIX_SIZE; j++) begin
                         pool_result[t][i][j] = '0;
+                    end
+                end
+            end
+        end
+    end
+    
+    // 归一化操作 (BatchNorm, LayerNorm)
+    always_comb begin
+        // 使用静态变量避免自动变量引用问题
+        static int t, i, j;
+        for (t = 0; t < THREAD_COUNT; t++) begin
+            // 只处理活跃线程
+            if (active_mask[t]) begin
+                // 计算均值和方差
+                logic [31:0] mean = '0;
+                logic [31:0] variance = '0;
+                
+                // 计算均值
+                for (i = 0; i < MATRIX_SIZE; i++) begin
+                    for (j = 0; j < MATRIX_SIZE; j++) begin
+                        mean = mean + pool_result[t][i][j];
+                    end
+                end
+                mean = mean / (MATRIX_SIZE * MATRIX_SIZE);
+                
+                // 计算方差
+                for (i = 0; i < MATRIX_SIZE; i++) begin
+                    for (j = 0; j < MATRIX_SIZE; j++) begin
+                        logic [31:0] diff = pool_result[t][i][j] - mean;
+                        variance = variance + (diff * diff);
+                    end
+                end
+                variance = variance / (MATRIX_SIZE * MATRIX_SIZE);
+                
+                // 应用归一化
+                for (i = 0; i < MATRIX_SIZE; i++) begin
+                    for (j = 0; j < MATRIX_SIZE; j++) begin
+                        logic [31:0] normalized = (pool_result[t][i][j] - mean) / (variance + 32'h3C000000); // 加epsilon
+                        norm_result[t][i][j] = normalized;
+                    end
+                end
+            end else begin
+                // 非活跃线程结果为0
+                for (i = 0; i < MATRIX_SIZE; i++) begin
+                    for (j = 0; j < MATRIX_SIZE; j++) begin
+                        norm_result[t][i][j] = '0;
                     end
                 end
             end

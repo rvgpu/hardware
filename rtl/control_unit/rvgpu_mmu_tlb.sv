@@ -20,8 +20,6 @@
 `include "rvgpu_sram_if.svh"
 `include "rvgpu_mmu_pkg.svh"
 
-`include "rvgpu_sram_sp_sim.sv"
-
 `ifndef RVGPU_MMU_PKG_IMPORTED
 `define RVGPU_MMU_PKG_IMPORTED
 import rvgpu_mmu_pkg::*;

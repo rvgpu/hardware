@@ -56,7 +56,7 @@ module rvgpu_gpc_mmu #(
     typedef struct packed {
         logic        valid;          // 有效位
         logic [38:0] vaddr;          // 虚拟地址
-        logic [2:0]  type;           // 访问类型
+        logic [2:0]  req_type;       // 访问类型
         logic [31:0] warp_id;        // Warp ID
         logic [3:0]  source_id;      // 请求源ID
         logic [3:0]  tpc_id;         // TPC ID (0-3表示TPC, 4表示Block Scheduler)
@@ -119,7 +119,7 @@ module rvgpu_gpc_mmu #(
             
             if (!req_queue_full) begin
                 // 从当前指针开始轮询
-                for (int i = 0; i < 5; i++) begin
+                for (int i = 0; i < 5; i++) begin : arbiter_loop
                     logic [2:0] idx = (arbiter_ptr + i) % 5;
                     if (req_valid_array[idx]) begin
                         req_grant_array[idx] <= 1'b1;
@@ -139,7 +139,7 @@ module rvgpu_gpc_mmu #(
             req_queue_full <= 1'b0;
             req_queue_empty <= 1'b1;
             
-            for (int i = 0; i < MAX_REQUESTS; i++) begin
+            for (int i = 0; i < MAX_REQUESTS; i++) begin : init_loop
                 req_queue[i].valid <= 1'b0;
                 req_queue[i].pending <= 1'b0;
             end
@@ -153,16 +153,16 @@ module rvgpu_gpc_mmu #(
                 if (req_grant_array[4]) begin
                     // Block Scheduler请求
                     req_queue[req_tail].vaddr <= bs_if.req_vaddr;
-                    req_queue[req_tail].type <= bs_if.req_type;
+                    req_queue[req_tail].req_type <= bs_if.req_type;
                     req_queue[req_tail].warp_id <= bs_if.req_warp_id;
                     req_queue[req_tail].source_id <= bs_if.req_source_id;
                     req_queue[req_tail].tpc_id <= 4; // 4表示Block Scheduler
                 end else begin
                     // TPC请求
-                    for (int i = 0; i < 4; i++) begin
+                    for (int i = 0; i < 4; i++) begin : tpc_loop
                         if (req_grant_array[i]) begin
                             req_queue[req_tail].vaddr <= tpc_if[i].req_vaddr;
-                            req_queue[req_tail].type <= tpc_if[i].req_type;
+                            req_queue[req_tail].req_type <= tpc_if[i].req_type;
                             req_queue[req_tail].warp_id <= tpc_if[i].req_warp_id;
                             req_queue[req_tail].source_id <= tpc_if[i].req_source_id;
                             req_queue[req_tail].tpc_id <= i;
@@ -192,13 +192,13 @@ module rvgpu_gpc_mmu #(
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             bs_if.req_ready <= 1'b0;
-            for (int i = 0; i < 4; i++) begin
+            for (int i = 0; i < 4; i++) begin : ready_init
                 tpc_if[i].req_ready <= 1'b0;
             end
         end else begin
             // 根据授权信号设置准备就绪
             bs_if.req_ready <= req_grant_array[4] && !req_queue_full;
-            for (int i = 0; i < 4; i++) begin
+            for (int i = 0; i < 4; i++) begin : ready_set
                 tpc_if[i].req_ready <= req_grant_array[i] && !req_queue_full;
             end
         end
@@ -214,17 +214,17 @@ module rvgpu_gpc_mmu #(
         tlb_fault = 1'b0;
         
         // 并行比较所有TLB条目
-        for (int i = 0; i < TLB_ENTRIES; i++) begin
+        for (int i = 0; i < TLB_ENTRIES; i++) begin : tlb_search
             if (tlb_entries[i].valid && tlb_entries[i].vpn == req_vpn) begin
                 tlb_hit = 1'b1;
                 hit_index = i;
                 
                 // 检查访问权限
-                case (current_req.type)
-                    gpc_mmu_if::MMU_READ:    tlb_fault = !(tlb_entries[i].perm[0]);
-                    gpc_mmu_if::MMU_WRITE:   tlb_fault = !(tlb_entries[i].perm[1]);
-                    gpc_mmu_if::MMU_EXECUTE: tlb_fault = !(tlb_entries[i].perm[2]);
-                    default:                 tlb_fault = 1'b1;
+                case (current_req.req_type)
+                    MMU_READ:    tlb_fault = !(tlb_entries[i].perm[0]);
+                    MMU_WRITE:   tlb_fault = !(tlb_entries[i].perm[1]);
+                    MMU_EXECUTE: tlb_fault = !(tlb_entries[i].perm[2]);
+                    default:     tlb_fault = 1'b1;
                 endcase
                 
                 break;
@@ -232,13 +232,16 @@ module rvgpu_gpc_mmu #(
         end
     end
     
+    // PLRU最小值
+    logic [3:0] min_plru;
+    
     // 替换策略 (PLRU - Pseudo-LRU)
     always_comb begin
         replace_index = '0;
-        logic [3:0] min_plru = '1;
+        min_plru = '1;
         
         // 查找PLRU值最小的条目
-        for (int i = 0; i < TLB_ENTRIES; i++) begin
+        for (int i = 0; i < TLB_ENTRIES; i++) begin : plru_search
             if (!tlb_entries[i].valid) begin
                 // 优先使用无效条目
                 replace_index = i;
@@ -260,7 +263,7 @@ module rvgpu_gpc_mmu #(
             noc_if.resp_ready <= 1'b0;
             
             // 初始化TLB条目
-            for (int i = 0; i < TLB_ENTRIES; i++) begin
+            for (int i = 0; i < TLB_ENTRIES; i++) begin : tlb_init
                 tlb_entries[i].valid <= 1'b0;
                 tlb_entries[i].vpn <= '0;
                 tlb_entries[i].ppn <= '0;
@@ -271,7 +274,7 @@ module rvgpu_gpc_mmu #(
             
             // 初始化响应信号
             bs_if.resp_valid <= 1'b0;
-            for (int i = 0; i < 4; i++) begin
+            for (int i = 0; i < 4; i++) begin : resp_init
                 tpc_if[i].resp_valid <= 1'b0;
                 l0_tlb_if[i].update_valid <= 1'b0;
             end
@@ -280,7 +283,7 @@ module rvgpu_gpc_mmu #(
                 IDLE: begin
                     // 重置响应信号
                     bs_if.resp_valid <= 1'b0;
-                    for (int i = 0; i < 4; i++) begin
+                    for (int i = 0; i < 4; i++) begin : resp_reset
                         tpc_if[i].resp_valid <= 1'b0;
                     end
                     
@@ -302,7 +305,7 @@ module rvgpu_gpc_mmu #(
                         tlb_entries[hit_index].plru <= '1; // 最近使用
                         
                         // 更新其他条目的PLRU值
-                        for (int i = 0; i < TLB_ENTRIES; i++) begin
+                        for (int i = 0; i < TLB_ENTRIES; i++) begin : plru_update_hit
                             if (tlb_entries[i].valid && i != hit_index && tlb_entries[i].plru > 0) begin
                                 tlb_entries[i].plru <= tlb_entries[i].plru - 1;
                             end
@@ -319,7 +322,7 @@ module rvgpu_gpc_mmu #(
                     // 发送请求到NOC Adapter
                     noc_if.req_valid <= 1'b1;
                     noc_if.req_vaddr <= current_req.vaddr;
-                    noc_if.req_type <= current_req.type;
+                    noc_if.req_type <= current_req.req_type;
                     noc_if.req_warp_id <= current_req.warp_id;
                     noc_if.req_source_id <= current_req.source_id;
                     noc_if.req_gpc_id <= GPC_ID;
@@ -355,12 +358,12 @@ module rvgpu_gpc_mmu #(
                     tlb_entries[replace_index].valid <= 1'b1;
                     tlb_entries[replace_index].vpn <= req_vpn;
                     tlb_entries[replace_index].ppn <= current_ppn;
-                    tlb_entries[replace_index].perm <= current_req.type; // 简化实现，实际应使用MMU返回的权限
+                    tlb_entries[replace_index].perm <= current_req.req_type; // 简化实现，实际应使用MMU返回的权限
                     tlb_entries[replace_index].accessed <= 1'b1;
                     tlb_entries[replace_index].plru <= '1; // 最近使用
                     
                     // 更新其他条目的PLRU值
-                    for (int i = 0; i < TLB_ENTRIES; i++) begin
+                    for (int i = 0; i < TLB_ENTRIES; i++) begin : plru_update_replace
                         if (tlb_entries[i].valid && i != replace_index && tlb_entries[i].plru > 0) begin
                             tlb_entries[i].plru <= tlb_entries[i].plru - 1;
                         end
@@ -379,7 +382,7 @@ module rvgpu_gpc_mmu #(
                     l0_tlb_if[current_req.tpc_id].update_valid <= 1'b1;
                     l0_tlb_if[current_req.tpc_id].update_vaddr <= current_req.vaddr;
                     l0_tlb_if[current_req.tpc_id].update_ppn <= current_ppn;
-                    l0_tlb_if[current_req.tpc_id].update_perm <= current_req.type; // 简化实现
+                    l0_tlb_if[current_req.tpc_id].update_perm <= current_req.req_type; // 简化实现
                     
                     if (l0_tlb_if[current_req.tpc_id].update_ready) begin
                         l0_tlb_if[current_req.tpc_id].update_valid <= 1'b0;
@@ -423,50 +426,6 @@ module rvgpu_gpc_mmu #(
         end
     end
     
-    // L0 TLB请求处理
-    genvar i;
-    generate
-        for (i = 0; i < 4; i++) begin : l0_tlb_req_gen
-            always_ff @(posedge clk or negedge rst_n) begin
-                if (!rst_n) begin
-                    l0_tlb_if[i].gpc_mmu_req_ready <= 1'b0;
-                end else begin
-                    // 简化实现：总是准备好接收L0 TLB的请求
-                    // 实际实现需要考虑队列状态和仲裁
-                    l0_tlb_if[i].gpc_mmu_req_ready <= 1'b1;
-                    
-                    // 当L0 TLB发送有效请求时，将其转发到TPC接口
-                    if (l0_tlb_if[i].gpc_mmu_req_valid && l0_tlb_if[i].gpc_mmu_req_ready) begin
-                        tpc_if[i].req_valid <= 1'b1;
-                        tpc_if[i].req_vaddr <= l0_tlb_if[i].gpc_mmu_req_vaddr;
-                        tpc_if[i].req_type <= l0_tlb_if[i].gpc_mmu_req_type;
-                        tpc_if[i].req_warp_id <= l0_tlb_if[i].gpc_mmu_req_warp_id;
-                        tpc_if[i].req_source_id <= 4'h0; // 默认值
-                    end
-                end
-            end
-            
-            // L0 TLB响应处理
-            always_ff @(posedge clk or negedge rst_n) begin
-                if (!rst_n) begin
-                    l0_tlb_if[i].gpc_mmu_resp_valid <= 1'b0;
-                end else begin
-                    // 当TPC接口有有效响应时，将其转发到L0 TLB
-                    if (tpc_if[i].resp_valid && tpc_if[i].resp_ready) begin
-                        l0_tlb_if[i].gpc_mmu_resp_valid <= 1'b1;
-                        l0_tlb_if[i].gpc_mmu_resp_ppn <= tpc_if[i].resp_ppn;
-                        l0_tlb_if[i].gpc_mmu_resp_fault <= tpc_if[i].resp_fault;
-                        l0_tlb_if[i].gpc_mmu_resp_warp_id <= tpc_if[i].resp_warp_id;
-                        
-                        if (l0_tlb_if[i].gpc_mmu_resp_ready) begin
-                            l0_tlb_if[i].gpc_mmu_resp_valid <= 1'b0;
-                        end
-                    end
-                end
-            end
-        end
-    endgenerate
-
 endmodule : rvgpu_gpc_mmu
 
 `endif // RVGPU_GPC_MMU_SV 

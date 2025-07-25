@@ -18,7 +18,7 @@
 
 `include "rvgpu_typedef.svh"
 `include "gpc_block_raster_if.svh"
-`include "gpc_l1_cache_if.svh"
+`include "gpc_l15_cache_if.svh"
 
 // GPC Raster Engine模块
 // 负责图形光栅化操作
@@ -125,8 +125,8 @@ module rvgpu_gpc_raster #(
             // 初始化接口信号
             raster_if.cmd_ready <= 1'b0;
             raster_if.complete_valid <= 1'b0;
-            l1_if.req_valid <= 1'b0;
-            l1_if.resp_ready <= 1'b0;
+            l15_if.req_valid <= 1'b0;
+            l15_if.resp_ready <= 1'b0;
         end else begin
             case (state)
                 IDLE: begin
@@ -149,7 +149,7 @@ module rvgpu_gpc_raster #(
                     l15_if.req_is_read <= 1'b1;
                     l15_if.req_paddr <= cmd_data + (cmd_index << 2); // 假设每个命令是4字节
                     l15_if.req_size <= 2; // 4字节
-                    l15_if.req_type <= gpc_l15_cache_if::L15_CACHE_NORMAL;
+                    l15_if.req_type <= L15_CACHE_NORMAL;
                     l15_if.req_data <= '0;
                     l15_if.req_mask <= '0;
                     l15_if.req_id <= req_id_counter;
@@ -163,18 +163,18 @@ module rvgpu_gpc_raster #(
                 
                 PARSE_CMD: begin
                     // 等待L1 Cache响应
-                    l1_if.resp_ready <= 1'b1;
+                    l15_if.resp_ready <= 1'b1;
                     
-                    if (l1_if.resp_valid) begin
-                        l1_if.resp_ready <= 1'b0;
+                    if (l15_if.resp_valid) begin
+                        l15_if.resp_ready <= 1'b0;
                         
                         // 解析命令
-                        cmd_type <= cmd_type_t'(l1_if.resp_data[3:0]);
+                        cmd_type <= cmd_type_t'(l15_if.resp_data[3:0]);
                         
-                        case (cmd_type_t'(l1_if.resp_data[3:0]))
+                        case (cmd_type_t'(l15_if.resp_data[3:0]))
                             CMD_CLEAR: begin
                                 // 清除帧缓冲
-                                framebuffer_addr <= l1_if.resp_data[63:0];
+                                framebuffer_addr <= l15_if.resp_data[63:0];
                                 state <= WRITE_COLOR;
                             end
                             
@@ -187,30 +187,30 @@ module rvgpu_gpc_raster #(
                             
                             CMD_TRIANGLE_STRIP: begin
                                 // 处理三角形条带
-                                triangle_count <= l1_if.resp_data[35:4];
+                                triangle_count <= l15_if.resp_data[35:4];
                                 current_triangle <= 0;
                                 state <= SETUP_TRIANGLE;
                             end
                             
                             CMD_TRIANGLE_FAN: begin
                                 // 处理三角形扇形
-                                triangle_count <= l1_if.resp_data[35:4];
+                                triangle_count <= l15_if.resp_data[35:4];
                                 current_triangle <= 0;
                                 state <= SETUP_TRIANGLE;
                             end
                             
                             CMD_TEXTURE_LOAD: begin
                                 // 加载纹理
-                                texture_addr <= l1_if.resp_data[95:32];
-                                texture_width <= l1_if.resp_data[127:96];
-                                texture_height <= l1_if.resp_data[159:128];
+                                texture_addr <= l15_if.resp_data[95:32];
+                                texture_width <= l15_if.resp_data[127:96];
+                                texture_height <= l15_if.resp_data[159:128];
                                 state <= FETCH_TEXTURE;
                             end
                             
                             CMD_SET_VIEWPORT: begin
                                 // 设置视口
-                                viewport_width <= l1_if.resp_data[35:4];
-                                viewport_height <= l1_if.resp_data[67:36];
+                                viewport_width <= l15_if.resp_data[35:4];
+                                viewport_height <= l15_if.resp_data[67:36];
                                 cmd_index <= cmd_index + 1;
                                 state <= (cmd_index + 1 < cmd_size) ? FETCH_CMD : COMPLETE;
                             end
@@ -274,17 +274,17 @@ module rvgpu_gpc_raster #(
                 
                 FETCH_TEXTURE: begin
                     // 获取纹理数据
-                    l1_if.req_valid <= 1'b1;
-                    l1_if.req_is_read <= 1'b1;
-                    l1_if.req_paddr <= texture_addr;
-                    l1_if.req_size <= 6; // 64字节
-                    l1_if.req_type <= gpc_l1_cache_if::CACHE_NORMAL;
-                    l1_if.req_data <= '0;
-                    l1_if.req_mask <= '0;
-                    l1_if.req_id <= req_id_counter;
+                    l15_if.req_valid <= 1'b1;
+                    l15_if.req_is_read <= 1'b1;
+                    l15_if.req_paddr <= texture_addr;
+                    l15_if.req_size <= 6; // 64字节
+                    l15_if.req_type <= L15_CACHE_NORMAL;
+                    l15_if.req_data <= '0;
+                    l15_if.req_mask <= '0;
+                    l15_if.req_id <= req_id_counter;
                     
-                    if (l1_if.req_ready) begin
-                        l1_if.req_valid <= 1'b0;
+                    if (l15_if.req_ready) begin
+                        l15_if.req_valid <= 1'b0;
                         req_id_counter <= req_id_counter + 1;
                         state <= WAIT_TEXTURE;
                     end
@@ -292,11 +292,11 @@ module rvgpu_gpc_raster #(
                 
                 WAIT_TEXTURE: begin
                     // 等待纹理数据
-                    l1_if.resp_ready <= 1'b1;
+                    l15_if.resp_ready <= 1'b1;
                     
-                    if (l1_if.resp_valid) begin
-                        l1_if.resp_ready <= 1'b0;
-                        texture_data <= l1_if.resp_data;
+                    if (l15_if.resp_valid) begin
+                        l15_if.resp_ready <= 1'b0;
+                        texture_data <= l15_if.resp_data;
                         cmd_index <= cmd_index + 1;
                         state <= (cmd_index + 1 < cmd_size) ? FETCH_CMD : COMPLETE;
                     end
@@ -319,17 +319,17 @@ module rvgpu_gpc_raster #(
                 
                 WRITE_COLOR: begin
                     // 写入颜色缓冲区
-                    l1_if.req_valid <= 1'b1;
-                    l1_if.req_is_read <= 1'b0;
-                    l1_if.req_paddr <= framebuffer_addr + ((current_y * viewport_width + current_x) << 2);
-                    l1_if.req_size <= 2; // 4字节
-                    l1_if.req_type <= gpc_l1_cache_if::CACHE_NORMAL;
-                    l1_if.req_data <= {15{color_data}}; // 重复颜色数据填充
-                    l1_if.req_mask <= 4'hF; // 写入所有字节
-                    l1_if.req_id <= req_id_counter;
+                    l15_if.req_valid <= 1'b1;
+                    l15_if.req_is_read <= 1'b0;
+                    l15_if.req_paddr <= framebuffer_addr + ((current_y * viewport_width + current_x) << 2);
+                    l15_if.req_size <= 2; // 4字节
+                    l15_if.req_type <= L15_CACHE_NORMAL;
+                    l15_if.req_data <= {15{color_data}}; // 重复颜色数据填充
+                    l15_if.req_mask <= 4'hF; // 写入所有字节
+                    l15_if.req_id <= req_id_counter;
                     
-                    if (l1_if.req_ready) begin
-                        l1_if.req_valid <= 1'b0;
+                    if (l15_if.req_ready) begin
+                        l15_if.req_valid <= 1'b0;
                         req_id_counter <= req_id_counter + 1;
                         state <= WAIT_WRITE;
                     end
@@ -337,10 +337,10 @@ module rvgpu_gpc_raster #(
                 
                 WAIT_WRITE: begin
                     // 等待写入完成
-                    l1_if.resp_ready <= 1'b1;
+                    l15_if.resp_ready <= 1'b1;
                     
-                    if (l1_if.resp_valid) begin
-                        l1_if.resp_ready <= 1'b0;
+                    if (l15_if.resp_valid) begin
+                        l15_if.resp_ready <= 1'b0;
                         
                         if (cmd_type == CMD_CLEAR) begin
                             // 清除操作完成

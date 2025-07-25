@@ -34,78 +34,23 @@ interface gpc_mmu_noc_if;
     logic                resp_valid;     // 响应有效
     logic                resp_ready;     // GPC MMU准备好接收响应
     logic [26:0]         resp_ppn;       // 物理页号
+    logic                resp_hit;       // TLB命中标志
     logic                resp_fault;     // 访问错误标志
     logic [31:0]         resp_warp_id;   // Warp ID
     logic [3:0]          resp_source_id; // 请求源ID
     
     // 模块端口
     modport gpc_mmu (
-        output req_valid, req_vaddr, req_type, req_warp_id, req_source_id, req_gpc_id, resp_ready,
-        input  req_ready, resp_valid, resp_ppn, resp_fault, resp_warp_id, resp_source_id
+        output req_valid, req_vaddr, req_type, req_warp_id, req_source_id, req_gpc_id,
+        output resp_ready,
+        input  req_ready, resp_valid, resp_ppn, resp_hit, resp_fault, resp_warp_id, resp_source_id
     );
     
     modport noc_adapter (
-        input  req_valid, req_vaddr, req_type, req_warp_id, req_source_id, req_gpc_id, resp_ready,
-        output req_ready, resp_valid, resp_ppn, resp_fault, resp_warp_id, resp_source_id
+        input  resp_ready,
+        output req_valid, req_vaddr, req_type, req_warp_id, req_source_id, req_gpc_id,
+        input  req_ready, resp_valid, resp_ppn, resp_hit, resp_fault, resp_warp_id, resp_source_id
     );
-    
-    // 任务和函数
-    // GPC MMU使用的任务
-    task mmu_send_request(
-        input logic [38:0] vaddr,
-        input logic [2:0]  type,
-        input logic [31:0] warp_id,
-        input logic [3:0]  source_id,
-        input logic [7:0]  gpc_id
-    );
-        req_valid <= 1'b1;
-        req_vaddr <= vaddr;
-        req_type <= type;
-        req_warp_id <= warp_id;
-        req_source_id <= source_id;
-        req_gpc_id <= gpc_id;
-        
-        @(posedge req_ready);
-        req_valid <= 1'b0;
-    endtask
-    
-    task mmu_wait_response(
-        output logic [26:0] ppn,
-        output logic        fault,
-        output logic [31:0] warp_id,
-        output logic [3:0]  source_id
-    );
-        resp_ready <= 1'b1;
-        @(posedge resp_valid);
-        ppn <= resp_ppn;
-        fault <= resp_fault;
-        warp_id <= resp_warp_id;
-        source_id <= resp_source_id;
-        resp_ready <= 1'b0;
-    endtask
-    
-    // NOC Adapter使用的任务
-    task noc_accept_request();
-        req_ready <= 1'b1;
-        @(posedge req_valid);
-        req_ready <= 1'b0;
-    endtask
-    
-    task noc_send_response(
-        input logic [26:0] ppn,
-        input logic        fault,
-        input logic [31:0] warp_id,
-        input logic [3:0]  source_id
-    );
-        resp_valid <= 1'b1;
-        resp_ppn <= ppn;
-        resp_fault <= fault;
-        resp_warp_id <= warp_id;
-        resp_source_id <= source_id;
-        
-        @(posedge resp_ready);
-        resp_valid <= 1'b0;
-    endtask
     
 endinterface : gpc_mmu_noc_if
 

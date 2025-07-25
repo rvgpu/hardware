@@ -1,85 +1,56 @@
-// Interface files
-rtl/common/rvgpu_command_package.svh
-rtl/common/rvgpu_config.svh
-rtl/common/rvgpu_constant.svh
-rtl/common/rvgpu_debug.svh
-rtl/common/rvgpu_job_block.svh
-rtl/common/rvgpu_register_space.svh
-rtl/common/rvgpu_typedef.svh
-rtl/gpc/gpc_l15_cache_if.svh
-rtl/gpc/gpc_mmu_if.svh
-rtl/gpc/gpc_mmu_noc_if.svh
-rtl/gpc/gpc_block_tpc_if.svh
-rtl/gpc/gpc_block_raster_if.svh
-rtl/gpc/gpc_noc_adapter_if.svh
-rtl/gpc/gpc_l0_tlb_if.svh
-rtl/gpc/ldst_sm_if.svh
-rtl/internal_noc/rvgpu_internal_noc_if.svh
-rtl/internal_noc/rvgpu_internal_noc_pkg.svh
-rtl/internal_noc/rvgpu_noc_debug.svh
-rtl/internal_noc/rvgpu_noc_message.svh
-rtl/l2cache/rvgpu_l2cache_if.svh
-rtl/l2cache/rvgpu_l2cache_pkg.svh
-rtl/l2cache/rvgpu_l2cache_types.svh
-rtl/control_unit/rvgpu_control_unit_if.svh
-rtl/control_unit/rvgpu_control_unit_pkg.svh
-rtl/control_unit/rvgpu_mmu_pkg.svh
-rtl/mem/sram/rvgpu_sram_if.svh
-rtl/gpu_top/rvgpu_interface_axi.svh
-
 // Internal NOC
-rtl/internal_noc/rvgpu_internal_noc_2sc.sv
+$RVGPU_HARDWARE/rtl/internal_noc/rvgpu_internal_noc_2sc.sv
 
 // L2 Cache
-rtl/l2cache/rvgpu_l2cache_tag_array.sv
-rtl/l2cache/rvgpu_l2cache_data_array.sv
-rtl/l2cache/rvgpu_l2cache_controller.sv
-rtl/l2cache/rvgpu_l2cache_noc_adapter.sv
-rtl/l2cache/rvgpu_l2cache_axi_adapter.sv
-rtl/l2cache/rvgpu_l2cache.sv
+$RVGPU_HARDWARE/rtl/l2cache/rvgpu_l2cache_tag_array.sv
+$RVGPU_HARDWARE/rtl/l2cache/rvgpu_l2cache_data_array.sv
+$RVGPU_HARDWARE/rtl/l2cache/rvgpu_l2cache_controller.sv
+$RVGPU_HARDWARE/rtl/l2cache/rvgpu_l2cache_noc_adapter.sv
+$RVGPU_HARDWARE/rtl/l2cache/rvgpu_l2cache_axi_adapter.sv
+$RVGPU_HARDWARE/rtl/l2cache/rvgpu_l2cache.sv
 
 // Control Unit
-rtl/control_unit/rvgpu_axi_adapter.sv
-rtl/control_unit/rvgpu_command_processor.sv
-rtl/control_unit/rvgpu_job_dispatcher.sv
-rtl/control_unit/rvgpu_mmu_tlb.sv
-rtl/control_unit/rvgpu_mmu.sv
-rtl/control_unit/rvgpu_noc_arbiter.sv
-rtl/control_unit/rvgpu_control_unit.sv
+$RVGPU_HARDWARE/rtl/control_unit/rvgpu_axi_adapter.sv
+$RVGPU_HARDWARE/rtl/control_unit/rvgpu_command_processor.sv
+$RVGPU_HARDWARE/rtl/control_unit/rvgpu_job_dispatcher.sv
+$RVGPU_HARDWARE/rtl/control_unit/rvgpu_mmu_tlb.sv
+$RVGPU_HARDWARE/rtl/control_unit/rvgpu_mmu.sv
+$RVGPU_HARDWARE/rtl/control_unit/rvgpu_noc_arbiter.sv
+$RVGPU_HARDWARE/rtl/control_unit/rvgpu_control_unit.sv
 
 // GPC
-rtl/gpc/rvgpu_gpc_top.sv
-rtl/gpc/rvgpu_gpc_noc_adapter.sv
-rtl/gpc/rvgpu_gpc_block_scheduler.sv
-rtl/gpc/rvgpu_gpc_l15_cache.sv
-rtl/gpc/rvgpu_gpc_l15_tag_array.sv
-rtl/gpc/rvgpu_gpc_l15_data_array.sv
-rtl/gpc/rvgpu_gpc_l15_rrip.sv
-rtl/gpc/rvgpu_gpc_l15_mshr.sv
-rtl/gpc/rvgpu_gpc_l15_write_buffer.sv
-rtl/gpc/rvgpu_gpc_mmu.sv
-rtl/gpc/rvgpu_gpc_raster.sv
-rtl/gpc/rvgpu_tpc_top.sv
+$RVGPU_HARDWARE/rtl/gpc/rvgpu_gpc_top.sv
+$RVGPU_HARDWARE/rtl/gpc/rvgpu_gpc_noc_adapter.sv
+$RVGPU_HARDWARE/rtl/gpc/rvgpu_gpc_block_scheduler.sv
+$RVGPU_HARDWARE/rtl/gpc/rvgpu_gpc_l15_cache.sv
+$RVGPU_HARDWARE/rtl/gpc/rvgpu_gpc_l15_tag_array.sv
+$RVGPU_HARDWARE/rtl/gpc/rvgpu_gpc_l15_data_array.sv
+$RVGPU_HARDWARE/rtl/gpc/rvgpu_gpc_l15_rrip.sv
+$RVGPU_HARDWARE/rtl/gpc/rvgpu_gpc_l15_mshr.sv
+$RVGPU_HARDWARE/rtl/gpc/rvgpu_gpc_l15_write_buffer.sv
+$RVGPU_HARDWARE/rtl/gpc/rvgpu_gpc_mmu.sv
+$RVGPU_HARDWARE/rtl/gpc/rvgpu_gpc_raster.sv
+$RVGPU_HARDWARE/rtl/gpc/rvgpu_tpc_top.sv
 
 // SM
-rtl/sm/rvgpu_sm.sv
-rtl/sm/rvgpu_sm_l0_icache.sv
-rtl/sm/rvgpu_sm_l1_data_cache.sv
-rtl/sm/rvgpu_sm_warp_scheduler.sv
-rtl/sm/rvgpu_sm_register_file.sv
-rtl/sm/rvgpu_sm_fetch_stage.sv
-rtl/sm/rvgpu_sm_decode_stage.sv
-rtl/sm/rvgpu_sm_execute_stage.sv
-rtl/sm/rvgpu_sm_memory_stage.sv
-rtl/sm/rvgpu_sm_writeback_stage.sv
+$RVGPU_HARDWARE/rtl/sm/rvgpu_sm.sv
+$RVGPU_HARDWARE/rtl/sm/rvgpu_sm_l0_icache.sv
+$RVGPU_HARDWARE/rtl/sm/rvgpu_sm_l1_data_cache.sv
+$RVGPU_HARDWARE/rtl/sm/rvgpu_sm_warp_scheduler.sv
+$RVGPU_HARDWARE/rtl/sm/rvgpu_sm_register_file.sv
+$RVGPU_HARDWARE/rtl/sm/rvgpu_sm_fetch_stage.sv
+$RVGPU_HARDWARE/rtl/sm/rvgpu_sm_decode_stage.sv
+$RVGPU_HARDWARE/rtl/sm/rvgpu_sm_execute_stage.sv
+$RVGPU_HARDWARE/rtl/sm/rvgpu_sm_memory_stage.sv
+$RVGPU_HARDWARE/rtl/sm/rvgpu_sm_writeback_stage.sv
 
 // CUDA Core
-rtl/cudacore/rvgpu_sm_cuda_core.sv
-rtl/cudacore/rvgpu_sm_tensor_core.sv
-rtl/cudacore/rvgpu_sm_cuda_core_unit.sv
+$RVGPU_HARDWARE/rtl/cudacore/rvgpu_sm_cuda_core.sv
+$RVGPU_HARDWARE/rtl/cudacore/rvgpu_sm_tensor_core.sv
+$RVGPU_HARDWARE/rtl/cudacore/rvgpu_sm_cuda_core_unit.sv
 
 // SRAM
-rtl/mem/sram/rvgpu_sram_sp_sim.sv
+$RVGPU_HARDWARE/rtl/mem/sram/rvgpu_sram_sp_sim.sv
 
 // GPU Top
-rtl/gpu_top/rvgpu_toplevel.sv
+$RVGPU_HARDWARE/rtl/gpu_top/rvgpu_toplevel.sv

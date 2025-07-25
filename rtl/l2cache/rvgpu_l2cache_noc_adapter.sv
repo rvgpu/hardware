@@ -189,7 +189,7 @@ module rvgpu_l2cache_noc_adapter #(
     //=============================================================================
     
     generate 
-        if (L2CACHE_CONFIG.debug_enable == 1) begin
+        if (L2CACHE_CONFIG.debug_enable == 1) begin : debug_output
             always_ff @(posedge clk) begin
                 if (noc_external_if.s_req_valid && noc_external_if.s_req_ready) begin
                     $display("@%0t: [L2CACHE_NOC] External Request Accepted: %s", $time, noc_request_mem_read_to_string(noc_external_if.s_req_header, noc_external_if.s_req_data));

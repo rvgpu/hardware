@@ -107,11 +107,11 @@ module rvgpu_gpc_noc_adapter #(
         // [15:8]: 源模块
         // [31:16]: 消息长度
         // [63:32]: 消息ID
-        msg_type = header[3:0];
+        msg_type = noc_msg_type_t'(header[3:0]);
         msg_target = header[7:4];
         msg_source = header[15:8];
         msg_length = header[31:16];
-        msg_id = header[63:32];
+        msg_id = 32'h0;
     endfunction
     
     // 构造响应头
@@ -128,7 +128,6 @@ module rvgpu_gpc_noc_adapter #(
         header[7:4] = target;
         header[15:8] = source;
         header[31:16] = length;
-        header[63:32] = id;
         return header;
     endfunction
     

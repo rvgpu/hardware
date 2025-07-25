@@ -168,14 +168,25 @@ module rvgpu_gpc_l15_cache #(
             req_grant_array <= '0;
             
             if (state == IDLE) begin
-                // 从当前指针开始轮询
-                for (int i = 0; i < NUM_REQUESTERS; i++) begin : arbiter_loop
-                    logic [$clog2(NUM_REQUESTERS)-1:0] idx = (arbiter_ptr + i) % NUM_REQUESTERS;
-                    if (req_valid_array[idx]) begin
-                        req_grant_array[idx] <= 1'b1;
-                        arbiter_ptr <= (idx + 1) % NUM_REQUESTERS;
-                        break;
-                    end
+                // 从当前指针开始轮询 - 简化处理
+                if (req_valid_array[(arbiter_ptr + 0) % NUM_REQUESTERS]) begin
+                    req_grant_array[(arbiter_ptr + 0) % NUM_REQUESTERS] <= 1'b1;
+                    arbiter_ptr <= ((arbiter_ptr + 0) % NUM_REQUESTERS + 1) % NUM_REQUESTERS;
+                end else if (req_valid_array[(arbiter_ptr + 1) % NUM_REQUESTERS]) begin
+                    req_grant_array[(arbiter_ptr + 1) % NUM_REQUESTERS] <= 1'b1;
+                    arbiter_ptr <= ((arbiter_ptr + 1) % NUM_REQUESTERS + 1) % NUM_REQUESTERS;
+                end else if (req_valid_array[(arbiter_ptr + 2) % NUM_REQUESTERS]) begin
+                    req_grant_array[(arbiter_ptr + 2) % NUM_REQUESTERS] <= 1'b1;
+                    arbiter_ptr <= ((arbiter_ptr + 2) % NUM_REQUESTERS + 1) % NUM_REQUESTERS;
+                end else if (req_valid_array[(arbiter_ptr + 3) % NUM_REQUESTERS]) begin
+                    req_grant_array[(arbiter_ptr + 3) % NUM_REQUESTERS] <= 1'b1;
+                    arbiter_ptr <= ((arbiter_ptr + 3) % NUM_REQUESTERS + 1) % NUM_REQUESTERS;
+                end else if (req_valid_array[(arbiter_ptr + 4) % NUM_REQUESTERS]) begin
+                    req_grant_array[(arbiter_ptr + 4) % NUM_REQUESTERS] <= 1'b1;
+                    arbiter_ptr <= ((arbiter_ptr + 4) % NUM_REQUESTERS + 1) % NUM_REQUESTERS;
+                end else if (req_valid_array[(arbiter_ptr + 5) % NUM_REQUESTERS]) begin
+                    req_grant_array[(arbiter_ptr + 5) % NUM_REQUESTERS] <= 1'b1;
+                    arbiter_ptr <= ((arbiter_ptr + 5) % NUM_REQUESTERS + 1) % NUM_REQUESTERS;
                 end
             end
         end
@@ -184,14 +195,20 @@ module rvgpu_gpc_l15_cache #(
     // 准备就绪信号
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            for (int i = 0; i < NUM_REQUESTERS; i++) begin : ready_init
-                requester_if[i].req_ready <= 1'b0;
-            end
+            requester_if[0].req_ready <= 1'b0;
+            requester_if[1].req_ready <= 1'b0;
+            requester_if[2].req_ready <= 1'b0;
+            requester_if[3].req_ready <= 1'b0;
+            requester_if[4].req_ready <= 1'b0;
+            requester_if[5].req_ready <= 1'b0;
         end else begin
             // 根据授权信号设置准备就绪
-            for (int i = 0; i < NUM_REQUESTERS; i++) begin : ready_set
-                requester_if[i].req_ready <= req_grant_array[i] && (state == IDLE);
-            end
+            requester_if[0].req_ready <= req_grant_array[0] && (state == IDLE);
+            requester_if[1].req_ready <= req_grant_array[1] && (state == IDLE);
+            requester_if[2].req_ready <= req_grant_array[2] && (state == IDLE);
+            requester_if[3].req_ready <= req_grant_array[3] && (state == IDLE);
+            requester_if[4].req_ready <= req_grant_array[4] && (state == IDLE);
+            requester_if[5].req_ready <= req_grant_array[5] && (state == IDLE);
         end
     end
     
@@ -244,9 +261,12 @@ module rvgpu_gpc_l15_cache #(
             noc_if.resp_id <= '0;
             
             // 初始化响应接口
-            for (int i = 0; i < NUM_REQUESTERS; i++) begin : resp_init
-                requester_if[i].resp_valid <= 1'b0;
-            end
+            requester_if[0].resp_valid <= 1'b0;
+            requester_if[1].resp_valid <= 1'b0;
+            requester_if[2].resp_valid <= 1'b0;
+            requester_if[3].resp_valid <= 1'b0;
+            requester_if[4].resp_valid <= 1'b0;
+            requester_if[5].resp_valid <= 1'b0;
         end else begin
             // 默认值
             tag_lookup_valid <= 1'b0;
@@ -266,25 +286,70 @@ module rvgpu_gpc_l15_cache #(
             case (state)
                 IDLE: begin
                     // 重置响应信号
-                    for (int i = 0; i < NUM_REQUESTERS; i++) begin : resp_reset
-                        requester_if[i].resp_valid <= 1'b0;
-                    end
+                    requester_if[0].resp_valid <= 1'b0;
+                    requester_if[1].resp_valid <= 1'b0;
+                    requester_if[2].resp_valid <= 1'b0;
+                    requester_if[3].resp_valid <= 1'b0;
+                    requester_if[4].resp_valid <= 1'b0;
+                    requester_if[5].resp_valid <= 1'b0;
                     
                     // 检查是否有请求
                     if (req_grant_array != '0) begin
-                        // 确定当前请求者
-                        for (int i = 0; i < NUM_REQUESTERS; i++) begin : req_check
-                            if (req_grant_array[i]) begin
-                                current_requester <= i[$clog2(NUM_REQUESTERS)-1:0];
-                                current_addr <= requester_if[i].req_paddr;
-                                current_is_read <= requester_if[i].req_is_read;
-                                current_size <= requester_if[i].req_size;
-                                current_type <= requester_if[i].req_type;
-                                current_data <= requester_if[i].req_data;
-                                current_mask <= requester_if[i].req_mask;
-                                current_id <= requester_if[i].req_id;
-                                break;
-                            end
+                        // 确定当前请求者 - 简化处理
+                        if (req_grant_array[0]) begin
+                            current_requester <= 0;
+                            current_addr <= requester_if[0].req_paddr;
+                            current_is_read <= requester_if[0].req_is_read;
+                            current_size <= requester_if[0].req_size;
+                            current_type <= requester_if[0].req_type;
+                            current_data <= requester_if[0].req_data;
+                            current_mask <= requester_if[0].req_mask;
+                            current_id <= requester_if[0].req_id;
+                        end else if (req_grant_array[1]) begin
+                            current_requester <= 1;
+                            current_addr <= requester_if[1].req_paddr;
+                            current_is_read <= requester_if[1].req_is_read;
+                            current_size <= requester_if[1].req_size;
+                            current_type <= requester_if[1].req_type;
+                            current_data <= requester_if[1].req_data;
+                            current_mask <= requester_if[1].req_mask;
+                            current_id <= requester_if[1].req_id;
+                        end else if (req_grant_array[2]) begin
+                            current_requester <= 2;
+                            current_addr <= requester_if[2].req_paddr;
+                            current_is_read <= requester_if[2].req_is_read;
+                            current_size <= requester_if[2].req_size;
+                            current_type <= requester_if[2].req_type;
+                            current_data <= requester_if[2].req_data;
+                            current_mask <= requester_if[2].req_mask;
+                            current_id <= requester_if[2].req_id;
+                        end else if (req_grant_array[3]) begin
+                            current_requester <= 3;
+                            current_addr <= requester_if[3].req_paddr;
+                            current_is_read <= requester_if[3].req_is_read;
+                            current_size <= requester_if[3].req_size;
+                            current_type <= requester_if[3].req_type;
+                            current_data <= requester_if[3].req_data;
+                            current_mask <= requester_if[3].req_mask;
+                            current_id <= requester_if[3].req_id;
+                        end else if (req_grant_array[4]) begin
+                            current_requester <= 4;
+                            current_addr <= requester_if[4].req_paddr;
+                            current_is_read <= requester_if[4].req_is_read;
+                            current_size <= requester_if[4].req_size;
+                            current_type <= requester_if[4].req_type;
+                            current_data <= requester_if[4].req_data;
+                            current_mask <= requester_if[4].req_mask;
+                            current_id <= requester_if[4].req_id;
+                        end else if (req_grant_array[5]) begin
+                            current_requester <= 5;
+                            current_addr <= requester_if[5].req_paddr;
+                            current_is_read <= requester_if[5].req_is_read;
+                            current_size <= requester_if[5].req_size;
+                            current_type <= requester_if[5].req_type;
+                            current_data <= requester_if[5].req_data;
+                            current_mask <= requester_if[5].req_mask;
+                            current_id <= requester_if[5].req_id;
                         end
                         
                         // 先检查写缓冲
@@ -581,7 +646,7 @@ module rvgpu_gpc_l15_cache #(
     ) u_rrip (
         .clk(clk),
         .rst_n(rst_n),
-        .index(current_addr[ADDR_WIDTH-$clog2(LINE_SIZE)-1:$clog2(LINE_SIZE)]),
+        .index(current_addr[$clog2((CACHE_SIZE/LINE_SIZE)/ASSOCIATIVITY)+$clog2(LINE_SIZE)-1:$clog2(LINE_SIZE)]),
         .hit_valid(rrip_hit_valid),
         .hit_way(rrip_hit_way),
         .insert_valid(rrip_insert_valid),

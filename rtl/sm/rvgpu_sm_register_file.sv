@@ -63,18 +63,6 @@ module rvgpu_sm_register_file #(
     // Warp分配状态
     logic [WARP_COUNT-1:0] warp_valid;
     
-    // 寄存器存储器初始化
-    initial begin
-        for (int w = 0; w < WARP_COUNT; w++) begin
-            for (int t = 0; t < THREAD_COUNT; t++) begin
-                for (int r = 0; r < REG_COUNT; r++) begin
-                    register_memory[w][t][r] = '0;
-                end
-            end
-        end
-        warp_valid = '0;
-    end
-    
     // 读操作 - 组合逻辑
     always_comb begin
         for (int p = 0; p < READ_PORTS; p++) begin

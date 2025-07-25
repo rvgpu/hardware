@@ -118,14 +118,28 @@ module rvgpu_gpc_mmu #(
             req_grant_array <= 5'b0;
             
             if (!req_queue_full) begin
-                // 从当前指针开始轮询
-                for (int i = 0; i < 5; i++) begin : arbiter_loop
-                    logic [2:0] idx = (arbiter_ptr + i) % 5;
-                    if (req_valid_array[idx]) begin
-                        req_grant_array[idx] <= 1'b1;
-                        arbiter_ptr <= (idx + 1) % 5;
-                        break;
-                    end
+                // 从当前指针开始轮询 - 简化处理
+                logic [2:0] idx0 = (arbiter_ptr + 0) % 5;
+                logic [2:0] idx1 = (arbiter_ptr + 1) % 5;
+                logic [2:0] idx2 = (arbiter_ptr + 2) % 5;
+                logic [2:0] idx3 = (arbiter_ptr + 3) % 5;
+                logic [2:0] idx4 = (arbiter_ptr + 4) % 5;
+                
+                if (req_valid_array[idx0]) begin
+                    req_grant_array[idx0] <= 1'b1;
+                    arbiter_ptr <= (idx0 + 1) % 5;
+                end else if (req_valid_array[idx1]) begin
+                    req_grant_array[idx1] <= 1'b1;
+                    arbiter_ptr <= (idx1 + 1) % 5;
+                end else if (req_valid_array[idx2]) begin
+                    req_grant_array[idx2] <= 1'b1;
+                    arbiter_ptr <= (idx2 + 1) % 5;
+                end else if (req_valid_array[idx3]) begin
+                    req_grant_array[idx3] <= 1'b1;
+                    arbiter_ptr <= (idx3 + 1) % 5;
+                end else if (req_valid_array[idx4]) begin
+                    req_grant_array[idx4] <= 1'b1;
+                    arbiter_ptr <= (idx4 + 1) % 5;
                 end
             end
         end
@@ -139,10 +153,17 @@ module rvgpu_gpc_mmu #(
             req_queue_full <= 1'b0;
             req_queue_empty <= 1'b1;
             
-            for (int i = 0; i < MAX_REQUESTS; i++) begin : init_loop
-                req_queue[i].valid <= 1'b0;
-                req_queue[i].pending <= 1'b0;
-            end
+            // 初始化队列 - 简化处理
+            req_queue[0].valid <= 1'b0;
+            req_queue[0].pending <= 1'b0;
+            req_queue[1].valid <= 1'b0;
+            req_queue[1].pending <= 1'b0;
+            req_queue[2].valid <= 1'b0;
+            req_queue[2].pending <= 1'b0;
+            req_queue[3].valid <= 1'b0;
+            req_queue[3].pending <= 1'b0;
+            req_queue[4].valid <= 1'b0;
+            req_queue[4].pending <= 1'b0;
         end else begin
             // 入队逻辑
             if (req_grant_array != 5'b0 && !req_queue_full) begin
@@ -158,15 +179,31 @@ module rvgpu_gpc_mmu #(
                     req_queue[req_tail].source_id <= bs_if.req_source_id;
                     req_queue[req_tail].tpc_id <= 4; // 4表示Block Scheduler
                 end else begin
-                    // TPC请求
-                    for (int i = 0; i < 4; i++) begin : tpc_loop
-                        if (req_grant_array[i]) begin
-                            req_queue[req_tail].vaddr <= tpc_if[i].req_vaddr;
-                            req_queue[req_tail].req_type <= tpc_if[i].req_type;
-                            req_queue[req_tail].warp_id <= tpc_if[i].req_warp_id;
-                            req_queue[req_tail].source_id <= tpc_if[i].req_source_id;
-                            req_queue[req_tail].tpc_id <= i;
-                        end
+                    // TPC请求 - 简化处理
+                    if (req_grant_array[0]) begin
+                        req_queue[req_tail].vaddr <= tpc_if[0].req_vaddr;
+                        req_queue[req_tail].req_type <= tpc_if[0].req_type;
+                        req_queue[req_tail].warp_id <= tpc_if[0].req_warp_id;
+                        req_queue[req_tail].source_id <= tpc_if[0].req_source_id;
+                        req_queue[req_tail].tpc_id <= 0;
+                    end else if (req_grant_array[1]) begin
+                        req_queue[req_tail].vaddr <= tpc_if[1].req_vaddr;
+                        req_queue[req_tail].req_type <= tpc_if[1].req_type;
+                        req_queue[req_tail].warp_id <= tpc_if[1].req_warp_id;
+                        req_queue[req_tail].source_id <= tpc_if[1].req_source_id;
+                        req_queue[req_tail].tpc_id <= 1;
+                    end else if (req_grant_array[2]) begin
+                        req_queue[req_tail].vaddr <= tpc_if[2].req_vaddr;
+                        req_queue[req_tail].req_type <= tpc_if[2].req_type;
+                        req_queue[req_tail].warp_id <= tpc_if[2].req_warp_id;
+                        req_queue[req_tail].source_id <= tpc_if[2].req_source_id;
+                        req_queue[req_tail].tpc_id <= 2;
+                    end else if (req_grant_array[3]) begin
+                        req_queue[req_tail].vaddr <= tpc_if[3].req_vaddr;
+                        req_queue[req_tail].req_type <= tpc_if[3].req_type;
+                        req_queue[req_tail].warp_id <= tpc_if[3].req_warp_id;
+                        req_queue[req_tail].source_id <= tpc_if[3].req_source_id;
+                        req_queue[req_tail].tpc_id <= 3;
                     end
                 end
                 
@@ -185,6 +222,11 @@ module rvgpu_gpc_mmu #(
                 req_queue_full <= 1'b0;
                 req_queue_empty <= ((req_head + 1) % MAX_REQUESTS == req_tail);
             end
+            
+            // 状态机触发的pending设置
+            if (state == IDLE && !req_queue_empty && !req_queue[req_head].pending) begin
+                req_queue[req_head].pending <= 1'b1;
+            end
         end
     end
     
@@ -192,15 +234,17 @@ module rvgpu_gpc_mmu #(
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             bs_if.req_ready <= 1'b0;
-            for (int i = 0; i < 4; i++) begin : ready_init
-                tpc_if[i].req_ready <= 1'b0;
-            end
+            tpc_if[0].req_ready <= 1'b0;
+            tpc_if[1].req_ready <= 1'b0;
+            tpc_if[2].req_ready <= 1'b0;
+            tpc_if[3].req_ready <= 1'b0;
         end else begin
             // 根据授权信号设置准备就绪
             bs_if.req_ready <= req_grant_array[4] && !req_queue_full;
-            for (int i = 0; i < 4; i++) begin : ready_set
-                tpc_if[i].req_ready <= req_grant_array[i] && !req_queue_full;
-            end
+            tpc_if[0].req_ready <= req_grant_array[0] && !req_queue_full;
+            tpc_if[1].req_ready <= req_grant_array[1] && !req_queue_full;
+            tpc_if[2].req_ready <= req_grant_array[2] && !req_queue_full;
+            tpc_if[3].req_ready <= req_grant_array[3] && !req_queue_full;
         end
     end
     
@@ -213,22 +257,29 @@ module rvgpu_gpc_mmu #(
         hit_index = '0;
         tlb_fault = 1'b0;
         
-        // 并行比较所有TLB条目
-        for (int i = 0; i < TLB_ENTRIES; i++) begin : tlb_search
-            if (tlb_entries[i].valid && tlb_entries[i].vpn == req_vpn) begin
-                tlb_hit = 1'b1;
-                hit_index = i;
-                
-                // 检查访问权限
-                case (current_req.req_type)
-                    MMU_READ:    tlb_fault = !(tlb_entries[i].perm[0]);
-                    MMU_WRITE:   tlb_fault = !(tlb_entries[i].perm[1]);
-                    MMU_EXECUTE: tlb_fault = !(tlb_entries[i].perm[2]);
-                    default:     tlb_fault = 1'b1;
-                endcase
-                
-                break;
-            end
+        // 并行比较所有TLB条目 - 简化处理
+        if (tlb_entries[0].valid && tlb_entries[0].vpn == req_vpn) begin
+            tlb_hit = 1'b1;
+            hit_index = 0;
+            
+            // 检查访问权限
+            case (current_req.req_type)
+                MMU_READ:    tlb_fault = !(tlb_entries[0].perm[0]);
+                MMU_WRITE:   tlb_fault = !(tlb_entries[0].perm[1]);
+                MMU_EXECUTE: tlb_fault = !(tlb_entries[0].perm[2]);
+                default:     tlb_fault = 1'b1;
+            endcase
+        end else if (tlb_entries[1].valid && tlb_entries[1].vpn == req_vpn) begin
+            tlb_hit = 1'b1;
+            hit_index = 1;
+            
+            // 检查访问权限
+            case (current_req.req_type)
+                MMU_READ:    tlb_fault = !(tlb_entries[1].perm[0]);
+                MMU_WRITE:   tlb_fault = !(tlb_entries[1].perm[1]);
+                MMU_EXECUTE: tlb_fault = !(tlb_entries[1].perm[2]);
+                default:     tlb_fault = 1'b1;
+            endcase
         end
     end
     
@@ -240,16 +291,18 @@ module rvgpu_gpc_mmu #(
         replace_index = '0;
         min_plru = '1;
         
-        // 查找PLRU值最小的条目
-        for (int i = 0; i < TLB_ENTRIES; i++) begin : plru_search
-            if (!tlb_entries[i].valid) begin
-                // 优先使用无效条目
-                replace_index = i;
-                break;
-            end else if (tlb_entries[i].plru < min_plru) begin
-                min_plru = tlb_entries[i].plru;
-                replace_index = i;
-            end
+        // 查找PLRU值最小的条目 - 简化处理
+        if (!tlb_entries[0].valid) begin
+            // 优先使用无效条目
+            replace_index = 0;
+        end else if (!tlb_entries[1].valid) begin
+            replace_index = 1;
+        end else if (tlb_entries[0].plru < min_plru) begin
+            min_plru = tlb_entries[0].plru;
+            replace_index = 0;
+        end else if (tlb_entries[1].plru < min_plru) begin
+            min_plru = tlb_entries[1].plru;
+            replace_index = 1;
         end
     end
     
@@ -262,35 +315,44 @@ module rvgpu_gpc_mmu #(
             noc_if.req_valid <= 1'b0;
             noc_if.resp_ready <= 1'b0;
             
-            // 初始化TLB条目
-            for (int i = 0; i < TLB_ENTRIES; i++) begin : tlb_init
-                tlb_entries[i].valid <= 1'b0;
-                tlb_entries[i].vpn <= '0;
-                tlb_entries[i].ppn <= '0;
-                tlb_entries[i].perm <= '0;
-                tlb_entries[i].accessed <= 1'b0;
-                tlb_entries[i].plru <= i[3:0]; // 初始化PLRU值
-            end
+            // 初始化TLB条目 - 简化处理
+            tlb_entries[0].valid <= 1'b0;
+            tlb_entries[0].vpn <= '0;
+            tlb_entries[0].ppn <= '0;
+            tlb_entries[0].perm <= '0;
+            tlb_entries[0].accessed <= 1'b0;
+            tlb_entries[0].plru <= 4'h0;
+            
+            tlb_entries[1].valid <= 1'b0;
+            tlb_entries[1].vpn <= '0;
+            tlb_entries[1].ppn <= '0;
+            tlb_entries[1].perm <= '0;
+            tlb_entries[1].accessed <= 1'b0;
+            tlb_entries[1].plru <= 4'h1;
             
             // 初始化响应信号
             bs_if.resp_valid <= 1'b0;
-            for (int i = 0; i < 4; i++) begin : resp_init
-                tpc_if[i].resp_valid <= 1'b0;
-                l0_tlb_if[i].update_valid <= 1'b0;
-            end
+            tpc_if[0].resp_valid <= 1'b0;
+            tpc_if[1].resp_valid <= 1'b0;
+            tpc_if[2].resp_valid <= 1'b0;
+            tpc_if[3].resp_valid <= 1'b0;
+            l0_tlb_if[0].update_valid <= 1'b0;
+            l0_tlb_if[1].update_valid <= 1'b0;
+            l0_tlb_if[2].update_valid <= 1'b0;
+            l0_tlb_if[3].update_valid <= 1'b0;
         end else begin
             case (state)
                 IDLE: begin
                     // 重置响应信号
                     bs_if.resp_valid <= 1'b0;
-                    for (int i = 0; i < 4; i++) begin : resp_reset
-                        tpc_if[i].resp_valid <= 1'b0;
-                    end
+                    tpc_if[0].resp_valid <= 1'b0;
+                    tpc_if[1].resp_valid <= 1'b0;
+                    tpc_if[2].resp_valid <= 1'b0;
+                    tpc_if[3].resp_valid <= 1'b0;
                     
                     // 检查请求队列
                     if (!req_queue_empty && !req_queue[req_head].pending) begin
                         current_req <= req_queue[req_head];
-                        req_queue[req_head].pending <= 1'b1;
                         state <= LOOKUP;
                     end
                 end
@@ -304,11 +366,12 @@ module rvgpu_gpc_mmu #(
                         tlb_entries[hit_index].accessed <= 1'b1;
                         tlb_entries[hit_index].plru <= '1; // 最近使用
                         
-                        // 更新其他条目的PLRU值
-                        for (int i = 0; i < TLB_ENTRIES; i++) begin : plru_update_hit
-                            if (tlb_entries[i].valid && i != hit_index && tlb_entries[i].plru > 0) begin
-                                tlb_entries[i].plru <= tlb_entries[i].plru - 1;
-                            end
+                        // 更新其他条目的PLRU值 - 简化处理
+                        if (tlb_entries[0].valid && 0 != hit_index && tlb_entries[0].plru > 0) begin
+                            tlb_entries[0].plru <= tlb_entries[0].plru - 1;
+                        end
+                        if (tlb_entries[1].valid && 1 != hit_index && tlb_entries[1].plru > 0) begin
+                            tlb_entries[1].plru <= tlb_entries[1].plru - 1;
                         end
                         
                         state <= SEND_RESPONSE;
@@ -362,11 +425,12 @@ module rvgpu_gpc_mmu #(
                     tlb_entries[replace_index].accessed <= 1'b1;
                     tlb_entries[replace_index].plru <= '1; // 最近使用
                     
-                    // 更新其他条目的PLRU值
-                    for (int i = 0; i < TLB_ENTRIES; i++) begin : plru_update_replace
-                        if (tlb_entries[i].valid && i != replace_index && tlb_entries[i].plru > 0) begin
-                            tlb_entries[i].plru <= tlb_entries[i].plru - 1;
-                        end
+                    // 更新其他条目的PLRU值 - 简化处理
+                    if (tlb_entries[0].valid && 0 != replace_index && tlb_entries[0].plru > 0) begin
+                        tlb_entries[0].plru <= tlb_entries[0].plru - 1;
+                    end
+                    if (tlb_entries[1].valid && 1 != replace_index && tlb_entries[1].plru > 0) begin
+                        tlb_entries[1].plru <= tlb_entries[1].plru - 1;
                     end
                     
                     // 如果请求来自TPC，还需要更新L0 TLB

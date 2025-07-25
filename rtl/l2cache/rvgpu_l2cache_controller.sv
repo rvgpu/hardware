@@ -599,10 +599,10 @@ module rvgpu_l2cache_controller #(
     );
         noc_header_t header;
         logic [31:0] result;
-        header.msg_type = msg_type;
+        header.msg_type = noc_msg_type_t'(msg_type);
         header.trans_id = trans_id;
-        header.src_node = src_node;
-        header.dest_node = dest_node;
+        header.src_node = noc_node_id_t'(src_node);
+        header.dest_node = noc_node_id_t'(dest_node);
         header.local_addr = 2'b00;
         result = {header.msg_type, header.trans_id, header.src_node, header.dest_node, header.local_addr};
         return result;

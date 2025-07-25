@@ -141,19 +141,39 @@ module rvgpu_gpc_block_scheduler #(
             current_warp <= '0;
             
             // 初始化TPC负载
-            for (int i = 0; i < NUM_TPC; i++) begin
-                tpc_load[i] <= '0;
-            end
+            tpc_load[0] <= '0;
+            tpc_load[1] <= '0;
+            tpc_load[2] <= '0;
+            tpc_load[3] <= '0;
             
             // 初始化接口信号
             noc_if.job_ready <= 1'b0;
-            for (int i = 0; i < NUM_TPC; i++) begin
-                tpc_if[i].warp_valid <= 1'b0;
-            end
+            tpc_if[0].warp_valid <= 1'b0;
+            tpc_if[1].warp_valid <= 1'b0;
+            tpc_if[2].warp_valid <= 1'b0;
+            tpc_if[3].warp_valid <= 1'b0;
             raster_if.cmd_valid <= 1'b0;
             l15_if.req_valid <= 1'b0;
             tlb_if.req_valid <= 1'b0;
+            
+            // 初始化TPC完成接口
+            tpc_if[0].complete_ready <= 1'b0;
+            tpc_if[1].complete_ready <= 1'b0;
+            tpc_if[2].complete_ready <= 1'b0;
+            tpc_if[3].complete_ready <= 1'b0;
         end else begin
+            // TPC完成处理
+            for (int i = 0; i < NUM_TPC; i++) begin
+                tpc_if[i].complete_ready <= 1'b1;
+                
+                if (tpc_if[i].complete_valid && tpc_if[i].complete_ready) begin
+                    // 减少TPC负载
+                    if (tpc_load[i] > 0) begin
+                        tpc_load[i] <= tpc_load[i] - 1;
+                    end
+                end
+            end
+            
             case (state)
                 IDLE: begin
                     // 接收来自NOC Adapter的Job Block
@@ -178,9 +198,9 @@ module rvgpu_gpc_block_scheduler #(
                 end
                 
                 TRANSLATE_ARGLIST: begin
-                    // 请求GPC MMU进行地址转换
+                    // 翻译参数列表地址
                     tlb_if.req_valid <= 1'b1;
-                    tlb_if.req_vaddr <= current_job.arglist_ptr[38:0];
+                    tlb_if.req_vaddr <= current_job.arglist_ptr;
                     tlb_if.req_type <= MMU_READ;
                     tlb_if.req_warp_id <= '0;
                     tlb_if.req_source_id <= '0;
@@ -192,14 +212,14 @@ module rvgpu_gpc_block_scheduler #(
                 end
                 
                 WAIT_TLB: begin
-                    // 等待GPC MMU响应
+                    // 等待TLB响应
                     if (tlb_if.resp_valid) begin
-                        if (tlb_if.resp_hit && !tlb_if.resp_fault) begin
-                            // 地址转换成功
+                        if (!tlb_if.resp_fault) begin
+                            // TLB命中，获取参数列表
                             arglist_paddr <= {tlb_if.resp_ppn, current_job.arglist_ptr[11:0]};
                             state <= FETCH_ARGLIST;
                         end else begin
-                            // 地址转换失败，放弃这个Job
+                            // TLB未命中，返回错误状态
                             state <= IDLE;
                         end
                     end
@@ -210,7 +230,7 @@ module rvgpu_gpc_block_scheduler #(
                     l15_if.req_valid <= 1'b1;
                     l15_if.req_is_read <= 1'b1;
                     l15_if.req_paddr <= arglist_paddr;
-                    l15_if.req_size <= 5; // 32字节
+                    l15_if.req_size <= 4'b0100; // 16字节
                     l15_if.req_type <= L15_CACHE_NORMAL;
                     l15_if.req_data <= '0;
                     l15_if.req_mask <= '0;
@@ -295,27 +315,6 @@ module rvgpu_gpc_block_scheduler #(
             endcase
         end
     end
-    
-    // TPC完成处理
-    genvar i;
-    generate
-        for (i = 0; i < NUM_TPC; i++) begin : tpc_complete_gen
-            always_ff @(posedge clk or negedge rst_n) begin
-                if (!rst_n) begin
-                    tpc_if[i].complete_ready <= 1'b0;
-                end else begin
-                    tpc_if[i].complete_ready <= 1'b1;
-                    
-                    if (tpc_if[i].complete_valid && tpc_if[i].complete_ready) begin
-                        // 减少TPC负载
-                        if (tpc_load[i] > 0) begin
-                            tpc_load[i] <= tpc_load[i] - 1;
-                        end
-                    end
-                end
-            end
-        end
-    endgenerate
 
 endmodule : rvgpu_gpc_block_scheduler
 

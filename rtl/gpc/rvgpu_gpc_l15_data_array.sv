@@ -68,10 +68,6 @@ module rvgpu_gpc_l15_data_array #(
     assign read_index = read_addr[ADDR_WIDTH-TAG_WIDTH-1:$clog2(LINE_SIZE)];
     assign write_index = write_addr[ADDR_WIDTH-TAG_WIDTH-1:$clog2(LINE_SIZE)];
     
-    // 内部信号
-    logic read_ready;
-    logic write_ready;
-    
     // 主状态机
     always_ff @(posedge clk) begin
         if (!rst_n) begin
@@ -81,7 +77,6 @@ module rvgpu_gpc_l15_data_array #(
             sram_if.we <= 1'b0;
             sram_if.addr <= '0;
             sram_if.wdata <= '0;
-            sram_if.wmask <= '0;
         end else begin
             // 默认情况下，禁用SRAM
             sram_if.ce <= 1'b0;
@@ -98,9 +93,6 @@ module rvgpu_gpc_l15_data_array #(
                 sram_if.we <= 1'b1;
                 sram_if.addr <= {write_way, write_index};
                 sram_if.wdata <= write_data;
-                for (int i = 0; i < LINE_SIZE; i++) begin
-                    sram_if.wmask[i] <= write_mask[i] ? '1 : '0;
-                end
                 write_ready <= 1'b1;
             end
         end

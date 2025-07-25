@@ -182,13 +182,19 @@ module rvgpu_gpc_l15_write_buffer #(
             
             // 处理响应发送
             if (resp_valid && resp_ready) begin
-                // 找到已完成的写缓冲条目
-                for (int i = 0; i < BUFFER_ENTRIES; i++) begin : resp_cleanup
-                    if (wb[i].valid && !wb[i].pending && !wb[i].dirty) begin
-                        wb[i].valid <= 1'b0;
-                        entry_count <= entry_count - 1;
-                        break;
-                    end
+                // 找到已完成的写缓冲条目 - 简化处理
+                if (wb[0].valid && !wb[0].pending && !wb[0].dirty) begin
+                    wb[0].valid <= 1'b0;
+                    entry_count <= entry_count - 1;
+                end else if (wb[1].valid && !wb[1].pending && !wb[1].dirty) begin
+                    wb[1].valid <= 1'b0;
+                    entry_count <= entry_count - 1;
+                end else if (wb[2].valid && !wb[2].pending && !wb[2].dirty) begin
+                    wb[2].valid <= 1'b0;
+                    entry_count <= entry_count - 1;
+                end else if (wb[3].valid && !wb[3].pending && !wb[3].dirty) begin
+                    wb[3].valid <= 1'b0;
+                    entry_count <= entry_count - 1;
                 end
             end
             
@@ -202,11 +208,18 @@ module rvgpu_gpc_l15_write_buffer #(
             
             // 处理刷新请求
             if (flush) begin
-                // 将所有非挂起的脏条目标记为待写回
-                for (int i = 0; i < BUFFER_ENTRIES; i++) begin : flush_mark
-                    if (wb[i].valid && !wb[i].pending && wb[i].dirty) begin
-                        wb[i].pending <= 1'b1;
-                    end
+                // 将所有非挂起的脏条目标记为待写回 - 简化处理
+                if (wb[0].valid && !wb[0].pending && wb[0].dirty) begin
+                    wb[0].pending <= 1'b1;
+                end
+                if (wb[1].valid && !wb[1].pending && wb[1].dirty) begin
+                    wb[1].pending <= 1'b1;
+                end
+                if (wb[2].valid && !wb[2].pending && wb[2].dirty) begin
+                    wb[2].pending <= 1'b1;
+                end
+                if (wb[3].valid && !wb[3].pending && wb[3].dirty) begin
+                    wb[3].pending <= 1'b1;
                 end
             end
         end
@@ -222,17 +235,27 @@ module rvgpu_gpc_l15_write_buffer #(
         wb_data = '0;
         wb_mask = '0;
         
-        // 寻找脏且未挂起的写缓冲条目
-        for (int i = 0; i < BUFFER_ENTRIES; i++) begin : wb_search
-            int idx = (next_wb_index + i) % BUFFER_ENTRIES;
-            if (wb[idx].valid && !wb[idx].pending && wb[idx].dirty) begin
-                wb_valid = 1'b1;
-                wb_addr = wb[idx].addr;
-                wb_data = wb[idx].data;
-                wb_mask = wb[idx].mask;
-                next_wb_index = idx[$clog2(BUFFER_ENTRIES)-1:0];
-                break;
-            end
+        // 寻找脏且未挂起的写缓冲条目 - 简化处理
+        if (wb[(next_wb_index + 0) % BUFFER_ENTRIES].valid && !wb[(next_wb_index + 0) % BUFFER_ENTRIES].pending && wb[(next_wb_index + 0) % BUFFER_ENTRIES].dirty) begin
+            wb_valid = 1'b1;
+            wb_addr = wb[(next_wb_index + 0) % BUFFER_ENTRIES].addr;
+            wb_data = wb[(next_wb_index + 0) % BUFFER_ENTRIES].data;
+            wb_mask = wb[(next_wb_index + 0) % BUFFER_ENTRIES].mask;
+        end else if (wb[(next_wb_index + 1) % BUFFER_ENTRIES].valid && !wb[(next_wb_index + 1) % BUFFER_ENTRIES].pending && wb[(next_wb_index + 1) % BUFFER_ENTRIES].dirty) begin
+            wb_valid = 1'b1;
+            wb_addr = wb[(next_wb_index + 1) % BUFFER_ENTRIES].addr;
+            wb_data = wb[(next_wb_index + 1) % BUFFER_ENTRIES].data;
+            wb_mask = wb[(next_wb_index + 1) % BUFFER_ENTRIES].mask;
+        end else if (wb[(next_wb_index + 2) % BUFFER_ENTRIES].valid && !wb[(next_wb_index + 2) % BUFFER_ENTRIES].pending && wb[(next_wb_index + 2) % BUFFER_ENTRIES].dirty) begin
+            wb_valid = 1'b1;
+            wb_addr = wb[(next_wb_index + 2) % BUFFER_ENTRIES].addr;
+            wb_data = wb[(next_wb_index + 2) % BUFFER_ENTRIES].data;
+            wb_mask = wb[(next_wb_index + 2) % BUFFER_ENTRIES].mask;
+        end else if (wb[(next_wb_index + 3) % BUFFER_ENTRIES].valid && !wb[(next_wb_index + 3) % BUFFER_ENTRIES].pending && wb[(next_wb_index + 3) % BUFFER_ENTRIES].dirty) begin
+            wb_valid = 1'b1;
+            wb_addr = wb[(next_wb_index + 3) % BUFFER_ENTRIES].addr;
+            wb_data = wb[(next_wb_index + 3) % BUFFER_ENTRIES].data;
+            wb_mask = wb[(next_wb_index + 3) % BUFFER_ENTRIES].mask;
         end
     end
     
@@ -241,13 +264,19 @@ module rvgpu_gpc_l15_write_buffer #(
         resp_valid = 1'b0;
         resp_id = '0;
         
-        // 寻找已完成的写缓冲条目
-        for (int i = 0; i < BUFFER_ENTRIES; i++) begin : resp_search
-            if (wb[i].valid && !wb[i].pending && !wb[i].dirty) begin
-                resp_valid = 1'b1;
-                resp_id = wb[i].last_id;
-                break;
-            end
+        // 寻找已完成的写缓冲条目 - 简化处理
+        if (wb[0].valid && !wb[0].pending && !wb[0].dirty) begin
+            resp_valid = 1'b1;
+            resp_id = wb[0].last_id;
+        end else if (wb[1].valid && !wb[1].pending && !wb[1].dirty) begin
+            resp_valid = 1'b1;
+            resp_id = wb[1].last_id;
+        end else if (wb[2].valid && !wb[2].pending && !wb[2].dirty) begin
+            resp_valid = 1'b1;
+            resp_id = wb[2].last_id;
+        end else if (wb[3].valid && !wb[3].pending && !wb[3].dirty) begin
+            resp_valid = 1'b1;
+            resp_id = wb[3].last_id;
         end
     end
 

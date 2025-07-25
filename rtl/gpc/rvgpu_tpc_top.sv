@@ -71,20 +71,23 @@ module rvgpu_tpc_top #(
     gpc_block_tpc_if sm_dispatch_if[NUM_SM](); // 每个SM的任务分发接口
     ldst_sm_if sm_ldst_if[NUM_SM]();          // 每个SM的LDST接口（暂时保留）
     
-    // 内部信号
-    logic [31:0] total_active_warps;
-    logic [31:0] total_max_warps;
+    // 循环变量声明
+    int sm_search_i;
+    int sm_init_i;
+    int sm_update_i;
+    int sm_util_i;
+    int sm_active_i;
     
     // =========================================================================
-    // SM选择逻辑 - 轮询调度
+    // SM可用性检查和轮询
     // =========================================================================
     
     always_comb begin
         next_sm_id = '0;
         
         // 轮询查找可用的SM
-        for (int i = 0; i < NUM_SM; i++) begin : sm_search
-            int sm_idx = (round_robin_counter + i) % NUM_SM;
+        for (sm_search_i = 0; sm_search_i < NUM_SM; sm_search_i++) begin : sm_search_loop
+            int sm_idx = (round_robin_counter + sm_search_i) % NUM_SM;
             if (sm_available[sm_idx]) begin
                 next_sm_id = sm_idx[$clog2(NUM_SM)-1:0];
                 break;
@@ -156,30 +159,30 @@ module rvgpu_tpc_top #(
     
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            for (int i = 0; i < NUM_SM; i++) begin : sm_init
-                sm_states[i] <= SM_IDLE;
-                sm_active_warps[i] <= '0;
-                sm_pending_requests[i] <= '0;
-                sm_available[i] <= 1'b1;
+            for (sm_init_i = 0; sm_init_i < NUM_SM; sm_init_i++) begin : sm_init_loop
+                sm_states[sm_init_i] <= SM_IDLE;
+                sm_active_warps[sm_init_i] <= '0;
+                sm_pending_requests[sm_init_i] <= '0;
+                sm_available[sm_init_i] <= 1'b1;
             end
         end else begin
-            for (int i = 0; i < NUM_SM; i++) begin : sm_update
+            for (sm_update_i = 0; sm_update_i < NUM_SM; sm_update_i++) begin : sm_update_loop
                 // 更新SM状态（这里需要从SM获取实际状态）
                 // 简化实现：基于活跃warp数判断状态
-                if (sm_active_warps[i] == 0) begin
-                    sm_states[i] <= SM_IDLE;
-                    sm_available[i] <= 1'b1;
-                end else if (sm_active_warps[i] < MAX_WARPS_PER_SM) begin
-                    sm_states[i] <= SM_BUSY;
-                    sm_available[i] <= 1'b1;  // 仍可接受新任务
+                if (sm_active_warps[sm_update_i] == 0) begin
+                    sm_states[sm_update_i] <= SM_IDLE;
+                    sm_available[sm_update_i] <= 1'b1;
+                end else if (sm_active_warps[sm_update_i] < MAX_WARPS_PER_SM) begin
+                    sm_states[sm_update_i] <= SM_BUSY;
+                    sm_available[sm_update_i] <= 1'b1;  // 仍可接受新任务
                 end else begin
-                    sm_states[i] <= SM_BUSY;
-                    sm_available[i] <= 1'b0;  // 已满，不能接受新任务
+                    sm_states[sm_update_i] <= SM_BUSY;
+                    sm_available[sm_update_i] <= 1'b0;  // 已满，不能接受新任务
                 end
                 
                 // TODO: 从实际SM模块获取这些状态
                 // 这里是占位符实现
-                case (i)
+                case (sm_update_i)
                     0: if (sm_dispatch_if[0].warp_valid && sm_dispatch_if[0].warp_ready) begin
                         sm_active_warps[0] <= sm_active_warps[0] + 1;
                     end
@@ -189,7 +192,7 @@ module rvgpu_tpc_top #(
                 endcase
                 
                 // 处理SM完成通知
-                case (i)
+                case (sm_update_i)
                     0: begin
                         if (sm_dispatch_if[0].complete_valid) begin
                             if (sm_active_warps[0] > 0) begin
@@ -230,8 +233,8 @@ module rvgpu_tpc_top #(
             l15_if.req_valid <= 1'b0;
             
             // 轮询检查每个SM的缓存请求
-            for (int i = 0; i < NUM_SM; i++) begin : cache_arb
-                int sm_idx = (cache_arb_counter + i) % NUM_SM;
+            for (sm_util_i = 0; sm_util_i < NUM_SM; sm_util_i++) begin : cache_arb_loop
+                int sm_idx = (cache_arb_counter + sm_util_i) % NUM_SM;
                 
                 case (sm_idx)
                     0: if (sm_l15_if[0].req_valid) begin
@@ -376,11 +379,15 @@ module rvgpu_tpc_top #(
     // =========================================================================
     
     always_comb begin
+        logic [31:0] total_active_warps;
+        logic [31:0] total_max_warps;
+        int stats_calc_i;
+        
         total_active_warps = '0;
         total_max_warps = NUM_SM * MAX_WARPS_PER_SM;
         
-        for (int i = 0; i < NUM_SM; i++) begin : stats_calc
-            total_active_warps += sm_active_warps[i];
+        for (stats_calc_i = 0; stats_calc_i < NUM_SM; stats_calc_i++) begin : stats_calc_loop
+            total_active_warps += sm_active_warps[stats_calc_i];
         end
         
         active_warps_count = total_active_warps[7:0];

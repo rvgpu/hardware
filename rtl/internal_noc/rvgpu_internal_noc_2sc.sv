@@ -226,7 +226,7 @@ module rvgpu_internal_noc #(
     
     // 功能函数：更新req的仲裁状态，如果有请求，状态按照 0 -> 1 -> 2 -> 3 的顺序轮转
     function automatic void update_req_arb_state(int port);
-        logic [NUM_PORTS-1:0] req_mask = get_req_mask(port);
+        logic [NUM_PORTS-1:0] req_mask = get_req_mask(noc_node_id_t'(port));
         if (req_mask != 4'b0000) begin
             case (req_arb_state[port])
                 2'b00: req_arb_state[port] <= 2'b01;
@@ -241,7 +241,7 @@ module rvgpu_internal_noc #(
 
     // 功能函数：更新resp的仲裁状态，如果有请求，状态按照 0 -> 1 -> 2 -> 3 的顺序轮转
     function automatic void update_resp_arb_state(int port);
-        logic [NUM_PORTS-1:0] resp_mask = get_resp_mask(port);
+        logic [NUM_PORTS-1:0] resp_mask = get_resp_mask(noc_node_id_t'(port));
         if (resp_mask != 4'b0000) begin
             case (resp_arb_state[port])
                 2'b00: resp_arb_state[port] <= 2'b01;
@@ -285,7 +285,7 @@ module rvgpu_internal_noc #(
     // 请求仲裁逻辑，根据arb_state来检查grant哪个端口
     function automatic logic [NUM_PORTS-1:0] get_req_grant(int dst, logic [1:0] arb_state);
         logic [NUM_PORTS-1:0] grant = 4'b0000;
-        logic [NUM_PORTS-1:0] mask = get_req_mask(dst);
+        logic [NUM_PORTS-1:0] mask = get_req_mask(noc_node_id_t'(dst));
         
         case (arb_state)
             2'b00: begin
@@ -382,7 +382,7 @@ module rvgpu_internal_noc #(
     // 响应仲裁逻辑 - 使用函数和查找表
     function automatic logic [NUM_PORTS-1:0] get_resp_grant(int dst, logic [1:0] arb_state);
         logic [NUM_PORTS-1:0] grant = 4'b0000;
-        logic [NUM_PORTS-1:0] mask = get_resp_mask(dst);
+        logic [NUM_PORTS-1:0] mask = get_resp_mask(noc_node_id_t'(dst));
         
         case (arb_state)
             2'b00: begin

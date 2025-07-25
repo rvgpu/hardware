@@ -69,7 +69,7 @@ function automatic command_header_t build_command_header(
     command_header_t header;
     header.payload_size = payload_size;
     header.flags = flags;
-    header.command_type = command_type;
+    header.command_type = command_type_t'(command_type);
     return header;
 endfunction
 

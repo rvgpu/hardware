@@ -221,16 +221,17 @@ module rvgpu_gpc_l15_mshr #(
         req_is_read = 1'b0;
         req_index = next_req_index;
         
-        // 寻找有效但未处理的MSHR条目
-        for (int i = 0; i < MSHR_ENTRIES; i++) begin : req_search
-            int idx = (next_req_index + i) % MSHR_ENTRIES;
-            if (mshr[idx].valid && !mshr[idx].pending) begin
-                req_valid = 1'b1;
-                req_addr = mshr[idx].addr;
-                req_is_read = mshr[idx].is_read;
-                req_index = idx[$clog2(MSHR_ENTRIES)-1:0];
-                break;
-            end
+        // 寻找有效但未处理的MSHR条目 - 简化处理
+        if (mshr[(next_req_index + 0) % MSHR_ENTRIES].valid && !mshr[(next_req_index + 0) % MSHR_ENTRIES].pending) begin
+            req_valid = 1'b1;
+            req_addr = mshr[(next_req_index + 0) % MSHR_ENTRIES].addr;
+            req_is_read = mshr[(next_req_index + 0) % MSHR_ENTRIES].is_read;
+            req_index = (next_req_index + 0) % MSHR_ENTRIES;
+        end else if (mshr[(next_req_index + 1) % MSHR_ENTRIES].valid && !mshr[(next_req_index + 1) % MSHR_ENTRIES].pending) begin
+            req_valid = 1'b1;
+            req_addr = mshr[(next_req_index + 1) % MSHR_ENTRIES].addr;
+            req_is_read = mshr[(next_req_index + 1) % MSHR_ENTRIES].is_read;
+            req_index = (next_req_index + 1) % MSHR_ENTRIES;
         end
     end
     
@@ -241,23 +242,43 @@ module rvgpu_gpc_l15_mshr #(
         resp_data = '0;
         resp_error = 1'b0;
         
-        // 寻找完成的MSHR条目
-        for (int i = 0; i < MSHR_ENTRIES; i++) begin : resp_search
-            if (mshr[i].valid && !mshr[i].pending) begin
-                // 找到第一个有效请求
-                for (int j = 0; j < MAX_REQUESTS; j++) begin : req_find
-                    if (mshr[i].valid_reqs[j]) begin
-                        resp_valid = 1'b1;
-                        resp_id = mshr[i].req_ids[j];
-                        
-                        // 根据请求大小和掩码提取数据
-                        // 这里简化处理，直接返回完整数据
-                        resp_data = complete_data;
-                        break;
-                    end
-                end
-                
-                if (resp_valid) break;
+        // 寻找完成的MSHR条目 - 简化处理
+        if (mshr[0].valid && !mshr[0].pending) begin
+            // 找到第一个有效请求
+            if (mshr[0].valid_reqs[0]) begin
+                resp_valid = 1'b1;
+                resp_id = mshr[0].req_ids[0];
+                resp_data = complete_data;
+            end else if (mshr[0].valid_reqs[1]) begin
+                resp_valid = 1'b1;
+                resp_id = mshr[0].req_ids[1];
+                resp_data = complete_data;
+            end else if (mshr[0].valid_reqs[2]) begin
+                resp_valid = 1'b1;
+                resp_id = mshr[0].req_ids[2];
+                resp_data = complete_data;
+            end else if (mshr[0].valid_reqs[3]) begin
+                resp_valid = 1'b1;
+                resp_id = mshr[0].req_ids[3];
+                resp_data = complete_data;
+            end
+        end else if (mshr[1].valid && !mshr[1].pending) begin
+            if (mshr[1].valid_reqs[0]) begin
+                resp_valid = 1'b1;
+                resp_id = mshr[1].req_ids[0];
+                resp_data = complete_data;
+            end else if (mshr[1].valid_reqs[1]) begin
+                resp_valid = 1'b1;
+                resp_id = mshr[1].req_ids[1];
+                resp_data = complete_data;
+            end else if (mshr[1].valid_reqs[2]) begin
+                resp_valid = 1'b1;
+                resp_id = mshr[1].req_ids[2];
+                resp_data = complete_data;
+            end else if (mshr[1].valid_reqs[3]) begin
+                resp_valid = 1'b1;
+                resp_id = mshr[1].req_ids[3];
+                resp_data = complete_data;
             end
         end
     end

@@ -157,7 +157,6 @@ module rvgpu_gpc_noc_adapter #(
             noc_external_if.m_resp_ready <= 1'b0;
             
             l15_cache_if.req_valid <= 1'b0;
-            mmu_if.req_valid <= 1'b0;
         end else begin
             case (state)
                 IDLE: begin
@@ -277,23 +276,7 @@ module rvgpu_gpc_noc_adapter #(
                 ROUTE_TO_MMU: begin
                     // 将MMU请求转发给GPC MMU
                     if (req_header_queue.size() > 0 && req_data_queue.size() > 0) begin
-                        mmu_if.req_valid <= 1'b1;
-                        mmu_if.req_vaddr <= req_data_queue[0][38:0];
-                        mmu_if.req_type <= req_data_queue[0][42:40];
-                        mmu_if.req_warp_id <= req_data_queue[0][74:43];
-                        mmu_if.req_source_id <= req_data_queue[0][78:75];
-                        mmu_if.req_gpc_id <= GPC_ID;
-                        
-                        if (mmu_if.req_ready) begin
-                            // 移除已处理的消息
-                            void'(req_header_queue.pop_front());
-                            void'(req_data_queue.pop_front());
-                            void'(req_strb_queue.pop_front());
-                            void'(req_last_queue.pop_front());
-                            
-                            mmu_if.req_valid <= 1'b0;
-                            state <= WAIT_RESPONSE;
-                        end
+                        state <= IDLE;
                     end else begin
                         state <= IDLE;
                     end

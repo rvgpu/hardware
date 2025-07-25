@@ -162,15 +162,32 @@ module rvgpu_gpc_block_scheduler #(
             tpc_if[2].complete_ready <= 1'b0;
             tpc_if[3].complete_ready <= 1'b0;
         end else begin
-            // TPC完成处理
-            for (int i = 0; i < NUM_TPC; i++) begin
-                tpc_if[i].complete_ready <= 1'b1;
-                
-                if (tpc_if[i].complete_valid && tpc_if[i].complete_ready) begin
-                    // 减少TPC负载
-                    if (tpc_load[i] > 0) begin
-                        tpc_load[i] <= tpc_load[i] - 1;
-                    end
+            // TPC完成处理 - 展开循环避免动态索引
+            tpc_if[0].complete_ready <= 1'b1;
+            if (tpc_if[0].complete_valid && tpc_if[0].complete_ready) begin
+                if (tpc_load[0] > 0) begin
+                    tpc_load[0] <= tpc_load[0] - 1;
+                end
+            end
+            
+            tpc_if[1].complete_ready <= 1'b1;
+            if (tpc_if[1].complete_valid && tpc_if[1].complete_ready) begin
+                if (tpc_load[1] > 0) begin
+                    tpc_load[1] <= tpc_load[1] - 1;
+                end
+            end
+            
+            tpc_if[2].complete_ready <= 1'b1;
+            if (tpc_if[2].complete_valid && tpc_if[2].complete_ready) begin
+                if (tpc_load[2] > 0) begin
+                    tpc_load[2] <= tpc_load[2] - 1;
+                end
+            end
+            
+            tpc_if[3].complete_ready <= 1'b1;
+            if (tpc_if[3].complete_valid && tpc_if[3].complete_ready) begin
+                if (tpc_load[3] > 0) begin
+                    tpc_load[3] <= tpc_load[3] - 1;
                 end
             end
             
@@ -264,38 +281,142 @@ module rvgpu_gpc_block_scheduler #(
                 end
                 
                 DISPATCH_COMPUTE: begin
-                    // 将Warp分发给TPC
-                    tpc_if[target_tpc].warp_valid <= 1'b1;
-                    tpc_if[target_tpc].warp_id <= current_warp.warp_id;
-                    tpc_if[target_tpc].block_id <= current_warp.block_id;
-                    tpc_if[target_tpc].program_addr <= current_warp.program_addr;
-                    tpc_if[target_tpc].arglist_ptr <= current_warp.arglist_ptr;
-                    tpc_if[target_tpc].argument_size <= current_warp.argument_size;
-                    tpc_if[target_tpc].thread_mask <= current_warp.thread_mask;
-                    tpc_if[target_tpc].arglist_data <= current_warp.arglist_data;
-                    
-                    if (tpc_if[target_tpc].warp_ready) begin
-                        tpc_if[target_tpc].warp_valid <= 1'b0;
-                        
-                        // 更新TPC负载
-                        tpc_load[target_tpc] <= tpc_load[target_tpc] + 1;
-                        
-                        // 检查是否还有更多Warp需要分发
-                        if (warp_count > 1) begin
-                            warp_count <= warp_count - 1;
+                    // 将Warp分发给TPC - 使用case语句避免动态索引
+                    case (target_tpc)
+                        0: begin
+                            tpc_if[0].warp_valid <= 1'b1;
+                            tpc_if[0].warp_id <= current_warp.warp_id;
+                            tpc_if[0].block_id <= current_warp.block_id;
+                            tpc_if[0].program_addr <= current_warp.program_addr;
+                            tpc_if[0].arglist_ptr <= current_warp.arglist_ptr;
+                            tpc_if[0].argument_size <= current_warp.argument_size;
+                            tpc_if[0].thread_mask <= current_warp.thread_mask;
+                            tpc_if[0].arglist_data <= current_warp.arglist_data;
                             
-                            // 创建下一个Warp
-                            current_warp.warp_id <= current_warp.warp_id + 1;
-                            
-                            // 选择下一个目标TPC
-                            target_tpc <= select_tpc();
-                            
-                            state <= DISPATCH_COMPUTE;
-                        end else begin
-                            // 所有Warp都已分发，返回空闲状态
-                            state <= IDLE;
+                            if (tpc_if[0].warp_ready) begin
+                                tpc_if[0].warp_valid <= 1'b0;
+                                
+                                // 更新TPC负载
+                                tpc_load[0] <= tpc_load[0] + 1;
+                                
+                                // 检查是否还有更多Warp需要分发
+                                if (warp_count > 1) begin
+                                    warp_count <= warp_count - 1;
+                                    
+                                    // 创建下一个Warp
+                                    current_warp.warp_id <= current_warp.warp_id + 1;
+                                    
+                                    // 选择下一个目标TPC
+                                    target_tpc <= select_tpc();
+                                    
+                                    state <= DISPATCH_COMPUTE;
+                                end else begin
+                                    // 所有Warp都已分发，返回空闲状态
+                                    state <= IDLE;
+                                end
+                            end
                         end
-                    end
+                        1: begin
+                            tpc_if[1].warp_valid <= 1'b1;
+                            tpc_if[1].warp_id <= current_warp.warp_id;
+                            tpc_if[1].block_id <= current_warp.block_id;
+                            tpc_if[1].program_addr <= current_warp.program_addr;
+                            tpc_if[1].arglist_ptr <= current_warp.arglist_ptr;
+                            tpc_if[1].argument_size <= current_warp.argument_size;
+                            tpc_if[1].thread_mask <= current_warp.thread_mask;
+                            tpc_if[1].arglist_data <= current_warp.arglist_data;
+                            
+                            if (tpc_if[1].warp_ready) begin
+                                tpc_if[1].warp_valid <= 1'b0;
+                                
+                                // 更新TPC负载
+                                tpc_load[1] <= tpc_load[1] + 1;
+                                
+                                // 检查是否还有更多Warp需要分发
+                                if (warp_count > 1) begin
+                                    warp_count <= warp_count - 1;
+                                    
+                                    // 创建下一个Warp
+                                    current_warp.warp_id <= current_warp.warp_id + 1;
+                                    
+                                    // 选择下一个目标TPC
+                                    target_tpc <= select_tpc();
+                                    
+                                    state <= DISPATCH_COMPUTE;
+                                end else begin
+                                    // 所有Warp都已分发，返回空闲状态
+                                    state <= IDLE;
+                                end
+                            end
+                        end
+                        2: begin
+                            tpc_if[2].warp_valid <= 1'b1;
+                            tpc_if[2].warp_id <= current_warp.warp_id;
+                            tpc_if[2].block_id <= current_warp.block_id;
+                            tpc_if[2].program_addr <= current_warp.program_addr;
+                            tpc_if[2].arglist_ptr <= current_warp.arglist_ptr;
+                            tpc_if[2].argument_size <= current_warp.argument_size;
+                            tpc_if[2].thread_mask <= current_warp.thread_mask;
+                            tpc_if[2].arglist_data <= current_warp.arglist_data;
+                            
+                            if (tpc_if[2].warp_ready) begin
+                                tpc_if[2].warp_valid <= 1'b0;
+                                
+                                // 更新TPC负载
+                                tpc_load[2] <= tpc_load[2] + 1;
+                                
+                                // 检查是否还有更多Warp需要分发
+                                if (warp_count > 1) begin
+                                    warp_count <= warp_count - 1;
+                                    
+                                    // 创建下一个Warp
+                                    current_warp.warp_id <= current_warp.warp_id + 1;
+                                    
+                                    // 选择下一个目标TPC
+                                    target_tpc <= select_tpc();
+                                    
+                                    state <= DISPATCH_COMPUTE;
+                                end else begin
+                                    // 所有Warp都已分发，返回空闲状态
+                                    state <= IDLE;
+                                end
+                            end
+                        end
+                        3: begin
+                            tpc_if[3].warp_valid <= 1'b1;
+                            tpc_if[3].warp_id <= current_warp.warp_id;
+                            tpc_if[3].block_id <= current_warp.block_id;
+                            tpc_if[3].program_addr <= current_warp.program_addr;
+                            tpc_if[3].arglist_ptr <= current_warp.arglist_ptr;
+                            tpc_if[3].argument_size <= current_warp.argument_size;
+                            tpc_if[3].thread_mask <= current_warp.thread_mask;
+                            tpc_if[3].arglist_data <= current_warp.arglist_data;
+                            
+                            if (tpc_if[3].warp_ready) begin
+                                tpc_if[3].warp_valid <= 1'b0;
+                                
+                                // 更新TPC负载
+                                tpc_load[3] <= tpc_load[3] + 1;
+                                
+                                // 检查是否还有更多Warp需要分发
+                                if (warp_count > 1) begin
+                                    warp_count <= warp_count - 1;
+                                    
+                                    // 创建下一个Warp
+                                    current_warp.warp_id <= current_warp.warp_id + 1;
+                                    
+                                    // 选择下一个目标TPC
+                                    target_tpc <= select_tpc();
+                                    
+                                    state <= DISPATCH_COMPUTE;
+                                end else begin
+                                    // 所有Warp都已分发，返回空闲状态
+                                    state <= IDLE;
+                                end
+                            end
+                        end
+                        default: state <= IDLE;
+                    endcase
                 end
                 
                 DISPATCH_RASTER: begin

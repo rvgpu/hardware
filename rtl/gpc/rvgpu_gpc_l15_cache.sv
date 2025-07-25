@@ -494,17 +494,58 @@ module rvgpu_gpc_l15_cache #(
                 end
                 
                 RESP_SEND: begin
-                    // 发送响应给请求者
-                    requester_if[current_requester].resp_valid <= 1'b1;
-                    requester_if[current_requester].resp_data <= data_read_resp_valid ? data_read_data : 
-                                                               mshr_resp_valid ? mshr_resp_data : '0;
-                    requester_if[current_requester].resp_error <= mshr_resp_valid ? mshr_resp_error : 1'b0;
-                    requester_if[current_requester].resp_id <= current_id;
-                    
-                    if (requester_if[current_requester].resp_ready) begin
-                        requester_if[current_requester].resp_valid <= 1'b0;
-                        state <= IDLE;
-                    end
+                    // 发送响应给请求者 - 使用case语句避免动态索引
+                    case (current_requester)
+                        0: begin
+                            requester_if[0].resp_valid <= 1'b1;
+                            requester_if[0].resp_data <= data_read_resp_valid ? data_read_data : 
+                                                       mshr_resp_valid ? mshr_resp_data : '0;
+                            requester_if[0].resp_error <= mshr_resp_valid ? mshr_resp_error : 1'b0;
+                            requester_if[0].resp_id <= current_id;
+                            
+                            if (requester_if[0].resp_ready) begin
+                                requester_if[0].resp_valid <= 1'b0;
+                                state <= IDLE;
+                            end
+                        end
+                        1: begin
+                            requester_if[1].resp_valid <= 1'b1;
+                            requester_if[1].resp_data <= data_read_resp_valid ? data_read_data : 
+                                                       mshr_resp_valid ? mshr_resp_data : '0;
+                            requester_if[1].resp_error <= mshr_resp_valid ? mshr_resp_error : 1'b0;
+                            requester_if[1].resp_id <= current_id;
+                            
+                            if (requester_if[1].resp_ready) begin
+                                requester_if[1].resp_valid <= 1'b0;
+                                state <= IDLE;
+                            end
+                        end
+                        2: begin
+                            requester_if[2].resp_valid <= 1'b1;
+                            requester_if[2].resp_data <= data_read_resp_valid ? data_read_data : 
+                                                       mshr_resp_valid ? mshr_resp_data : '0;
+                            requester_if[2].resp_error <= mshr_resp_valid ? mshr_resp_error : 1'b0;
+                            requester_if[2].resp_id <= current_id;
+                            
+                            if (requester_if[2].resp_ready) begin
+                                requester_if[2].resp_valid <= 1'b0;
+                                state <= IDLE;
+                            end
+                        end
+                        3: begin
+                            requester_if[3].resp_valid <= 1'b1;
+                            requester_if[3].resp_data <= data_read_resp_valid ? data_read_data : 
+                                                       mshr_resp_valid ? mshr_resp_data : '0;
+                            requester_if[3].resp_error <= mshr_resp_valid ? mshr_resp_error : 1'b0;
+                            requester_if[3].resp_id <= current_id;
+                            
+                            if (requester_if[3].resp_ready) begin
+                                requester_if[3].resp_valid <= 1'b0;
+                                state <= IDLE;
+                            end
+                        end
+                        default: state <= IDLE;
+                    endcase
                 end
                 
                 default: state <= IDLE;

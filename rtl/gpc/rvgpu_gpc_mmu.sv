@@ -442,16 +442,54 @@ module rvgpu_gpc_mmu #(
                 end
                 
                 UPDATE_L0_TLB: begin
-                    // 更新TPC的L0 TLB
-                    l0_tlb_if[current_req.tpc_id].update_valid <= 1'b1;
-                    l0_tlb_if[current_req.tpc_id].update_vaddr <= current_req.vaddr;
-                    l0_tlb_if[current_req.tpc_id].update_ppn <= current_ppn;
-                    l0_tlb_if[current_req.tpc_id].update_perm <= current_req.req_type; // 简化实现
-                    
-                    if (l0_tlb_if[current_req.tpc_id].update_ready) begin
-                        l0_tlb_if[current_req.tpc_id].update_valid <= 1'b0;
-                        state <= SEND_RESPONSE;
-                    end
+                    // 更新TPC的L0 TLB - 使用case语句避免动态索引
+                    case (current_req.tpc_id)
+                        0: begin
+                            l0_tlb_if[0].update_valid <= 1'b1;
+                            l0_tlb_if[0].update_vaddr <= current_req.vaddr;
+                            l0_tlb_if[0].update_ppn <= current_ppn;
+                            l0_tlb_if[0].update_perm <= current_req.req_type;
+                            
+                            if (l0_tlb_if[0].update_ready) begin
+                                l0_tlb_if[0].update_valid <= 1'b0;
+                                state <= SEND_RESPONSE;
+                            end
+                        end
+                        1: begin
+                            l0_tlb_if[1].update_valid <= 1'b1;
+                            l0_tlb_if[1].update_vaddr <= current_req.vaddr;
+                            l0_tlb_if[1].update_ppn <= current_ppn;
+                            l0_tlb_if[1].update_perm <= current_req.req_type;
+                            
+                            if (l0_tlb_if[1].update_ready) begin
+                                l0_tlb_if[1].update_valid <= 1'b0;
+                                state <= SEND_RESPONSE;
+                            end
+                        end
+                        2: begin
+                            l0_tlb_if[2].update_valid <= 1'b1;
+                            l0_tlb_if[2].update_vaddr <= current_req.vaddr;
+                            l0_tlb_if[2].update_ppn <= current_ppn;
+                            l0_tlb_if[2].update_perm <= current_req.req_type;
+                            
+                            if (l0_tlb_if[2].update_ready) begin
+                                l0_tlb_if[2].update_valid <= 1'b0;
+                                state <= SEND_RESPONSE;
+                            end
+                        end
+                        3: begin
+                            l0_tlb_if[3].update_valid <= 1'b1;
+                            l0_tlb_if[3].update_vaddr <= current_req.vaddr;
+                            l0_tlb_if[3].update_ppn <= current_ppn;
+                            l0_tlb_if[3].update_perm <= current_req.req_type;
+                            
+                            if (l0_tlb_if[3].update_ready) begin
+                                l0_tlb_if[3].update_valid <= 1'b0;
+                                state <= SEND_RESPONSE;
+                            end
+                        end
+                        default: state <= SEND_RESPONSE;
+                    endcase
                 end
                 
                 SEND_RESPONSE: begin
@@ -470,18 +508,62 @@ module rvgpu_gpc_mmu #(
                             state <= IDLE;
                         end
                     end else begin
-                        // 响应TPC
-                        tpc_if[current_req.tpc_id].resp_valid <= 1'b1;
-                        tpc_if[current_req.tpc_id].resp_ppn <= current_ppn;
-                        tpc_if[current_req.tpc_id].resp_hit <= tlb_hit;
-                        tpc_if[current_req.tpc_id].resp_fault <= tlb_fault;
-                        tpc_if[current_req.tpc_id].resp_warp_id <= current_req.warp_id;
-                        tpc_if[current_req.tpc_id].resp_source_id <= current_req.source_id;
-                        
-                        if (tpc_if[current_req.tpc_id].resp_ready) begin
-                            tpc_if[current_req.tpc_id].resp_valid <= 1'b0;
-                            state <= IDLE;
-                        end
+                        // 响应TPC - 使用case语句避免动态索引
+                        case (current_req.tpc_id)
+                            0: begin
+                                tpc_if[0].resp_valid <= 1'b1;
+                                tpc_if[0].resp_ppn <= current_ppn;
+                                tpc_if[0].resp_hit <= tlb_hit;
+                                tpc_if[0].resp_fault <= tlb_fault;
+                                tpc_if[0].resp_warp_id <= current_req.warp_id;
+                                tpc_if[0].resp_source_id <= current_req.source_id;
+                                
+                                if (tpc_if[0].resp_ready) begin
+                                    tpc_if[0].resp_valid <= 1'b0;
+                                    state <= IDLE;
+                                end
+                            end
+                            1: begin
+                                tpc_if[1].resp_valid <= 1'b1;
+                                tpc_if[1].resp_ppn <= current_ppn;
+                                tpc_if[1].resp_hit <= tlb_hit;
+                                tpc_if[1].resp_fault <= tlb_fault;
+                                tpc_if[1].resp_warp_id <= current_req.warp_id;
+                                tpc_if[1].resp_source_id <= current_req.source_id;
+                                
+                                if (tpc_if[1].resp_ready) begin
+                                    tpc_if[1].resp_valid <= 1'b0;
+                                    state <= IDLE;
+                                end
+                            end
+                            2: begin
+                                tpc_if[2].resp_valid <= 1'b1;
+                                tpc_if[2].resp_ppn <= current_ppn;
+                                tpc_if[2].resp_hit <= tlb_hit;
+                                tpc_if[2].resp_fault <= tlb_fault;
+                                tpc_if[2].resp_warp_id <= current_req.warp_id;
+                                tpc_if[2].resp_source_id <= current_req.source_id;
+                                
+                                if (tpc_if[2].resp_ready) begin
+                                    tpc_if[2].resp_valid <= 1'b0;
+                                    state <= IDLE;
+                                end
+                            end
+                            3: begin
+                                tpc_if[3].resp_valid <= 1'b1;
+                                tpc_if[3].resp_ppn <= current_ppn;
+                                tpc_if[3].resp_hit <= tlb_hit;
+                                tpc_if[3].resp_fault <= tlb_fault;
+                                tpc_if[3].resp_warp_id <= current_req.warp_id;
+                                tpc_if[3].resp_source_id <= current_req.source_id;
+                                
+                                if (tpc_if[3].resp_ready) begin
+                                    tpc_if[3].resp_valid <= 1'b0;
+                                    state <= IDLE;
+                                end
+                            end
+                            default: state <= IDLE;
+                        endcase
                     end
                 end
                 

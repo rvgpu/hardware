@@ -17,7 +17,7 @@
 `define RVGPU_GPC_BLOCK_SCHEDULER_SV
 
 `include "rvgpu_typedef.svh"
-`include "rvgpu_job_block.svh"
+`include "rvgpu_job_cluster_block.svh"
 `include "gpc_noc_adapter_if.svh"
 `include "gpc_block_tpc_if.svh"
 `include "gpc_block_raster_if.svh"
@@ -25,7 +25,7 @@
 `include "gpc_mmu_if.svh"
 
 // GPC Block Scheduler模块
-// 负责接收job_block并将其调度到合适的TPC
+// 负责接收job_cluster并将其调度到合适的TPC
 module rvgpu_gpc_block_scheduler #(
     parameter int NUM_TPC = 4,           // TPC数量
     parameter int MAX_WARPS_PER_BLOCK = 32, // 每个Block最大Warp数
@@ -75,7 +75,7 @@ module rvgpu_gpc_block_scheduler #(
     
     // 内部信号
     scheduler_state_t state;
-    job_block_t current_job;
+    job_cluster_t current_job;
     logic [63:0] arglist_paddr;
     logic [31:0] current_block_id;
     logic [31:0] warp_count;
@@ -84,9 +84,9 @@ module rvgpu_gpc_block_scheduler #(
     logic [7:0] tpc_load[NUM_TPC];
     
     // 解析Job Block
-    function automatic void parse_job_block(input job_block_t job);
+    function automatic void parse_job_cluster(input job_cluster_t job);
         current_job = job;
-        current_block_id = job.current_block_id;
+        current_block_id = job.curr_cluster_id;
         
         // 简化实现：假设每个Block有8个Warp
         warp_count = 8;
@@ -113,16 +113,16 @@ module rvgpu_gpc_block_scheduler #(
     // 生成Warp
     function automatic warp_t create_warp(
         input logic [31:0] warp_id,
-        input job_block_t job,
+        input job_cluster_t job,
         input logic [255:0] arglist_data
     );
         warp_t warp;
         
         warp.warp_id = warp_id;
-        warp.block_id = job.current_block_id;
-        warp.program_addr = job.program_addr;
-        warp.arglist_ptr = job.arglist_ptr;
-        warp.argument_size = job.argument_size;
+        warp.block_id = job.curr_cluster_id;
+        warp.program_addr = job.program_ptr;
+        warp.arglist_ptr = job.program_ptr + 64'd8;
+        warp.argument_size = job.arg_size;
         warp.thread_mask = '1; // 默认所有线程都活跃
         warp.arglist_data = arglist_data;
         
@@ -197,7 +197,7 @@ module rvgpu_gpc_block_scheduler #(
                     noc_if.job_ready <= 1'b1;
                     
                     if (noc_if.job_valid && noc_if.job_ready) begin
-                        parse_job_block(noc_if.job_block);
+                        parse_job_cluster(noc_if.job_cluster);
                         noc_if.job_ready <= 1'b0;
                         state <= PARSE_JOB;
                     end
@@ -205,7 +205,7 @@ module rvgpu_gpc_block_scheduler #(
                 
                 PARSE_JOB: begin
                     // 解析Job Block并确定任务类型
-                    if (current_job.program_addr[63]) begin
+                    if (current_job.program_ptr[63]) begin
                         // 光栅化任务 (假设程序地址最高位为1表示光栅化任务)
                         state <= DISPATCH_RASTER;
                     end else begin
@@ -217,7 +217,7 @@ module rvgpu_gpc_block_scheduler #(
                 TRANSLATE_ARGLIST: begin
                     // 翻译参数列表地址
                     tlb_if.req_valid <= 1'b1;
-                    tlb_if.req_vaddr <= current_job.arglist_ptr;
+                    tlb_if.req_vaddr <= current_job.program_ptr + 64'd8;
                     tlb_if.req_type <= MMU_READ;
                     tlb_if.req_warp_id <= '0;
                     tlb_if.req_source_id <= '0;
@@ -233,7 +233,7 @@ module rvgpu_gpc_block_scheduler #(
                     if (tlb_if.resp_valid) begin
                         if (!tlb_if.resp_fault) begin
                             // TLB命中，获取参数列表
-                            arglist_paddr <= {tlb_if.resp_ppn, current_job.arglist_ptr[11:0]};
+                            arglist_paddr <= {tlb_if.resp_ppn, current_job.program_ptr[11:0]};
                             state <= FETCH_ARGLIST;
                         end else begin
                             // TLB未命中，返回错误状态
@@ -422,9 +422,9 @@ module rvgpu_gpc_block_scheduler #(
                 DISPATCH_RASTER: begin
                     // 将光栅化命令发送给Raster Engine
                     raster_if.cmd_valid <= 1'b1;
-                    raster_if.cmd_addr <= current_job.program_addr;
-                    raster_if.cmd_data <= current_job.arglist_ptr;
-                    raster_if.cmd_size <= current_job.argument_size;
+                    raster_if.cmd_addr <= current_job.program_ptr;
+                    raster_if.cmd_data <= current_job.program_ptr + 64'd8;
+                    raster_if.cmd_size <= current_job.arg_size;
                     
                     if (raster_if.cmd_ready) begin
                         raster_if.cmd_valid <= 1'b0;

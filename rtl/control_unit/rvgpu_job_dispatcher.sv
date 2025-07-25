@@ -19,8 +19,9 @@
 `include "rvgpu_control_unit_pkg.svh"
 `include "rvgpu_control_unit_if.svh"
 `include "rvgpu_internal_noc_if.svh"
+`include "rvgpu_command_package.svh"
+`include "rvgpu_job_cluster_block.svh"
 `include "rvgpu_debug.svh"
-`include "rvgpu_job_block.svh"
 
 `ifndef RVGPU_CONTROL_UNIT_PKG_IMPORTED
 `define RVGPU_CONTROL_UNIT_PKG_IMPORTED
@@ -43,37 +44,43 @@ module rvgpu_job_dispatcher #(
     // Command Processor Interface
     job_dispatcher_if.jd_port jd_if
 );
-    typedef enum logic [2:0] {
-        STATE_IDLE = 3'd0,
-        STATE_MMU_REQ = 3'd1,
-        STATE_MMU_WAIT = 3'd2,
-        STATE_NOC_REQ = 3'd3,
-        STATE_NOC_WAIT = 3'd4,
-        STATE_BLOCK_DISPATCH = 3'd5,
-        STATE_DISPATCH_WAIT = 3'd6,
-        STATE_DONE = 3'd7
+    typedef enum logic [3:0] {
+        STATE_IDLE = 4'd0,
+        STATE_MMU_REQ = 4'd1,
+        STATE_MMU_WAIT = 4'd2,
+        STATE_NOC_REQ = 4'd3,
+        STATE_NOC_WAIT = 4'd4,
+        STATE_CLUSTER_DISPATCH = 4'd5,  // 修改：cluster 调度
+        STATE_DISPATCH_WAIT = 4'd6,
+        STATE_DONE = 4'd7
     } main_state_e;
 
     typedef struct packed {
-        logic [3:0] core_id;
-        logic [15:0] block_id;
-    } block_core_entry_t;
+        logic [3:0] gpc_id;
+        logic [31:0] cluster_id;
+    } cluster_gpc_entry_t;
 
     //==================== 状态寄存器段 ====================
     main_state_e state_r, state_n;
-    logic [`SHADER_CORE_NUMBER-1:0] shadercore_busy_r, shadercore_busy_n;
-    logic [$clog2(`SHADER_CORE_NUMBER)-1:0] shadercore_sel_r, shadercore_sel_n;
+    logic [`SHADER_CORE_NUMBER-1:0] gpc_busy_r, gpc_busy_n;  // 修改：GPC 忙状态
+    logic [$clog2(`SHADER_CORE_NUMBER)-1:0] gpc_sel_r, gpc_sel_n;  // 修改：GPC 选择
     command_t command_r, command_n;
     logic [63:0] command_addr_r, command_addr_n;
-    logic [15:0] total_blocks_r, total_blocks_n;
-    logic [15:0] block_idx_r, block_idx_n;
-    job_block_t job_block_r, job_block_n;
-    block_core_entry_t block_core_fifo_r [7:0], block_core_fifo_n [7:0];
+    logic [31:0] total_clusters_r, total_clusters_n;  // 修改：总 cluster 数
+    logic [31:0] cluster_idx_r, cluster_idx_n;  // 修改：cluster 索引
+    job_cluster_t job_cluster_r, job_cluster_n;  // 修改：job_cluster_t
+    cluster_gpc_entry_t cluster_gpc_fifo_r [7:0], cluster_gpc_fifo_n [7:0];  // 修改：cluster-GPC 对应关系
     logic [2:0] fifo_head_r, fifo_head_n, fifo_tail_r, fifo_tail_n;
     logic [7:0] error_status_r, error_status_n;
     logic [63:0] package_addr_r, package_addr_n;
     logic [63:0] mmu_base_r, mmu_base_n;
     logic [47:0] mmu_paddr_r, mmu_paddr_n;
+    
+    // 新增：cluster 枚举相关寄存器
+    logic [15:0] cluster_x_r, cluster_x_n;
+    logic [15:0] cluster_y_r, cluster_y_n;
+    logic [15:0] cluster_z_r, cluster_z_n;
+    logic [31:0] curr_cluster_id_r, curr_cluster_id_n;
 
     //==================== 组合逻辑段 ====================
     // FIFO状态
@@ -95,35 +102,61 @@ module rvgpu_job_dispatcher #(
     localparam ERROR_BIT_TIMEOUT       = 6;
     localparam ERROR_BIT_UNKNOWN       = 7;
 
-    // next_shadercore_sel函数
-    function automatic noc_node_id_t next_shadercore_sel(input logic [`SHADER_CORE_NUMBER-1:0] busy_vec, input int last_sel);
+    // 修改：next_gpc_sel函数
+    function automatic noc_node_id_t next_gpc_sel(input logic [`SHADER_CORE_NUMBER-1:0] busy_vec, input int last_sel);
         int i;
         for (i = 1; i <= `SHADER_CORE_NUMBER; i++) begin
             int idx = (last_sel + i) % `SHADER_CORE_NUMBER;
             if (!busy_vec[idx]) begin
-                return noc_node_id_t'(2 + idx); // NODE_SHADER_0 = 2
+                return noc_node_id_t'(2 + idx); // NODE_GPC_0 = 2
             end
         end
         return noc_node_id_t'(2 + last_sel); // fallback
     endfunction
 
+    // 新增：计算总 cluster 数
+    function automatic logic [31:0] calculate_total_clusters(input command_compute_t cmd);
+        logic [31:0] grid_clusters_x, grid_clusters_y, grid_clusters_z;
+        grid_clusters_x = (cmd.header.job_dim.grid_x + cmd.header.job_dim.cluster_x - 1) / cmd.header.job_dim.cluster_x;
+        grid_clusters_y = (cmd.header.job_dim.grid_y + cmd.header.job_dim.cluster_y - 1) / cmd.header.job_dim.cluster_y;
+        grid_clusters_z = (cmd.header.job_dim.grid_z + cmd.header.job_dim.cluster_z - 1) / cmd.header.job_dim.cluster_z;
+        return grid_clusters_x * grid_clusters_y * grid_clusters_z;
+    endfunction
+
+    // 新增：计算当前 cluster ID
+    function automatic logic [31:0] calculate_cluster_id(
+        input logic [15:0] cluster_x, cluster_y, cluster_z,
+        input logic [15:0] grid_x, grid_y, grid_z,
+        input logic [3:0] cluster_dim_x, cluster_dim_y, cluster_dim_z
+    );
+        logic [31:0] grid_clusters_x, grid_clusters_y;
+        grid_clusters_x = (grid_x + cluster_dim_x - 1) / cluster_dim_x;
+        grid_clusters_y = (grid_y + cluster_dim_y - 1) / cluster_dim_y;
+        return cluster_z * grid_clusters_y * grid_clusters_x + 
+               cluster_y * grid_clusters_x + cluster_x;
+    endfunction
+
     always_comb begin
         // 默认赋值
         state_n = state_r;
-        shadercore_busy_n = shadercore_busy_r;
-        shadercore_sel_n = shadercore_sel_r;
+        gpc_busy_n = gpc_busy_r;
+        gpc_sel_n = gpc_sel_r;
         command_n = command_r;
         command_addr_n = command_addr_r;
-        total_blocks_n = total_blocks_r;
-        block_idx_n = block_idx_r;
-        job_block_n = job_block_r;
-        block_core_fifo_n = block_core_fifo_r;
+        total_clusters_n = total_clusters_r;
+        cluster_idx_n = cluster_idx_r;
+        job_cluster_n = job_cluster_r;
+        cluster_gpc_fifo_n = cluster_gpc_fifo_r;
         fifo_head_n = fifo_head_r;
         fifo_tail_n = fifo_tail_r;
         error_status_n = error_status_r;
         package_addr_n = package_addr_r;
         mmu_base_n = mmu_base_r;
         mmu_paddr_n = mmu_paddr_r;
+        cluster_x_n = cluster_x_r;
+        cluster_y_n = cluster_y_r;
+        cluster_z_n = cluster_z_r;
+        curr_cluster_id_n = curr_cluster_id_r;
 
         // MMU/NOC接口默认
         mmu_if.req_valid = 1'b0;
@@ -186,47 +219,86 @@ module rvgpu_job_dispatcher #(
                 if (noc_if.m_resp_valid && noc_if.m_resp_ready) begin
                     if (noc_if.m_resp_status == 2'b00) begin
                         command_n = noc_if.m_resp_data;
-                        total_blocks_n = command_get_block_count(noc_if.m_resp_data);
-                        block_idx_n = 0;
-                        state_n = STATE_BLOCK_DISPATCH;
-                        `DEBUG_PRINT("JD", $sformatf("NOC Response: %s", command_to_string(noc_if.m_resp_data)));
+                        total_clusters_n = calculate_total_clusters(noc_if.m_resp_data);
+                        cluster_idx_n = 0;
+                        cluster_x_n = 0;
+                        cluster_y_n = 0;
+                        cluster_z_n = 0;
+                        curr_cluster_id_n = 0;
+                        state_n = STATE_CLUSTER_DISPATCH;
+                        `DEBUG_PRINT("JD", $sformatf("NOC Response: %s", command_compute_to_string(noc_if.m_resp_data)));
                     end else begin
                         state_n = STATE_IDLE;
                         error_status_n[ERROR_BIT_NOC_ERROR] = 1'b1;
                     end
                 end
             end
-            STATE_BLOCK_DISPATCH: begin
-                if (block_idx_r < total_blocks_r && (|(~shadercore_busy_r)) && !fifo_full_n) begin
-                    noc_node_id_t selected_core;
-                    selected_core = next_shadercore_sel(shadercore_busy_r, shadercore_sel_r);
-                    job_block_n = build_job_block(arglist_ptr_n, command_r.prog.argument_size, command_r.prog.program_addr,block_idx_r);
+            STATE_CLUSTER_DISPATCH: begin
+                if (cluster_idx_r < total_clusters_r && (|(~gpc_busy_r)) && !fifo_full_n) begin
+                    noc_node_id_t selected_gpc;
+                    selected_gpc = next_gpc_sel(gpc_busy_r, gpc_sel_r);
+                    
+                    // 构建 job_cluster_t
+                    job_cluster_n = build_job_cluster(
+                        command_r.compute.header.job_dim,
+                        command_r.compute.prog.program_addr,
+                        curr_cluster_id_r,
+                        command_r.compute.prog.argument_size
+                    );
+                    
+                    // 通过 NOC 下发到选中的 GPC
                     noc_if.m_req_valid  = 1'b1;
-                    noc_if.m_req_header = build_noc_header_jobblock_dispatch(8'h01, selected_core);
-                    noc_if.m_req_data   = job_block_n;
+                    noc_if.m_req_header = build_noc_header_jobcluster_dispatch(8'h01, selected_gpc);
+                    noc_if.m_req_data   = job_cluster_n;
                     noc_if.m_req_strb   = 32'hFF;
                     noc_if.m_req_last   = 1'b1;
-                    shadercore_busy_n[selected_core - 2] = 1'b1;
-                    block_core_fifo_n = block_core_fifo_r;
-                    block_core_fifo_n[fifo_tail_r].core_id = selected_core;
-                    block_core_fifo_n[fifo_tail_r].block_id = block_idx_r;
+                    
+                    // 标记 GPC 为忙状态
+                    gpc_busy_n[selected_gpc - 2] = 1'b1;
+                    cluster_gpc_fifo_n = cluster_gpc_fifo_r;
+                    cluster_gpc_fifo_n[fifo_tail_r].gpc_id = selected_gpc;
+                    cluster_gpc_fifo_n[fifo_tail_r].cluster_id = curr_cluster_id_r;
                     fifo_tail_n = (fifo_tail_r + 1) % 8;
-                    `DEBUG_PRINT("JD", $sformatf("Dispatch block %0d to core %0d", block_idx_r, selected_core));
+                    
+                    `DEBUG_PRINT("JD", $sformatf("Dispatch cluster %0d to GPC %0d", curr_cluster_id_r, selected_gpc));
                     state_n = STATE_DISPATCH_WAIT;
-                end else if (block_idx_r >= total_blocks_r) begin
+                end else if (cluster_idx_r >= total_clusters_r) begin
                     state_n = STATE_DONE;
                 end
             end
             STATE_DISPATCH_WAIT: begin
                 if (noc_if.m_resp_valid && noc_if.m_resp_ready && noc_if.m_resp_status == 2'b00 && !fifo_empty_n) begin
-                    logic [3:0] resp_core_id;
-                    resp_core_id = block_core_fifo_r[fifo_head_r].core_id;
-                    shadercore_busy_n[resp_core_id - 2] = 1'b0;
-                    block_idx_n = block_idx_r + 1;
+                    logic [3:0] resp_gpc_id;
+                    resp_gpc_id = cluster_gpc_fifo_r[fifo_head_r].gpc_id;
+                    gpc_busy_n[resp_gpc_id - 2] = 1'b0;
+                    cluster_idx_n = cluster_idx_r + 1;
                     fifo_head_n = (fifo_head_r + 1) % 8;
-                    `DEBUG_PRINT("JD", $sformatf("Core %0d finished block %0d", resp_core_id, block_core_fifo_r[fifo_head_r].block_id));
-                    if ((block_idx_r + 1) < total_blocks_r) begin
-                        state_n = STATE_BLOCK_DISPATCH;
+                    
+                    // 更新 cluster 枚举指针
+                    if (cluster_x_r < command_r.compute.header.job_dim.grid_x - command_r.compute.header.job_dim.cluster_x) begin
+                        cluster_x_n = cluster_x_r + command_r.compute.header.job_dim.cluster_x;
+                    end else begin
+                        cluster_x_n = 0;
+                        if (cluster_y_r < command_r.compute.header.job_dim.grid_y - command_r.compute.header.job_dim.cluster_y) begin
+                            cluster_y_n = cluster_y_r + command_r.compute.header.job_dim.cluster_y;
+                        end else begin
+                            cluster_y_n = 0;
+                            if (cluster_z_r < command_r.compute.header.job_dim.grid_z - command_r.compute.header.job_dim.cluster_z) begin
+                                cluster_z_n = cluster_z_r + command_r.compute.header.job_dim.cluster_z;
+                            end
+                        end
+                    end
+                    
+                    // 更新 cluster ID
+                    curr_cluster_id_n = calculate_cluster_id(
+                        cluster_x_n, cluster_y_n, cluster_z_n,
+                        command_r.compute.header.job_dim.grid_x, command_r.compute.header.job_dim.grid_y, command_r.compute.header.job_dim.grid_z,
+                        command_r.compute.header.job_dim.cluster_x, command_r.compute.header.job_dim.cluster_y, command_r.compute.header.job_dim.cluster_z
+                    );
+                    
+                    `DEBUG_PRINT("JD", $sformatf("GPC %0d finished cluster %0d", resp_gpc_id, cluster_gpc_fifo_r[fifo_head_r].cluster_id));
+                    if ((cluster_idx_r + 1) < total_clusters_r) begin
+                        state_n = STATE_CLUSTER_DISPATCH;
                     end else begin
                         state_n = STATE_DONE;
                     end
@@ -245,43 +317,51 @@ module rvgpu_job_dispatcher #(
     always_ff @(posedge clk) begin
         if (!rst_n || jd_if.reset) begin
             state_r <= STATE_IDLE;
-            shadercore_busy_r <= '0;
-            shadercore_sel_r <= 0;
+            gpc_busy_r <= '0;
+            gpc_sel_r <= 0;
             command_r <= '0;
             command_addr_r <= 64'h0;
-            total_blocks_r <= 0;
-            block_idx_r <= 0;
-            job_block_r <= '0;
-            block_core_fifo_r <= '{default: '0};
+            total_clusters_r <= 0;
+            cluster_idx_r <= 0;
+            job_cluster_r <= '0;
+            cluster_gpc_fifo_r <= '{default: '0};
             fifo_head_r <= 0;
             fifo_tail_r <= 0;
             error_status_r <= 8'h0;
             package_addr_r <= 64'h0;
             mmu_base_r <= 64'h0;
             mmu_paddr_r <= 48'h0;
+            cluster_x_r <= 0;
+            cluster_y_r <= 0;
+            cluster_z_r <= 0;
+            curr_cluster_id_r <= 0;
         end else begin
             state_r <= state_n;
-            shadercore_busy_r <= shadercore_busy_n;
-            shadercore_sel_r <= shadercore_sel_n;
+            gpc_busy_r <= gpc_busy_n;
+            gpc_sel_r <= gpc_sel_n;
             command_r <= command_n;
             command_addr_r <= command_addr_n;
-            total_blocks_r <= total_blocks_n;
-            block_idx_r <= block_idx_n;
-            job_block_r <= job_block_n;
-            block_core_fifo_r <= block_core_fifo_n;
+            total_clusters_r <= total_clusters_n;
+            cluster_idx_r <= cluster_idx_n;
+            job_cluster_r <= job_cluster_n;
+            cluster_gpc_fifo_r <= cluster_gpc_fifo_n;
             fifo_head_r <= fifo_head_n;
             fifo_tail_r <= fifo_tail_n;
             error_status_r <= error_status_n;
             package_addr_r <= package_addr_n;
             mmu_base_r <= mmu_base_n;
             mmu_paddr_r <= mmu_paddr_n;
+            cluster_x_r <= cluster_x_n;
+            cluster_y_r <= cluster_y_n;
+            cluster_z_r <= cluster_z_n;
+            curr_cluster_id_r <= curr_cluster_id_n;
         end
     end
 
     //==================== 输出段 ====================
     logic busy_o, complete_o, error_o;
     logic [7:0] error_status_o;
-    assign busy_o = (state_r != STATE_IDLE) || (state_r == STATE_BLOCK_DISPATCH);
+    assign busy_o = (state_r != STATE_IDLE) || (state_r == STATE_CLUSTER_DISPATCH);
     assign complete_o = (state_r == STATE_DONE) && (error_status_r == 8'h00);
     assign error_o = (error_status_r != 8'h00);
     assign error_status_o = error_status_r;

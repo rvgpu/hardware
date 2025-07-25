@@ -17,23 +17,23 @@
 `define GPC_NOC_ADAPTER_IF_SVH
 
 `include "rvgpu_typedef.svh"
-`include "rvgpu_job_block.svh"
+`include "rvgpu_job_cluster_block.svh"
 
 // NOC Adapter接口，用于NOC Adapter和Block Scheduler之间的通信
 interface gpc_noc_adapter_if;
     // Job Block通道 (NOC Adapter -> Block Scheduler)
     logic                job_valid;      // Job有效
     logic                job_ready;      // Block Scheduler准备好接收Job
-    job_block_t          job_block;      // Job Block数据
+    job_cluster_t        job_cluster;    // Job Cluster数据
     
     // 模块端口
     modport noc_adapter (
-        output job_valid, job_block,
+        output job_valid, job_cluster,
         input  job_ready
     );
     
     modport device (
-        input  job_valid, job_block,
+        input  job_valid, job_cluster,
         output job_ready
     );
     

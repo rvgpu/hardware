@@ -151,7 +151,7 @@ function automatic noc_header_t build_noc_header_mem_response(
     return build_noc_header(MSG_MEM_READ_RESP, trans_id, NODE_L2_CACHE, dst_node, local_addr); 
 endfunction
 
-function automatic noc_header_t build_noc_header_jobblock_dispatch(
+function automatic noc_header_t build_noc_header_jobcluster_dispatch(
     input noc_trans_id_t    trans_id,
     input noc_node_id_t     dst_node
 );

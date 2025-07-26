@@ -125,6 +125,10 @@ function automatic noc_local_addr_t get_noc_header_dst_local(input noc_header_t 
     return header.dst_local;
 endfunction
 
+function automatic noc_msg_type_t get_noc_header_msg_type(input noc_header_t header);
+    return header.msg_type;
+endfunction
+
 // 构建NOC header
 function automatic noc_header_t build_noc_header(
     input noc_msg_type_t    msg_type,

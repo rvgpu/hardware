@@ -18,7 +18,6 @@
 
 `include "rvgpu_typedef.svh"
 `include "rvgpu_job_cluster_block.svh"
-`include "gpc_noc_adapter_if.svh"
 `include "gpc_block_tpc_if.svh"
 `include "gpc_block_raster_if.svh"
 `include "gpc_l15_cache_if.svh"
@@ -35,7 +34,7 @@ module rvgpu_gpc_block_scheduler #(
     input  logic rst_n,
     
     // NOC Adapter接口
-    gpc_noc_adapter_if.device noc_if,
+    rvgpu_internal_noc_if.device noc_if,
     
     // TPC接口
     gpc_block_tpc_if.scheduler tpc_if[NUM_TPC],
@@ -147,7 +146,7 @@ module rvgpu_gpc_block_scheduler #(
             tpc_load[3] <= '0;
             
             // 初始化接口信号
-            noc_if.job_ready <= 1'b0;
+            noc_if.s_req_ready <= 1'b0;
             tpc_if[0].warp_valid <= 1'b0;
             tpc_if[1].warp_valid <= 1'b0;
             tpc_if[2].warp_valid <= 1'b0;
@@ -194,11 +193,12 @@ module rvgpu_gpc_block_scheduler #(
             case (state)
                 IDLE: begin
                     // 接收来自NOC Adapter的Job Block
-                    noc_if.job_ready <= 1'b1;
+                    noc_if.s_req_ready <= 1'b1;
                     
-                    if (noc_if.job_valid && noc_if.job_ready) begin
-                        parse_job_cluster(noc_if.job_cluster);
-                        noc_if.job_ready <= 1'b0;
+                    if (noc_if.s_req_valid && noc_if.s_req_ready) begin
+                        // 假设 job_cluster 数据打包在 s_req_data 里
+                        parse_job_cluster(noc_if.s_req_data);
+                        noc_if.s_req_ready <= 1'b0;
                         state <= PARSE_JOB;
                     end
                 end

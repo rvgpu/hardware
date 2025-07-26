@@ -20,9 +20,7 @@
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_internal_noc_pkg.svh"
 `include "gpc_l15_cache_if.svh"
-`include "gpc_l15_noc_if.svh"
 `include "gpc_mmu_if.svh"
-`include "gpc_mmu_noc_if.svh"
 `include "gpc_l0_tlb_if.svh"
 `include "ldst_sm_if.svh"
 `include "gpc_block_tpc_if.svh"
@@ -42,13 +40,13 @@ module rvgpu_gpc_top #(
     rvgpu_internal_noc_if.device noc_if
 );
     // 内部接口声明
-    gpc_noc_adapter_if       noc_adapter_if();
     gpc_block_raster_if      block_raster_if();
     gpc_block_tpc_if         block_tpc_if[GPC_CONFIG.num_tpc]();
     gpc_l15_cache_if         l15_cache_if[GPC_CONFIG.num_tpc+2]();  // NUM_TPC个TPC + Block Scheduler + Raster
-    gpc_l15_noc_if           l15_noc_if();                          // NOC适配器和L1.5缓存之间的接口
+    rvgpu_internal_noc_if    l15_noc_if();                          // L1.5缓存NOC接口
     gpc_mmu_if               gpc_mmu_if[GPC_CONFIG.num_tpc+1]();    // NUM_TPC个TPC + Block Scheduler
-    gpc_mmu_noc_if           gpc_mmu_noc_if();
+    rvgpu_internal_noc_if    mmu_noc_if();                          // MMU NOC接口
+    rvgpu_internal_noc_if    scheduler_noc_if();                    // Scheduler NOC接口
     gpc_l0_tlb_if            l0_tlb_if[GPC_CONFIG.num_tpc]();
     
     // 内部信号
@@ -60,8 +58,9 @@ module rvgpu_gpc_top #(
         .clk(clk),
         .rst_n(rst_n),
         .noc_external_if(noc_if),
-        .l15_cache_if(l15_noc_if.noc_adapter),
-        .mmu_if(gpc_mmu_noc_if.noc_adapter)
+        .l15_cache_if(l15_noc_if.noc),
+        .mmu_if(mmu_noc_if.noc),
+        .scheduler_if(scheduler_noc_if.noc)
     );
     
     // GPC MMU实例化
@@ -75,14 +74,14 @@ module rvgpu_gpc_top #(
         .bs_if(gpc_mmu_if[GPC_CONFIG.num_tpc].gpc_mmu),
         .tpc_if(gpc_mmu_if[0:GPC_CONFIG.num_tpc-1]),
         .l0_tlb_if(l0_tlb_if),
-        .noc_if(gpc_mmu_noc_if.gpc_mmu)
+        .noc_if(mmu_noc_if.device)
     );
     
     // Block Scheduler实例化
     rvgpu_gpc_block_scheduler u_block_scheduler (
         .clk(clk),
         .rst_n(rst_n),
-        .noc_if(noc_adapter_if.device),
+        .noc_if(scheduler_noc_if.device),
         .tpc_if(block_tpc_if),
         .raster_if(block_raster_if.scheduler),
         .l15_if(l15_cache_if[GPC_CONFIG.num_tpc].requester),
@@ -95,7 +94,7 @@ module rvgpu_gpc_top #(
     ) u_l15_cache (
         .clk(clk),
         .rst_n(rst_n),
-        .noc_if(l15_noc_if.cache),
+        .noc_if(l15_noc_if.device),
         .requester_if(l15_cache_if)
     );
     

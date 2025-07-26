@@ -17,8 +17,10 @@
 `define RVGPU_GPC_MMU_SV
 
 `include "rvgpu_typedef.svh"
+`include "rvgpu_internal_noc_if.svh"
+`include "rvgpu_noc_message.svh"
 `include "gpc_mmu_if.svh"
-`include "gpc_mmu_noc_if.svh"
+
 `include "gpc_l0_tlb_if.svh"
 
 module rvgpu_gpc_mmu #(
@@ -39,7 +41,7 @@ module rvgpu_gpc_mmu #(
     gpc_l0_tlb_if.gpc_mmu l0_tlb_if[4],
     
     // NOC Adapter接口 (连接到控制单元MMU)
-    gpc_mmu_noc_if.gpc_mmu noc_if
+    rvgpu_internal_noc_if.device noc_if
 );
 
     // TLB表项定义
@@ -312,8 +314,8 @@ module rvgpu_gpc_mmu #(
             state <= IDLE;
             current_req <= '0;
             current_ppn <= '0;
-            noc_if.req_valid <= 1'b0;
-            noc_if.resp_ready <= 1'b0;
+            noc_if.m_req_valid <= 1'b0;
+            noc_if.m_resp_ready <= 1'b0;
             
             // 初始化TLB条目 - 简化处理
             tlb_entries[0].valid <= 1'b0;
@@ -383,30 +385,33 @@ module rvgpu_gpc_mmu #(
                 
                 SEND_TO_NOC: begin
                     // 发送请求到NOC Adapter
-                    noc_if.req_valid <= 1'b1;
-                    noc_if.req_vaddr <= current_req.vaddr;
-                    noc_if.req_type <= current_req.req_type;
-                    noc_if.req_warp_id <= current_req.warp_id;
-                    noc_if.req_source_id <= current_req.source_id;
-                    noc_if.req_gpc_id <= GPC_ID;
-                    
-                    if (noc_if.req_ready) begin
-                        noc_if.req_valid <= 1'b0;
+                                noc_if.m_req_valid <= 1'b1;
+            noc_if.m_req_header <= build_noc_header_mmu_request(
+                current_req.source_id,
+                NODE_CONTROL,
+                NOC_NODE_CONTROL_MMU
+            );
+            noc_if.m_req_data <= {current_req.vaddr, current_req.req_type, current_req.warp_id, current_req.source_id, GPC_ID};
+            noc_if.m_req_strb <= '1;
+            noc_if.m_req_last <= 1'b1;
+            
+            if (noc_if.m_req_ready) begin
+                noc_if.m_req_valid <= 1'b0;
                         state <= WAIT_NOC;
                     end
                 end
                 
                 WAIT_NOC: begin
                     // 等待NOC Adapter响应
-                    noc_if.resp_ready <= 1'b1;
+                    noc_if.m_resp_ready <= 1'b1;
                     
-                    if (noc_if.resp_valid) begin
-                        noc_if.resp_ready <= 1'b0;
+                    if (noc_if.m_resp_valid) begin
+                        noc_if.m_resp_ready <= 1'b0;
                         
-                        // 保存响应结果
-                        current_ppn <= noc_if.resp_ppn;
+                        // 从响应数据中提取信息
+                        current_ppn <= noc_if.m_resp_data[26:0];
                         
-                        if (!noc_if.resp_fault) begin
+                        if (!noc_if.m_resp_data[28]) begin // 假设fault位在data[28]
                             // 如果没有错误，更新TLB
                             state <= UPDATE_TLB;
                         end else begin

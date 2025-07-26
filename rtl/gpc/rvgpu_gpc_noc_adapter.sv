@@ -20,15 +20,11 @@
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_internal_noc_pkg.svh"
 `include "rvgpu_noc_message.svh"
-`include "gpc_l15_noc_if.svh"
-`include "gpc_mmu_noc_if.svh"
+`ifndef RVGPU_INTERNAL_NOC_PKG_IMPORTED
+`define RVGPU_INTERNAL_NOC_PKG_IMPORTED
+import rvgpu_internal_noc_pkg::*;
+`endif // RVGPU_INTERNAL_NOC_PKG_IMPORTED
 
-// 目标节点常量定义
-localparam logic [3:0] MSG_TARGET_L2CACHE = NODE_L2_CACHE;
-localparam logic [3:0] MSG_TARGET_CONTROL_MMU = NODE_CONTROL;
-
-// GPC NOC Adapter模块
-// 负责GPC与全局互联网络(Network-on-Chip)之间的通信适配
 module rvgpu_gpc_noc_adapter #(
     parameter noc_config_t NOC_CONFIG = DEFAULT_NOC_CONFIG,
     parameter int GPC_ID = 0
@@ -40,431 +36,561 @@ module rvgpu_gpc_noc_adapter #(
     rvgpu_internal_noc_if.device                  noc_external_if,
     
     // L1.5缓存接口
-    gpc_l15_noc_if.noc_adapter                    l15_cache_if,
+    rvgpu_internal_noc_if.noc                     l15_cache_if,
 
     // GPC MMU接口
-    gpc_mmu_noc_if.noc_adapter                    mmu_if
+    rvgpu_internal_noc_if.noc                     mmu_if,
+    
+    // Block Scheduler接口
+    rvgpu_internal_noc_if.noc                     scheduler_if
 );
 
-    // 消息类型定义
-    import rvgpu_internal_noc_pkg::*;
+    //=============================================================================
+    // Local Parameters and Types
+    //=============================================================================
     
-    // 状态机状态
+    // 请求仲裁状态机 - 处理内部模块发出的请求
     typedef enum logic [2:0] {
-        IDLE,
-        PARSE_HEADER,
-        ROUTE_TO_L1_CACHE,
-        ROUTE_TO_MMU,
-        WAIT_RESPONSE,
-        SEND_RESPONSE
-    } noc_adapter_state_t;
+        REQ_ARB_IDLE       = 3'b000,
+        REQ_ARB_L15        = 3'b001,
+        REQ_ARB_MMU        = 3'b010,
+        REQ_ARB_SCHED      = 3'b011,
+        REQ_WAIT_RESPONSE  = 3'b100,
+        REQ_SEND_RESPONSE  = 3'b101
+    } req_arb_state_t;
     
-    // 内部信号
-    noc_adapter_state_t state;
-    noc_adapter_state_t next_state;
-    logic [NOC_CONFIG.if_config.header_width-1:0] current_header;
-    logic [NOC_CONFIG.if_config.data_width-1:0] current_data;
-    logic [NOC_CONFIG.if_config.data_width/8-1:0] current_strb;
-    logic current_last;
+    // 响应路由状态机 - 处理来自NOC的响应
+    typedef enum logic [2:0] {
+        RESP_ROUTE_IDLE    = 3'b000,
+        RESP_ROUTE_L15     = 3'b001,
+        RESP_ROUTE_MMU     = 3'b010,
+        RESP_ROUTE_SCHED   = 3'b011
+    } resp_route_state_t;
     
-    // 消息类型和目标解析
-    noc_msg_type_t msg_type;
-    logic [3:0] msg_target;
-    logic [7:0] msg_source;
-    logic [15:0] msg_length;
-    logic [31:0] msg_id;
+    // 外部请求处理状态机 - 处理来自NOC的请求
+    typedef enum logic [2:0] {
+        EXT_REQ_IDLE       = 3'b000,
+        EXT_REQ_L15        = 3'b001,
+        EXT_REQ_MMU        = 3'b010,
+        EXT_REQ_SCHED      = 3'b011,
+        EXT_REQ_RESPONSE   = 3'b100
+    } ext_req_state_t;
     
-    // 缓冲队列
-    logic [NOC_CONFIG.if_config.header_width-1:0] req_header_queue[$];
-    logic [NOC_CONFIG.if_config.data_width-1:0] req_data_queue[$];
-    logic [NOC_CONFIG.if_config.data_width/8-1:0] req_strb_queue[$];
-    logic req_last_queue[$];
+    //=============================================================================
+    // Internal Signals and Registers
+    //=============================================================================
     
-    logic [NOC_CONFIG.if_config.header_width-1:0] resp_header_queue[$];
-    logic [NOC_CONFIG.if_config.data_width-1:0] resp_data_queue[$];
-    logic resp_last_queue[$];
+    req_arb_state_t req_arb_state, req_arb_state_next;
+    resp_route_state_t resp_route_state, resp_route_state_next;
+    ext_req_state_t ext_req_state, ext_req_state_next;
     
-    // 临时响应数据变量
-    logic [NOC_CONFIG.if_config.data_width-1:0] resp_data;
+    // 仲裁优先级轮转计数器
+    logic [1:0] arb_priority, arb_priority_next;
     
-    // 临时请求数据变量
-    logic [NOC_CONFIG.if_config.data_width-1:0] req_data;
+    // 请求缓冲
+    logic [NOC_CONFIG.if_config.header_width-1:0] req_header_buffer;
+    logic [NOC_CONFIG.if_config.data_width-1:0] req_data_buffer;
+    logic [NOC_CONFIG.if_config.data_width/8-1:0] req_strb_buffer;
+    logic req_last_buffer;
+    logic req_valid_buffer;
     
-    // 临时消息头变量
-    logic [NOC_CONFIG.if_config.header_width-1:0] header;
+    // 响应缓冲
+    logic [NOC_CONFIG.if_config.header_width-1:0] resp_header_buffer;
+    logic [NOC_CONFIG.if_config.data_width-1:0] resp_data_buffer;
+    logic resp_last_buffer;
+    logic resp_valid_buffer;
     
-    // 临时请求类型变量
-    noc_msg_type_t req_type;
+    // 临时变量
+    logic [NOC_CONFIG.if_config.data_width-1:0] temp_data;
     
-    // 临时响应类型变量
-    noc_msg_type_t resp_type;
+    //=============================================================================
+    // Sequential Logic - State Register Updates
+    //=============================================================================
     
-    // 解析NOC消息头
-    function automatic void parse_header(input logic [NOC_CONFIG.if_config.header_width-1:0] header);
-        // 假设消息头格式如下:
-        // [3:0]: 消息类型
-        // [7:4]: 目标模块
-        // [15:8]: 源模块
-        // [31:16]: 消息长度
-        // [63:32]: 消息ID
-        msg_type = noc_msg_type_t'(header[3:0]);
-        msg_target = header[7:4];
-        msg_source = header[15:8];
-        msg_length = header[31:16];
-        msg_id = 32'h0;
-    endfunction
-    
-    // 构造响应头
-    function automatic logic [NOC_CONFIG.if_config.header_width-1:0] build_response_header(
-        input noc_msg_type_t msg_type,
-        input logic [3:0] target,
-        input logic [7:0] source,
-        input logic [15:0] length,
-        input logic [31:0] id
-    );
-        logic [NOC_CONFIG.if_config.header_width-1:0] header;
-        header = '0;
-        header[3:0] = msg_type;
-        header[7:4] = target;
-        header[15:8] = source;
-        header[31:16] = length;
-        return header;
-    endfunction
-    
-    // 主状态机
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
-            state <= IDLE;
-            next_state <= IDLE;
-            current_header <= '0;
-            current_data <= '0;
-            current_strb <= '0;
-            current_last <= 1'b0;
-            
-            // 清空队列
-            req_header_queue = {};
-            req_data_queue = {};
-            req_strb_queue = {};
-            req_last_queue = {};
-            resp_header_queue = {};
-            resp_data_queue = {};
-            resp_last_queue = {};
-            
-            // 初始化接口信号
-            noc_external_if.m_req_valid <= 1'b0;
-            noc_external_if.s_req_ready <= 1'b0;
-            noc_external_if.s_resp_valid <= 1'b0;
-            noc_external_if.m_resp_ready <= 1'b0;
-            
-            l15_cache_if.req_valid <= 1'b0;
+            req_arb_state <= REQ_ARB_IDLE;
+            resp_route_state <= RESP_ROUTE_IDLE;
+            ext_req_state <= EXT_REQ_IDLE;
+            arb_priority <= 2'b00;
+            req_valid_buffer <= 1'b0;
+            resp_valid_buffer <= 1'b0;
+            req_header_buffer <= '0;
+            req_data_buffer <= '0;
+            req_strb_buffer <= '0;
+            req_last_buffer <= 1'b0;
+            resp_header_buffer <= '0;
+            resp_data_buffer <= '0;
+            resp_last_buffer <= 1'b0;
         end else begin
-            case (state)
-                IDLE: begin
-                    // 接收来自NOC的请求
-                    noc_external_if.s_req_ready <= 1'b1;
-                    
-                    if (noc_external_if.s_req_valid && noc_external_if.s_req_ready) begin
-                        // 存储请求头和数据
-                        req_header_queue.push_back(noc_external_if.s_req_header);
-                        req_data_queue.push_back(noc_external_if.s_req_data);
-                        req_strb_queue.push_back(noc_external_if.s_req_strb);
-                        req_last_queue.push_back(noc_external_if.s_req_last);
-                        
-                        // 如果是消息头，解析并确定路由
-                        if (req_header_queue.size() == 1) begin
-                            current_header = noc_external_if.s_req_header;
-                            parse_header(current_header);
-                            
-                            // 根据消息类型和目标确定下一状态
-                            case (msg_type)
-                                MSG_MEM_READ_REQ, MSG_MEM_WRITE_REQ: begin
-                                    next_state = ROUTE_TO_L1_CACHE;
-                                end
-                                MSG_MMU_REQ: begin
-                                    next_state = ROUTE_TO_MMU;
-                                end
-                                default: begin
-                                    // 未知消息类型，丢弃
-                                    req_header_queue = {};
-                                    req_data_queue = {};
-                                    req_strb_queue = {};
-                                    req_last_queue = {};
-                                    next_state = IDLE;
-                                end
-                            endcase
-                            
-                            // 如果是最后一个数据包，切换到下一状态
-                            if (noc_external_if.s_req_last) begin
-                                state <= next_state;
-                                noc_external_if.s_req_ready <= 1'b0;
-                            end
-                        end else if (noc_external_if.s_req_last) begin
-                            // 接收到最后一个数据包，切换到下一状态
-                            state <= next_state;
-                            noc_external_if.s_req_ready <= 1'b0;
-                        end
-                    end
-                    
-                    // 检查是否有响应需要发送
-                    if (resp_header_queue.size() > 0) begin
-                        state <= SEND_RESPONSE;
-                        noc_external_if.s_req_ready <= 1'b0;
+            req_arb_state <= req_arb_state_next;
+            resp_route_state <= resp_route_state_next;
+            ext_req_state <= ext_req_state_next;
+            arb_priority <= arb_priority_next;
+            
+            // Buffer 变量赋值逻辑
+            case (ext_req_state)
+                EXT_REQ_IDLE: begin
+                    if (noc_external_if.s_req_valid) begin
+                        // 捕获请求数据到 buffer
+                        req_header_buffer <= noc_external_if.s_req_header;
+                        req_data_buffer <= noc_external_if.s_req_data;
+                        req_strb_buffer <= noc_external_if.s_req_strb;
+                        req_last_buffer <= noc_external_if.s_req_last;
+                        req_valid_buffer <= 1'b1;
                     end
                 end
-                
-                PARSE_HEADER: begin
-                    // 解析消息头并确定路由
-                    if (req_header_queue.size() > 0) begin
-                        current_header = req_header_queue[0];
-                        parse_header(current_header);
-                        
-                        // 根据消息类型和目标确定下一状态
-                        case (msg_type)
-                            MSG_MEM_READ_REQ, MSG_MEM_WRITE_REQ: begin
-                                state <= ROUTE_TO_L1_CACHE;
-                            end
-                            MSG_MMU_REQ: begin
-                                state <= ROUTE_TO_MMU;
-                            end
-                            default: begin
-                                // 未知消息类型，丢弃
-                                req_header_queue = {};
-                                req_data_queue = {};
-                                req_strb_queue = {};
-                                req_last_queue = {};
-                                state <= IDLE;
-                            end
-                        endcase
-                    end else begin
-                        state <= IDLE;
+                EXT_REQ_L15, EXT_REQ_MMU, EXT_REQ_SCHED: begin
+                    // 在发送请求后清除 buffer
+                    if (l15_cache_if.s_req_ready || mmu_if.s_req_ready || scheduler_if.s_req_ready) begin
+                        req_valid_buffer <= 1'b0;
                     end
                 end
-                
-                ROUTE_TO_L1_CACHE: begin
-                    // 将内存访问请求转发给L1.5 Cache
-                    if (req_header_queue.size() > 0 && req_data_queue.size() > 0) begin
-                        l15_cache_if.req_valid <= 1'b1;
-                        l15_cache_if.req_is_read <= (msg_type == MSG_MEM_READ_REQ);
-                        l15_cache_if.req_paddr <= req_data_queue[0][63:0];
-                        l15_cache_if.req_size <= req_data_queue[0][67:64];
-                        l15_cache_if.req_type <= req_data_queue[0][71:68];
-                        l15_cache_if.req_data <= req_data_queue.size() > 1 ? req_data_queue[1] : '0;
-                        l15_cache_if.req_mask <= req_strb_queue[0];
-                        l15_cache_if.req_id <= msg_id;
-                        
-                        if (l15_cache_if.req_ready) begin
-                            // 移除已处理的消息
-                            void'(req_header_queue.pop_front());
-                            void'(req_data_queue.pop_front());
-                            void'(req_strb_queue.pop_front());
-                            void'(req_last_queue.pop_front());
-                            
-                            if (req_data_queue.size() > 0 && !req_last_queue[0]) begin
-                                void'(req_data_queue.pop_front());
-                                void'(req_strb_queue.pop_front());
-                                void'(req_last_queue.pop_front());
-                            end
-                            
-                            l15_cache_if.req_valid <= 1'b0;
-                            state <= WAIT_RESPONSE;
-                        end
-                    end else begin
-                        state <= IDLE;
-                    end
+                default: begin
+                    // 其他状态下保持 buffer 不变
                 end
-                
-                ROUTE_TO_MMU: begin
-                    // 将MMU请求转发给GPC MMU
-                    if (req_header_queue.size() > 0 && req_data_queue.size() > 0) begin
-                        state <= IDLE;
-                    end else begin
-                        state <= IDLE;
-                    end
-                end
-                
-                WAIT_RESPONSE: begin
-                    // 等待内部模块响应
-                    if (msg_type == MSG_MEM_READ_REQ || msg_type == MSG_MEM_WRITE_REQ) begin
-                        if (l15_cache_if.resp_valid) begin
-                            // 构造响应消息
-                            resp_type = (msg_type == MSG_MEM_READ_REQ) ? MSG_MEM_READ_RESP : MSG_MEM_WRITE_RESP;
-                            resp_header_queue.push_back(build_response_header(
-                                resp_type,
-                                msg_source[3:0],
-                                {4'b0, GPC_ID[3:0]},
-                                16'd2,  // 2个数据包 (头 + 数据)
-                                l15_cache_if.resp_id
-                            ));
-                            resp_data_queue.push_back(l15_cache_if.resp_data);
-                            resp_last_queue.push_back(1'b1);
-                            
-                            state <= SEND_RESPONSE;
-                        end
-                    end else if (msg_type == MSG_MMU_REQ) begin
-                        if (mmu_if.resp_valid) begin
-                            // 构造响应消息
-                            resp_header_queue.push_back(build_response_header(
-                                MSG_MMU_RESP,
-                                msg_source[3:0],
-                                {4'b0, GPC_ID[3:0]},
-                                16'd1,  // 1个数据包
-                                msg_id
-                            ));
-                            
-                            // 构造响应数据
-                            resp_data = '0;
-                            resp_data[26:0] = mmu_if.resp_ppn;
-                            resp_data[27] = mmu_if.resp_hit;
-                            resp_data[28] = mmu_if.resp_fault;
-                            resp_data[60:29] = mmu_if.resp_warp_id;
-                            resp_data[64:61] = mmu_if.resp_source_id;
-                            
-                            resp_data_queue.push_back(resp_data);
-                            resp_last_queue.push_back(1'b1);
-                            
-                            state <= SEND_RESPONSE;
-                        end
-                    end else begin
-                        state <= IDLE;
-                    end
-                end
-                
-                SEND_RESPONSE: begin
-                    // 发送响应到NOC
-                    if (resp_header_queue.size() > 0) begin
-                        noc_external_if.s_resp_valid <= 1'b1;
-                        noc_external_if.s_resp_header <= resp_header_queue[0];
-                        noc_external_if.s_resp_data <= resp_data_queue.size() > 0 ? resp_data_queue[0] : '0;
-                        noc_external_if.s_resp_last <= resp_header_queue.size() == 1 || 
-                                                     (resp_last_queue.size() > 0 && resp_last_queue[0]);
-                        
-                        if (noc_external_if.s_resp_ready) begin
-                            void'(resp_header_queue.pop_front());
-                            
-                            if (resp_data_queue.size() > 0) begin
-                                void'(resp_data_queue.pop_front());
-                            end
-                            
-                            if (resp_last_queue.size() > 0) begin
-                                void'(resp_last_queue.pop_front());
-                            end
-                            
-                            if (resp_header_queue.size() == 0) begin
-                                noc_external_if.s_resp_valid <= 1'b0;
-                                state <= IDLE;
-                            end
-                        end
-                    end else begin
-                        noc_external_if.s_resp_valid <= 1'b0;
-                        state <= IDLE;
-                    end
-                end
-                
-                default: state <= IDLE;
             endcase
-            
-            // 处理来自内部模块的请求
-            if (state == IDLE) begin
-                // 处理L1.5 Cache请求
-                if (l15_cache_if.req_valid) begin
-                    // 构造NOC请求
-                    req_type = l15_cache_if.req_is_read ? MSG_MEM_READ_REQ : MSG_MEM_WRITE_REQ;
-                    header = build_response_header(
-                        req_type,
-                        MSG_TARGET_L2CACHE,
-                        {4'b0, GPC_ID[3:0]},
-                        l15_cache_if.req_is_read ? 16'd1 : 16'd2,
-                        l15_cache_if.req_id
-                    );
-                    
-                    // 发送请求
-                    noc_external_if.m_req_valid <= 1'b1;
-                    noc_external_if.m_req_header <= header;
-                    
-                    // 构造请求数据
-                    req_data = '0;
-                    req_data[63:0] = l15_cache_if.req_paddr;
-                    req_data[67:64] = l15_cache_if.req_size;
-                    req_data[71:68] = l15_cache_if.req_type;
-                    
-                    noc_external_if.m_req_data <= req_data;
-                    noc_external_if.m_req_strb <= '1;
-                    noc_external_if.m_req_last <= l15_cache_if.req_is_read;
-                    
-                    if (noc_external_if.m_req_ready) begin
-                        if (l15_cache_if.req_is_read) begin
-                            // 读请求只需要一个数据包
-                            noc_external_if.m_req_valid <= 1'b0;
-                        end else begin
-                            // 写请求需要两个数据包
-                            noc_external_if.m_req_valid <= 1'b1;
-                            noc_external_if.m_req_header <= '0;
-                            noc_external_if.m_req_data <= l15_cache_if.req_data;
-                            noc_external_if.m_req_strb <= l15_cache_if.req_mask;
-                            noc_external_if.m_req_last <= 1'b1;
-                            
-                            if (noc_external_if.m_req_ready) begin
-                                noc_external_if.m_req_valid <= 1'b0;
-                            end
+        end
+    end
+    
+    //=============================================================================
+    // Combinational Logic - Request Arbitration State Machine
+    //=============================================================================
+    
+    always_comb begin
+        req_arb_state_next = req_arb_state;
+        
+        case (req_arb_state)
+            REQ_ARB_IDLE: begin
+                // 根据轮转优先级选择主设备
+                case (arb_priority)
+                    2'b00: begin
+                        // 优先级：L15 > MMU > Scheduler
+                        if (l15_cache_if.m_req_valid) begin
+                            req_arb_state_next = REQ_ARB_L15;
+                        end else if (mmu_if.m_req_valid) begin
+                            req_arb_state_next = REQ_ARB_MMU;
+                        end else if (scheduler_if.m_req_valid) begin
+                            req_arb_state_next = REQ_ARB_SCHED;
                         end
                     end
-                end
-                
-                // 处理MMU请求
-                else if (mmu_if.req_valid) begin
-                    // 构造NOC请求
-                    header = build_response_header(
-                        MSG_MMU_REQ,
-                        MSG_TARGET_CONTROL_MMU,
-                        {4'b0, GPC_ID[3:0]},
-                        16'd1,
-                        {GPC_ID[3:0], mmu_if.req_source_id, mmu_if.req_warp_id[23:0]}
-                    );
-                    
-                    // 发送请求
-                    noc_external_if.m_req_valid <= 1'b1;
-                    noc_external_if.m_req_header <= header;
-                    
-                    // 构造请求数据
-                    req_data = '0;
-                    req_data[38:0] = mmu_if.req_vaddr;
-                    req_data[42:40] = mmu_if.req_type;
-                    req_data[74:43] = mmu_if.req_warp_id;
-                    req_data[78:75] = mmu_if.req_source_id;
-                    req_data[82:79] = mmu_if.req_gpc_id;
-                    
-                    noc_external_if.m_req_data <= req_data;
-                    noc_external_if.m_req_strb <= '1;
-                    noc_external_if.m_req_last <= 1'b1;
-                    
-                    if (noc_external_if.m_req_ready) begin
-                        noc_external_if.m_req_valid <= 1'b0;
+                    2'b01: begin
+                        // 优先级：MMU > Scheduler > L15
+                        if (mmu_if.m_req_valid) begin
+                            req_arb_state_next = REQ_ARB_MMU;
+                        end else if (scheduler_if.m_req_valid) begin
+                            req_arb_state_next = REQ_ARB_SCHED;
+                        end else if (l15_cache_if.m_req_valid) begin
+                            req_arb_state_next = REQ_ARB_L15;
+                        end
                     end
-                end
-            end
-            
-            // 处理来自NOC的响应
-            noc_external_if.m_resp_ready <= 1'b1;
-            if (noc_external_if.m_resp_valid && noc_external_if.m_resp_ready) begin
-                // 解析响应头
-                parse_header(noc_external_if.m_resp_header);
-                
-                // 根据消息类型路由响应
-                case (msg_type)
-                    MSG_MEM_READ_RESP, MSG_MEM_WRITE_RESP: begin
-                        // 只需要将响应转发给L1.5缓存，无需驱动信号
+                    2'b10: begin
+                        // 优先级：Scheduler > L15 > MMU
+                        if (scheduler_if.m_req_valid) begin
+                            req_arb_state_next = REQ_ARB_SCHED;
+                        end else if (l15_cache_if.m_req_valid) begin
+                            req_arb_state_next = REQ_ARB_L15;
+                        end else if (mmu_if.m_req_valid) begin
+                            req_arb_state_next = REQ_ARB_MMU;
+                        end
                     end
-                    
-                    MSG_MMU_RESP: begin
-                        // 只需要将响应转发给GPC MMU，无需驱动信号
-                    end
-                    
                     default: begin
-                        // 未知响应类型，忽略
+                        // 优先级：L15 > MMU > Scheduler
+                        if (l15_cache_if.m_req_valid) begin
+                            req_arb_state_next = REQ_ARB_L15;
+                        end else if (mmu_if.m_req_valid) begin
+                            req_arb_state_next = REQ_ARB_MMU;
+                        end else if (scheduler_if.m_req_valid) begin
+                            req_arb_state_next = REQ_ARB_SCHED;
+                        end
                     end
                 endcase
             end
+            
+            REQ_ARB_L15: begin
+                // 传输完成后返回空闲
+                if (l15_cache_if.m_req_valid && noc_external_if.m_req_ready && l15_cache_if.m_req_last) begin
+                    req_arb_state_next = REQ_WAIT_RESPONSE;
+                end
+            end
+            
+            REQ_ARB_MMU: begin
+                // 传输完成后返回空闲
+                if (mmu_if.m_req_valid && noc_external_if.m_req_ready && mmu_if.m_req_last) begin
+                    req_arb_state_next = REQ_WAIT_RESPONSE;
+                end
+            end
+            
+            REQ_ARB_SCHED: begin
+                // 传输完成后返回空闲
+                if (scheduler_if.m_req_valid && noc_external_if.m_req_ready && scheduler_if.m_req_last) begin
+                    req_arb_state_next = REQ_WAIT_RESPONSE;
+                end
+            end
+            
+            REQ_WAIT_RESPONSE: begin
+                if (noc_external_if.m_resp_valid) begin
+                    req_arb_state_next = REQ_SEND_RESPONSE;
+                end
+            end
+            
+            REQ_SEND_RESPONSE: begin
+                if (noc_external_if.m_resp_ready) begin
+                    req_arb_state_next = REQ_ARB_IDLE;
+                end
+            end
+            
+            default: begin
+                req_arb_state_next = REQ_ARB_IDLE;
+            end
+        endcase
+    end
+    
+    // 优先级轮转逻辑
+    always_comb begin
+        arb_priority_next = arb_priority;
+        // 每次从空闲状态开始仲裁时切换优先级
+        if (req_arb_state == REQ_ARB_IDLE && req_arb_state_next != REQ_ARB_IDLE) begin
+            arb_priority_next = arb_priority + 1;
         end
+    end
+    
+    //=============================================================================
+    // Combinational Logic - Response Routing State Machine
+    //=============================================================================
+    
+    always_comb begin
+        resp_route_state_next = resp_route_state;
+        
+        case (resp_route_state)
+            RESP_ROUTE_IDLE: begin
+                if (noc_external_if.m_resp_valid) begin
+                    case (get_noc_header_msg_type(noc_external_if.m_resp_header))
+                        MSG_MEM_READ_RESP, MSG_MEM_WRITE_RESP: begin
+                            resp_route_state_next = RESP_ROUTE_L15;
+                        end
+                        MSG_MMU_RESP: begin
+                            resp_route_state_next = RESP_ROUTE_MMU;
+                        end
+                        MSG_COMPUTE_RESP: begin
+                            resp_route_state_next = RESP_ROUTE_SCHED;
+                        end
+                        default: begin
+                            resp_route_state_next = RESP_ROUTE_IDLE;
+                        end
+                    endcase
+                end
+            end
+            
+            RESP_ROUTE_L15: begin
+                if (l15_cache_if.m_resp_ready) begin
+                    resp_route_state_next = RESP_ROUTE_IDLE;
+                end
+            end
+            
+            RESP_ROUTE_MMU: begin
+                if (mmu_if.m_resp_ready) begin
+                    resp_route_state_next = RESP_ROUTE_IDLE;
+                end
+            end
+            
+            RESP_ROUTE_SCHED: begin
+                if (scheduler_if.m_resp_ready) begin
+                    resp_route_state_next = RESP_ROUTE_IDLE;
+                end
+            end
+            
+            default: begin
+                resp_route_state_next = RESP_ROUTE_IDLE;
+            end
+        endcase
+    end
+    
+    //=============================================================================
+    // Combinational Logic - External Request State Machine
+    //=============================================================================
+    
+    always_comb begin
+        ext_req_state_next = ext_req_state;
+        
+        case (ext_req_state)
+            EXT_REQ_IDLE: begin
+                if (noc_external_if.s_req_valid) begin
+                    // 直接根据消息类型转换到目标状态
+                    case (get_noc_header_msg_type(noc_external_if.s_req_header))
+                        MSG_MEM_READ_REQ, MSG_MEM_WRITE_REQ: begin
+                            ext_req_state_next = EXT_REQ_L15;
+                        end
+                        MSG_MMU_REQ: begin
+                            ext_req_state_next = EXT_REQ_MMU;
+                        end
+                        MSG_COMPUTE_REQ: begin
+                            ext_req_state_next = EXT_REQ_SCHED;
+                        end
+                        default: begin
+                            ext_req_state_next = EXT_REQ_IDLE;
+                        end
+                    endcase
+                end
+            end
+            
+            EXT_REQ_L15: begin
+                if (l15_cache_if.s_req_ready) begin
+                    ext_req_state_next = EXT_REQ_RESPONSE;
+                end
+            end
+            
+            EXT_REQ_MMU: begin
+                if (mmu_if.s_req_ready) begin
+                    ext_req_state_next = EXT_REQ_RESPONSE;
+                end
+            end
+            
+            EXT_REQ_SCHED: begin
+                if (scheduler_if.s_req_ready) begin
+                    ext_req_state_next = EXT_REQ_IDLE;
+                end
+            end
+            
+            EXT_REQ_RESPONSE: begin
+                if (l15_cache_if.s_resp_valid || mmu_if.s_resp_valid) begin
+                    ext_req_state_next = EXT_REQ_IDLE;
+                end
+            end
+            
+            default: begin
+                ext_req_state_next = EXT_REQ_IDLE;
+            end
+        endcase
+    end
+    
+    //=============================================================================
+    // Combinational Logic - Request Arbitration Output Logic
+    //=============================================================================
+    
+    always_comb begin
+        // 默认值
+        noc_external_if.m_req_valid = 1'b0;
+        noc_external_if.m_req_header = '0;
+        noc_external_if.m_req_data = '0;
+        noc_external_if.m_req_strb = '0;
+        noc_external_if.m_req_last = 1'b0;
+        
+        l15_cache_if.m_req_ready = 1'b0;
+        mmu_if.m_req_ready = 1'b0;
+        scheduler_if.m_req_ready = 1'b0;
+        
+        case (req_arb_state)
+            REQ_ARB_L15: begin
+                // 转发L15 Cache的请求到NOC
+                l15_cache_if.m_req_ready = noc_external_if.m_req_ready;
+                noc_external_if.m_req_valid = l15_cache_if.m_req_valid;
+                noc_external_if.m_req_header = l15_cache_if.m_req_header;
+                noc_external_if.m_req_data = l15_cache_if.m_req_data;
+                noc_external_if.m_req_strb = l15_cache_if.m_req_strb;
+                noc_external_if.m_req_last = l15_cache_if.m_req_last;
+            end
+            
+            REQ_ARB_MMU: begin
+                // 转发MMU的请求到NOC
+                mmu_if.m_req_ready = noc_external_if.m_req_ready;
+                noc_external_if.m_req_valid = mmu_if.m_req_valid;
+                noc_external_if.m_req_header = mmu_if.m_req_header;
+                noc_external_if.m_req_data = mmu_if.m_req_data;
+                noc_external_if.m_req_strb = mmu_if.m_req_strb;
+                noc_external_if.m_req_last = mmu_if.m_req_last;
+            end
+            
+            REQ_ARB_SCHED: begin
+                // 转发Scheduler的请求到NOC
+                scheduler_if.m_req_ready = noc_external_if.m_req_ready;
+                noc_external_if.m_req_valid = scheduler_if.m_req_valid;
+                noc_external_if.m_req_header = scheduler_if.m_req_header;
+                noc_external_if.m_req_data = scheduler_if.m_req_data;
+                noc_external_if.m_req_strb = scheduler_if.m_req_strb;
+                noc_external_if.m_req_last = scheduler_if.m_req_last;
+            end
+            
+            default: begin
+                // 保持默认值 
+            end
+        endcase
+    end
+    
+    //=============================================================================
+    // Combinational Logic - Response Routing Output Logic
+    //=============================================================================
+    
+    always_comb begin
+        // 默认值
+        l15_cache_if.m_resp_valid = 1'b0;
+        l15_cache_if.m_resp_header = '0;
+        l15_cache_if.m_resp_data = '0;
+        l15_cache_if.m_resp_status = 2'b00;
+        l15_cache_if.m_resp_last = 1'b0;
+        
+        mmu_if.m_resp_valid = 1'b0;
+        mmu_if.m_resp_header = '0;
+        mmu_if.m_resp_data = '0;
+        mmu_if.m_resp_status = 2'b00;
+        mmu_if.m_resp_last = 1'b0;
+        
+        scheduler_if.m_resp_valid = 1'b0;
+        scheduler_if.m_resp_header = '0;
+        scheduler_if.m_resp_data = '0;
+        scheduler_if.m_resp_status = 2'b00;
+        scheduler_if.m_resp_last = 1'b0;
+        
+        noc_external_if.m_resp_ready = 1'b0;
+        
+        case (resp_route_state)
+            RESP_ROUTE_IDLE: begin
+                noc_external_if.m_resp_ready = 1'b1;
+            end
+            
+            RESP_ROUTE_L15: begin
+                if (noc_external_if.m_resp_valid) begin
+                    l15_cache_if.m_resp_valid = 1'b1;
+                    l15_cache_if.m_resp_header = noc_external_if.m_resp_header;
+                    l15_cache_if.m_resp_data = noc_external_if.m_resp_data;
+                    l15_cache_if.m_resp_status = noc_external_if.m_resp_status;
+                    l15_cache_if.m_resp_last = noc_external_if.m_resp_last;
+                    noc_external_if.m_resp_ready = l15_cache_if.m_resp_ready;
+                end
+            end
+            
+            RESP_ROUTE_MMU: begin
+                if (noc_external_if.m_resp_valid) begin
+                    mmu_if.m_resp_valid = 1'b1;
+                    mmu_if.m_resp_header = noc_external_if.m_resp_header;
+                    mmu_if.m_resp_data = noc_external_if.m_resp_data;
+                    mmu_if.m_resp_status = noc_external_if.m_resp_status;
+                    mmu_if.m_resp_last = noc_external_if.m_resp_last;
+                    noc_external_if.m_resp_ready = mmu_if.m_resp_ready;
+                end
+            end
+            
+            RESP_ROUTE_SCHED: begin
+                if (noc_external_if.m_resp_valid) begin
+                    scheduler_if.m_resp_valid = 1'b1;
+                    scheduler_if.m_resp_header = noc_external_if.m_resp_header;
+                    scheduler_if.m_resp_data = noc_external_if.m_resp_data;
+                    scheduler_if.m_resp_status = noc_external_if.m_resp_status;
+                    scheduler_if.m_resp_last = noc_external_if.m_resp_last;
+                    noc_external_if.m_resp_ready = scheduler_if.m_resp_ready;
+                end
+            end
+            
+            default: begin
+                // 保持默认值
+            end
+        endcase
+    end
+    
+    //=============================================================================
+    // Combinational Logic - External Request Output Logic
+    //=============================================================================
+    
+    always_comb begin
+        // 默认值
+        noc_external_if.s_req_ready = 1'b0;
+        l15_cache_if.s_req_valid = 1'b0;
+        l15_cache_if.s_req_header = '0;
+        l15_cache_if.s_req_data = '0;
+        l15_cache_if.s_req_strb = '0;
+        l15_cache_if.s_req_last = 1'b0;
+        
+        mmu_if.s_req_valid = 1'b0;
+        mmu_if.s_req_header = '0;
+        mmu_if.s_req_data = '0;
+        mmu_if.s_req_strb = '0;
+        mmu_if.s_req_last = 1'b0;
+        
+        scheduler_if.s_req_valid = 1'b0;
+        scheduler_if.s_req_data = '0;
+        
+        case (ext_req_state)
+            EXT_REQ_IDLE: begin
+                noc_external_if.s_req_ready = 1'b1;
+            end
+            
+            EXT_REQ_L15: begin
+                if (req_valid_buffer) begin
+                    l15_cache_if.s_req_valid = 1'b1;
+                    l15_cache_if.s_req_header = req_header_buffer;
+                    l15_cache_if.s_req_data = req_data_buffer;
+                    l15_cache_if.s_req_strb = req_strb_buffer;
+                    l15_cache_if.s_req_last = req_last_buffer;
+                end
+            end
+            
+            EXT_REQ_MMU: begin
+                if (req_valid_buffer) begin
+                    mmu_if.s_req_valid = 1'b1;
+                    mmu_if.s_req_header = req_header_buffer;
+                    mmu_if.s_req_data = req_data_buffer;
+                    mmu_if.s_req_strb = req_strb_buffer;
+                    mmu_if.s_req_last = req_last_buffer;
+                end
+            end
+            
+            EXT_REQ_SCHED: begin
+                if (req_valid_buffer) begin
+                    // 这里需要特殊处理 job_cluster 数据
+                    // 由于 Scheduler 现在使用标准的 NOC 接口，
+                    // 我们需要将 job_cluster 数据转换为标准的 NOC 消息格式
+                    scheduler_if.s_req_valid = 1'b1;
+                    scheduler_if.s_req_header = req_header_buffer;
+                    scheduler_if.s_req_data = req_data_buffer;
+                    scheduler_if.s_req_strb = req_strb_buffer;
+                    scheduler_if.s_req_last = req_last_buffer;
+                end
+            end
+            
+            default: begin
+                // 保持默认值
+            end
+        endcase
+    end
+    
+    //=============================================================================
+    // Combinational Logic - External Response Output Logic
+    //=============================================================================
+    
+    always_comb begin
+        // 默认值
+        noc_external_if.s_resp_valid = 1'b0;
+        noc_external_if.s_resp_header = '0;
+        noc_external_if.s_resp_data = '0;
+        noc_external_if.s_resp_status = 2'b00;
+        noc_external_if.s_resp_last = 1'b0;
+        
+        l15_cache_if.s_resp_ready = 1'b0;
+        mmu_if.s_resp_ready = 1'b0;
+        
+        case (ext_req_state)
+            EXT_REQ_RESPONSE: begin
+                if (l15_cache_if.s_resp_valid) begin
+                    noc_external_if.s_resp_valid = 1'b1;
+                    noc_external_if.s_resp_header = l15_cache_if.s_resp_header;
+                    noc_external_if.s_resp_data = l15_cache_if.s_resp_data;
+                    noc_external_if.s_resp_status = l15_cache_if.s_resp_status;
+                    noc_external_if.s_resp_last = l15_cache_if.s_resp_last;
+                    l15_cache_if.s_resp_ready = noc_external_if.s_resp_ready;
+                end else if (mmu_if.s_resp_valid) begin
+                    noc_external_if.s_resp_valid = 1'b1;
+                    noc_external_if.s_resp_header = mmu_if.s_resp_header;
+                    noc_external_if.s_resp_data = mmu_if.s_resp_data;
+                    noc_external_if.s_resp_status = mmu_if.s_resp_status;
+                    noc_external_if.s_resp_last = mmu_if.s_resp_last;
+                    mmu_if.s_resp_ready = noc_external_if.s_resp_ready;
+                end
+            end
+            
+            default: begin
+                // 保持默认值
+            end
+        endcase
     end
 
 endmodule : rvgpu_gpc_noc_adapter

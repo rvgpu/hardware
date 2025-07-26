@@ -17,8 +17,10 @@
 `define RVGPU_GPC_L1_CACHE_SV
 
 `include "rvgpu_typedef.svh"
+`include "rvgpu_internal_noc_if.svh"
+`include "rvgpu_noc_message.svh"
 `include "gpc_l15_cache_if.svh"
-`include "gpc_l15_noc_if.svh"
+
 
 // L1 Cache控制器模块
 // 集成Tag数组、数据数组、MSHR、RRIP替换策略和写缓冲
@@ -35,7 +37,7 @@ module rvgpu_gpc_l15_cache #(
     input  logic rst_n,
     
     // NOC接口 (连接到L2 Cache)
-    gpc_l15_noc_if.cache noc_if,
+    rvgpu_internal_noc_if.device noc_if,
     
     // 请求者接口数组 (TPC、Block Scheduler、Raster等)
     gpc_l15_cache_if.cache requester_if[NUM_REQUESTERS]
@@ -252,14 +254,6 @@ module rvgpu_gpc_l15_cache #(
             rrip_insert_valid <= 1'b0;
             rrip_replace_valid <= 1'b0;
             
-            // 初始化NOC接口
-            // 只允许驱动req_ready和resp_*信号
-            noc_if.req_ready <= 1'b0;
-            noc_if.resp_valid <= 1'b0;
-            noc_if.resp_data <= '0;
-            noc_if.resp_error <= 1'b0;
-            noc_if.resp_id <= '0;
-            
             // 初始化响应接口
             requester_if[0].resp_valid <= 1'b0;
             requester_if[1].resp_valid <= 1'b0;
@@ -471,19 +465,19 @@ module rvgpu_gpc_l15_cache #(
                 
                 NOC_REQ: begin
                     // 如需主动发起NOC请求，请使用独立的requester接口
-                    // 此处不允许驱动noc_if.req_*信号
-                    if (noc_if.req_ready) begin
+                                    // 此处不允许驱动noc_if.m_req_*信号
+                if (noc_if.m_req_ready) begin
                         state <= NOC_WAIT;
                     end
                 end
                 
                 NOC_WAIT: begin
                     // 等待NOC响应
-                    if (noc_if.resp_valid) begin
+                    if (noc_if.m_resp_valid) begin
                         // 完成MSHR请求
                         mshr_complete_valid <= 1'b1;
-                        mshr_complete_index <= noc_if.resp_id[$clog2(MSHR_ENTRIES)-1:0];
-                        mshr_complete_data <= noc_if.resp_data;
+                        mshr_complete_index <= noc_if.m_resp_header[7:0]; // 简化处理
+                        mshr_complete_data <= noc_if.m_resp_data;
                         if (mshr_complete_ready) begin
                             // 更新缓存
                             // 获取替换路

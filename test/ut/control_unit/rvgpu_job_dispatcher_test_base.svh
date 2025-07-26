@@ -26,7 +26,7 @@ typedef struct packed {
 // Virtual interface types for task parameters
 typedef virtual job_dispatcher_if jd_vif_t;
 typedef virtual rvgpu_internal_noc_if noc_vif_t;
-typedef virtual mmu_if #(.VA_WIDTH(48), .PA_WIDTH(48)) mmu_vif_t;
+typedef virtual mmu_if mmu_vif_t;
 typedef virtual clk_rst_if clk_rst_vif_t;
 
 // Base class for RVGPU Job Dispatcher testing
@@ -44,8 +44,6 @@ class rvgpu_job_dispatcher_test_base;
     // Test data patterns for comprehensive testing
     logic [63:0] test_package_addr_patterns[8];
     logic [63:0] test_mmu_addr_patterns[8];
-    command_header_t test_headers[8];
-    logic [255:0] test_payloads[8];  // 最大256字节Payload
 
     // Transaction monitoring variables
     job_dispatcher_transaction_t captured_jd_trans;
@@ -82,24 +80,6 @@ class rvgpu_job_dispatcher_test_base;
         test_mmu_addr_patterns[6] = 64'h0123456789ABCDEF;
         test_mmu_addr_patterns[7] = 64'hFEDCBA9876543210;
 
-        // Initialize test headers
-        for (int i = 0; i < 8; i++) begin
-            test_headers[i] = '{
-                next_command: 64'h0,
-                payload_size: 16'h20 + (i * 16'h10),
-                flags: 16'h0000 + (i == 0 ? 16'h0001 : 16'h0000),  // 第一个header表示job结束
-                command_type: CMD_COMPUTE_JOB + (i % 3)
-            };
-        end
-
-        // Initialize test payloads
-        for (int i = 0; i < 8; i++) begin
-            test_payloads[i] = 256'h0;
-            for (int j = 0; j < 32; j++) begin
-                logic [7:0] byte_val = 8'hA0 + i + j;
-                test_payloads[i] = test_payloads[i] | (byte_val << (j * 8));
-            end
-        end
     endfunction
 
     // Initialize all interface signals to known state
@@ -465,7 +445,7 @@ class rvgpu_job_dispatcher_test_base;
         logic [31:0] noc_addr;
         logic [15:0] noc_size;
         logic [63:0] payload_addr;
-        command_t cmd;
+        command_compute_t cmd;
         
         $display("@%0t: Starting Job Dispatcher workflow simulation", $time);
         
@@ -491,13 +471,21 @@ class rvgpu_job_dispatcher_test_base;
         clk_mgr.wait_clks(2);
         // 6. Send Header NOC response
         // Resp Command Header
-        cmd.header.next_command = 64'h0;  // 设置next_command字段
-        cmd.header.payload_size = 16'h64;
-        cmd.header.flags = 16'h1;
-        cmd.header.command_type = CMD_COMPUTE_JOB;
-        cmd.prog.argument_size = 32'h10; // 示例参数
-        cmd.prog.work_dim = '{x: 8'd1, y: 8'd0, z: 8'd0, w: 8'd0};
-        cmd.prog.program_addr = 64'h10000000;
+        cmd.header.cmd_type = CMD_COMPUTE_JOB;
+        cmd.header.size = 3'h0;
+        cmd.header.last = 1'b1;
+        cmd.header.reserved0 = 24'h0;
+        cmd.header.job_dim = '{
+            grid_x: 16'h0000,
+            grid_y: 16'h0000,
+            grid_z: 16'h0000,
+            cluster_x: 4'h1,
+            cluster_y: 4'h0,
+            cluster_z: 4'h0,
+            block_x: 12'h01,
+            block_y: 12'h00,
+            block_z: 12'h00
+        };
 
         fork
             wait_for_job_block_and_response(100);

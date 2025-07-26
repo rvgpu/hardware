@@ -76,10 +76,7 @@ module rvgpu_job_dispatcher #(
     logic [63:0] mmu_base_r, mmu_base_n;
     logic [47:0] mmu_paddr_r, mmu_paddr_n;
     
-    // 新增：cluster 枚举相关寄存器
-    logic [15:0] cluster_x_r, cluster_x_n;
-    logic [15:0] cluster_y_r, cluster_y_n;
-    logic [15:0] cluster_z_r, cluster_z_n;
+    // 新增：cluster ID 寄存器
     logic [31:0] curr_cluster_id_r, curr_cluster_id_n;
 
     //==================== 组合逻辑段 ====================
@@ -116,24 +113,32 @@ module rvgpu_job_dispatcher #(
 
     // 新增：计算总 cluster 数
     function automatic logic [31:0] calculate_total_clusters(input command_compute_t cmd);
-        logic [31:0] grid_clusters_x, grid_clusters_y, grid_clusters_z;
-        grid_clusters_x = (cmd.header.job_dim.grid_x + cmd.header.job_dim.cluster_x - 1) / cmd.header.job_dim.cluster_x;
-        grid_clusters_y = (cmd.header.job_dim.grid_y + cmd.header.job_dim.cluster_y - 1) / cmd.header.job_dim.cluster_y;
-        grid_clusters_z = (cmd.header.job_dim.grid_z + cmd.header.job_dim.cluster_z - 1) / cmd.header.job_dim.cluster_z;
-        return grid_clusters_x * grid_clusters_y * grid_clusters_z;
-    endfunction
+        logic [31:0] total_clusters_num;
+        logic [31:0] total_grid_num;
 
-    // 新增：计算当前 cluster ID
-    function automatic logic [31:0] calculate_cluster_id(
-        input logic [15:0] cluster_x, cluster_y, cluster_z,
-        input logic [15:0] grid_x, grid_y, grid_z,
-        input logic [3:0] cluster_dim_x, cluster_dim_y, cluster_dim_z
-    );
-        logic [31:0] grid_clusters_x, grid_clusters_y;
-        grid_clusters_x = (grid_x + cluster_dim_x - 1) / cluster_dim_x;
-        grid_clusters_y = (grid_y + cluster_dim_y - 1) / cluster_dim_y;
-        return cluster_z * grid_clusters_y * grid_clusters_x + 
-               cluster_y * grid_clusters_x + cluster_x;
+        total_clusters_num = 0;
+        if ((cmd.header.job_dim.cluster_x == 0) && (cmd.header.job_dim.cluster_y == 0) && (cmd.header.job_dim.cluster_z == 0)) begin
+            total_clusters_num = 0;
+        end else if ((cmd.header.job_dim.cluster_y == 0) && (cmd.header.job_dim.cluster_z == 0)) begin
+            total_clusters_num = cmd.header.job_dim.grid_x;
+        end else if ((cmd.header.job_dim.cluster_z == 0)) begin
+            total_clusters_num = cmd.header.job_dim.grid_x * cmd.header.job_dim.grid_y;
+        end else begin
+            total_clusters_num = cmd.header.job_dim.grid_x * cmd.header.job_dim.grid_y * cmd.header.job_dim.grid_z;
+        end
+        
+        total_grid_num = 0;
+        if ((cmd.header.job_dim.grid_x == 0) && (cmd.header.job_dim.grid_y == 0) && (cmd.header.job_dim.grid_z == 0)) begin
+            total_grid_num = 0;
+        end else if ((cmd.header.job_dim.grid_y == 0) && (cmd.header.job_dim.grid_z == 0)) begin
+            total_grid_num = cmd.header.job_dim.grid_x;
+        end else if ((cmd.header.job_dim.grid_z == 0)) begin
+            total_grid_num = cmd.header.job_dim.grid_x * cmd.header.job_dim.grid_y;
+        end else begin
+            total_grid_num = cmd.header.job_dim.grid_x * cmd.header.job_dim.grid_y * cmd.header.job_dim.grid_z;
+        end
+
+        return total_grid_num * total_clusters_num;
     endfunction
 
     always_comb begin
@@ -153,9 +158,6 @@ module rvgpu_job_dispatcher #(
         package_addr_n = package_addr_r;
         mmu_base_n = mmu_base_r;
         mmu_paddr_n = mmu_paddr_r;
-        cluster_x_n = cluster_x_r;
-        cluster_y_n = cluster_y_r;
-        cluster_z_n = cluster_z_r;
         curr_cluster_id_n = curr_cluster_id_r;
 
         // MMU/NOC接口默认
@@ -221,12 +223,9 @@ module rvgpu_job_dispatcher #(
                         command_n = noc_if.m_resp_data;
                         total_clusters_n = calculate_total_clusters(noc_if.m_resp_data);
                         cluster_idx_n = 0;
-                        cluster_x_n = 0;
-                        cluster_y_n = 0;
-                        cluster_z_n = 0;
                         curr_cluster_id_n = 0;
                         state_n = STATE_CLUSTER_DISPATCH;
-                        `DEBUG_PRINT("JD", $sformatf("NOC Response: %s", command_compute_to_string(noc_if.m_resp_data)));
+                        `DEBUG_PRINT("JD", $sformatf("NOC Response: %s, calculated_total_clusters: %0d", command_compute_to_string(noc_if.m_resp_data), calculate_total_clusters(noc_if.m_resp_data)));
                     end else begin
                         state_n = STATE_IDLE;
                         error_status_n[ERROR_BIT_NOC_ERROR] = 1'b1;
@@ -265,6 +264,10 @@ module rvgpu_job_dispatcher #(
                 end else if (cluster_idx_r >= total_clusters_r) begin
                     state_n = STATE_DONE;
                 end
+                $display("cluster_idx_r: %0d, total_clusters_r: %0d, gpc_busy_r: %0b, fifo_full_n: %0b", cluster_idx_r, total_clusters_r, gpc_busy_r, fifo_full_n);
+                $display("DEBUG: grid_x=%0d, grid_y=%0d, grid_z=%0d, cluster_x=%0d, cluster_y=%0d, cluster_z=%0d", 
+                         command_r.compute.header.job_dim.grid_x, command_r.compute.header.job_dim.grid_y, command_r.compute.header.job_dim.grid_z,
+                         command_r.compute.header.job_dim.cluster_x, command_r.compute.header.job_dim.cluster_y, command_r.compute.header.job_dim.cluster_z);
             end
             STATE_DISPATCH_WAIT: begin
                 if (noc_if.m_resp_valid && noc_if.m_resp_ready && noc_if.m_resp_status == 2'b00 && !fifo_empty_n) begin
@@ -274,27 +277,8 @@ module rvgpu_job_dispatcher #(
                     cluster_idx_n = cluster_idx_r + 1;
                     fifo_head_n = (fifo_head_r + 1) % 8;
                     
-                    // 更新 cluster 枚举指针
-                    if (cluster_x_r < command_r.compute.header.job_dim.grid_x - command_r.compute.header.job_dim.cluster_x) begin
-                        cluster_x_n = cluster_x_r + command_r.compute.header.job_dim.cluster_x;
-                    end else begin
-                        cluster_x_n = 0;
-                        if (cluster_y_r < command_r.compute.header.job_dim.grid_y - command_r.compute.header.job_dim.cluster_y) begin
-                            cluster_y_n = cluster_y_r + command_r.compute.header.job_dim.cluster_y;
-                        end else begin
-                            cluster_y_n = 0;
-                            if (cluster_z_r < command_r.compute.header.job_dim.grid_z - command_r.compute.header.job_dim.cluster_z) begin
-                                cluster_z_n = cluster_z_r + command_r.compute.header.job_dim.cluster_z;
-                            end
-                        end
-                    end
-                    
-                    // 更新 cluster ID
-                    curr_cluster_id_n = calculate_cluster_id(
-                        cluster_x_n, cluster_y_n, cluster_z_n,
-                        command_r.compute.header.job_dim.grid_x, command_r.compute.header.job_dim.grid_y, command_r.compute.header.job_dim.grid_z,
-                        command_r.compute.header.job_dim.cluster_x, command_r.compute.header.job_dim.cluster_y, command_r.compute.header.job_dim.cluster_z
-                    );
+                    // 更新 cluster ID - 直接使用计数器
+                    curr_cluster_id_n = cluster_idx_r + 1;
                     
                     `DEBUG_PRINT("JD", $sformatf("GPC %0d finished cluster %0d", resp_gpc_id, cluster_gpc_fifo_r[fifo_head_r].cluster_id));
                     if ((cluster_idx_r + 1) < total_clusters_r) begin
@@ -331,9 +315,6 @@ module rvgpu_job_dispatcher #(
             package_addr_r <= 64'h0;
             mmu_base_r <= 64'h0;
             mmu_paddr_r <= 48'h0;
-            cluster_x_r <= 0;
-            cluster_y_r <= 0;
-            cluster_z_r <= 0;
             curr_cluster_id_r <= 0;
         end else begin
             state_r <= state_n;
@@ -351,9 +332,6 @@ module rvgpu_job_dispatcher #(
             package_addr_r <= package_addr_n;
             mmu_base_r <= mmu_base_n;
             mmu_paddr_r <= mmu_paddr_n;
-            cluster_x_r <= cluster_x_n;
-            cluster_y_r <= cluster_y_n;
-            cluster_z_r <= cluster_z_n;
             curr_cluster_id_r <= curr_cluster_id_n;
         end
     end

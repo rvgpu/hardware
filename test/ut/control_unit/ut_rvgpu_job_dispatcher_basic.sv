@@ -35,9 +35,7 @@ module ut_rvgpu_job_dispatcher_basic_unit_test;
   mmu_if jd_mmu();
 
   // DUT instance - Job Dispatcher
-  rvgpu_job_dispatcher #(
-    .CONTROL_UNIT_CONFIG(DEFAULT_CONTROL_UNIT_CONFIG)
-  ) dut (
+  rvgpu_job_dispatcher dut (
     .clk(clk_rst_if.clk),
     .rst_n(clk_rst_if.rst_n),
     .noc_if(noc_if.device),
@@ -202,7 +200,7 @@ module ut_rvgpu_job_dispatcher_basic_unit_test;
   `SVTEST_END
 
   `SVTEST(test_noc_interface)
-    command_header_t test_header;
+    command_compute_header_t test_header;
 
     $display("@%0t: Testing NOC interface", $time);
     
@@ -221,9 +219,24 @@ module ut_rvgpu_job_dispatcher_basic_unit_test;
     `FAIL_IF(noc_size !== NOC_SIZE_8B)  // Header大小
     
     // 发送NOC响应
-    test_header.payload_size = 16'h20;
-    test_header.flags = 16'h0000;
-    test_header.command_type = CMD_COMPUTE_JOB;
+    test_header = '{
+      cmd_type: CMD_COMPUTE_JOB,
+      job_dim: '{
+        grid_x: 16'h0000,
+        grid_y: 16'h0000,
+        grid_z: 16'h0000,
+        cluster_x: 4'h1,
+        cluster_y: 4'h0,
+        cluster_z: 4'h0,
+        block_x: 12'h01,
+        block_y: 12'h00,
+        block_z: 12'h00
+      },
+      reserved0: 24'h0,
+      last: 1'b0,
+      size: 3'h0
+    };
+
     test_base.send_noc_read_response({192'h0, test_header}, 2'b00, 8'h00);
     
     $display("@%0t: NOC interface test completed", $time);

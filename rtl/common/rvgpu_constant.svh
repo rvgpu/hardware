@@ -23,7 +23,7 @@
 // ================================================
 //  Internal NOC Configuration
 // ================================================
-`define RVGPU_CONST_NOC_NUM_SHADER_CORES        `SHADER_CORE_NUMBER
+`define RVGPU_CONST_NOC_NUM_SHADER_CORES        `GPC_NUMBER
 `define RVGPU_CONST_NOC_HEADER_WIDTH            32
 `define RVGPU_CONST_NOC_DATA_WIDTH              256
 

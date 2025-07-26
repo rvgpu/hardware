@@ -62,8 +62,8 @@ module rvgpu_job_dispatcher #(
 
     //==================== 状态寄存器段 ====================
     main_state_e state_r, state_n;
-    logic [`SHADER_CORE_NUMBER-1:0] gpc_busy_r, gpc_busy_n;  // 修改：GPC 忙状态
-    logic [$clog2(`SHADER_CORE_NUMBER)-1:0] gpc_sel_r, gpc_sel_n;  // 修改：GPC 选择
+    logic [`GPC_NUMBER-1:0] gpc_busy_r, gpc_busy_n;  // 修改：GPC 忙状态
+    logic [$clog2(`GPC_NUMBER)-1:0] gpc_sel_r, gpc_sel_n;  // 修改：GPC 选择
     command_t command_r, command_n;
     logic [63:0] command_addr_r, command_addr_n;
     logic [31:0] total_clusters_r, total_clusters_n;  // 修改：总 cluster 数
@@ -99,10 +99,10 @@ module rvgpu_job_dispatcher #(
     localparam ERROR_BIT_TIMEOUT       = 6;
     localparam ERROR_BIT_UNKNOWN       = 7;
 
-    function automatic noc_node_id_t next_gpc_sel(input logic [`SHADER_CORE_NUMBER-1:0] busy_vec, input int last_sel);
+    function automatic noc_node_id_t next_gpc_sel(input logic [`GPC_NUMBER-1:0] busy_vec, input int last_sel);
         int i;
-        for (i = 1; i <= `SHADER_CORE_NUMBER; i++) begin
-            int idx = (last_sel + i) % `SHADER_CORE_NUMBER;
+        for (i = 1; i <= `GPC_NUMBER; i++) begin
+            int idx = (last_sel + i) % `GPC_NUMBER;
             if (!busy_vec[idx]) begin
                 return noc_node_id_t'(NODE_SHADER_0 + idx);
             end

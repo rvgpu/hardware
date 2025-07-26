@@ -29,9 +29,13 @@
 `define MEMORY_INTERFACE_DATA_WIDTH         256
 
 //=============================================================================
-// ShaderCore Configuration
+// GPC(Graphics Processing Core) Configuration
 //=============================================================================
-`define SHADER_CORE_NUMBER                  2
+`define GPC_NUMBER                          2      // GPC数量
+`define GPC_TPC_NUMBER                      4      // 每个GPC的TPC数量
+`define TPC_SM_NUMBER                       2      // 每个TPC的SM数量
+`define SM_CUDACORE_NUMBER                  32     // 每个SM的CUDACore数量
+`define WARP_THREAD_NUMBER                  32     // 每个WARP的线程数
 
 //=============================================================================
 // L2Cache Configuration

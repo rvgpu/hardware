@@ -173,6 +173,7 @@ module rvgpu_job_dispatcher #(
         noc_if.m_req_data   = '0;
         noc_if.m_req_strb   = 32'h0;
         noc_if.m_req_last   = 1'b0;
+        noc_if.m_resp_ready = 1'b0;
 
         // 状态机
         case (state_r)
@@ -218,6 +219,7 @@ module rvgpu_job_dispatcher #(
                 end
             end
             STATE_NOC_WAIT: begin
+                noc_if.m_resp_ready = 1'b1;
                 if (noc_if.m_resp_valid && noc_if.m_resp_ready) begin
                     if (noc_if.m_resp_status == 2'b00) begin
                         command_n = noc_if.m_resp_data;
@@ -270,6 +272,7 @@ module rvgpu_job_dispatcher #(
                          command_r.compute.header.job_dim.cluster_x, command_r.compute.header.job_dim.cluster_y, command_r.compute.header.job_dim.cluster_z);
             end
             STATE_DISPATCH_WAIT: begin
+                noc_if.m_resp_ready = 1'b1;
                 if (noc_if.m_resp_valid && noc_if.m_resp_ready && noc_if.m_resp_status == 2'b00 && !fifo_empty_n) begin
                     logic [3:0] resp_gpc_id;
                     resp_gpc_id = cluster_gpc_fifo_r[fifo_head_r].gpc_id;

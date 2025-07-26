@@ -99,16 +99,15 @@ module rvgpu_job_dispatcher #(
     localparam ERROR_BIT_TIMEOUT       = 6;
     localparam ERROR_BIT_UNKNOWN       = 7;
 
-    // 修改：next_gpc_sel函数
     function automatic noc_node_id_t next_gpc_sel(input logic [`SHADER_CORE_NUMBER-1:0] busy_vec, input int last_sel);
         int i;
         for (i = 1; i <= `SHADER_CORE_NUMBER; i++) begin
             int idx = (last_sel + i) % `SHADER_CORE_NUMBER;
             if (!busy_vec[idx]) begin
-                return noc_node_id_t'(2 + idx); // NODE_GPC_0 = 2
+                return noc_node_id_t'(NODE_SHADER_0 + idx);
             end
         end
-        return noc_node_id_t'(2 + last_sel); // fallback
+        return noc_node_id_t'(NODE_SHADER_0 + last_sel); // fallback
     endfunction
 
     // 新增：计算总 cluster 数
@@ -120,11 +119,11 @@ module rvgpu_job_dispatcher #(
         if ((cmd.header.job_dim.cluster_x == 0) && (cmd.header.job_dim.cluster_y == 0) && (cmd.header.job_dim.cluster_z == 0)) begin
             total_clusters_num = 0;
         end else if ((cmd.header.job_dim.cluster_y == 0) && (cmd.header.job_dim.cluster_z == 0)) begin
-            total_clusters_num = cmd.header.job_dim.grid_x;
+            total_clusters_num = cmd.header.job_dim.cluster_x;
         end else if ((cmd.header.job_dim.cluster_z == 0)) begin
-            total_clusters_num = cmd.header.job_dim.grid_x * cmd.header.job_dim.grid_y;
+            total_clusters_num = cmd.header.job_dim.cluster_x * cmd.header.job_dim.cluster_y;
         end else begin
-            total_clusters_num = cmd.header.job_dim.grid_x * cmd.header.job_dim.grid_y * cmd.header.job_dim.grid_z;
+            total_clusters_num = cmd.header.job_dim.cluster_x * cmd.header.job_dim.cluster_y * cmd.header.job_dim.cluster_z;
         end
         
         total_grid_num = 0;
@@ -261,15 +260,11 @@ module rvgpu_job_dispatcher #(
                     cluster_gpc_fifo_n[fifo_tail_r].cluster_id = curr_cluster_id_r;
                     fifo_tail_n = (fifo_tail_r + 1) % 8;
                     
-                    `DEBUG_PRINT("JD", $sformatf("Dispatch cluster %0d to GPC %0d", curr_cluster_id_r, selected_gpc));
+                    `DEBUG_PRINT("JD", $sformatf("Dispatch cluster %0d to GPC.%0d", curr_cluster_id_r, selected_gpc-NODE_SHADER_0));
                     state_n = STATE_DISPATCH_WAIT;
                 end else if (cluster_idx_r >= total_clusters_r) begin
                     state_n = STATE_DONE;
                 end
-                $display("cluster_idx_r: %0d, total_clusters_r: %0d, gpc_busy_r: %0b, fifo_full_n: %0b", cluster_idx_r, total_clusters_r, gpc_busy_r, fifo_full_n);
-                $display("DEBUG: grid_x=%0d, grid_y=%0d, grid_z=%0d, cluster_x=%0d, cluster_y=%0d, cluster_z=%0d", 
-                         command_r.compute.header.job_dim.grid_x, command_r.compute.header.job_dim.grid_y, command_r.compute.header.job_dim.grid_z,
-                         command_r.compute.header.job_dim.cluster_x, command_r.compute.header.job_dim.cluster_y, command_r.compute.header.job_dim.cluster_z);
             end
             STATE_DISPATCH_WAIT: begin
                 noc_if.m_resp_ready = 1'b1;

@@ -56,7 +56,6 @@ module rvgpu_toplevel (
     rvgpu_internal_noc_if l2cache_noc_if();
     rvgpu_internal_noc_if gpc_noc_if [2]();
 
-    // Control Unit - 使用control_unit_config_t参数
     rvgpu_control_unit u_control_unit (
         .clk(clk),
         .rst_n(rst_n),
@@ -65,28 +64,26 @@ module rvgpu_toplevel (
         .gpu_irq(gpu_irq)  // 连接到gpu_irq输出端口
     );
 
-    // L2Cache - 使用l2cache_config_t参数
     rvgpu_l2cache u_l2cache (
         .clk(clk),
         .rst_n(rst_n),
         .noc_if(l2cache_noc_if.device),
-        .mem_if(mem_if[0])  // 只使用第一个接口
+        .mem_if(mem_if[0])  // 目前只使用第一个master接口
     );
 
-    // GPC 实例化
-    rvgpu_gpc_top #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) u_gpc_0 (
+    rvgpu_gpc_top #(.GPC_ID(0)) u_gpc_0 (
         .clk(clk),
         .rst_n(rst_n),
         .noc_if(gpc_noc_if[0].device)
     );
-    rvgpu_gpc_top #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) u_gpc_1 (
+
+    rvgpu_gpc_top #(.GPC_ID(1)) u_gpc_1 (
         .clk(clk),
         .rst_n(rst_n),
         .noc_if(gpc_noc_if[1].device)
     );
 
-    // NOC - 连接所有模块的网络
-    rvgpu_internal_noc #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) u_internal_noc (
+    rvgpu_internal_noc u_internal_noc (
         .clk(clk),
         .rst_n(rst_n),
         .control_unit(control_unit_noc_if.noc),

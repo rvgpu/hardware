@@ -57,11 +57,13 @@ function automatic string noc_header_to_string(
     input noc_header_t header
 );
     // 直接在$sformatf中调用子函数，避免使用string中间变量
-    return $sformatf("header: {type: %s, %s -> %s, id: %d, localaddr: %d}", 
+    return $sformatf("header: {type: %s, %s.%s -> %s.%s, id: %d}", 
                      noc_msg_type_to_string(header.msg_type),
                      noc_node_id_to_string(header.src_node),
+                     header.src_local,
                      noc_node_id_to_string(header.dest_node),
-                     header.trans_id, header.local_addr);
+                     header.dst_local,
+                     header.trans_id);
 endfunction
 
 function automatic string noc_payload_request_mem_read_to_string(

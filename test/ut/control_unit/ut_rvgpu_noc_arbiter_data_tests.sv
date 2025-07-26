@@ -277,7 +277,7 @@ module rvgpu_noc_arbiter_data_tests_unit_test;
         // Send response from NOC with specific pattern (CP not ready initially)
         cp_if.m_resp_ready = 1'b0;
         noc_if.m_resp_valid = 1'b1;
-        noc_if.m_resp_header = test_base.create_mem_read_resp_header(8'h50, NOC_NODE_CONTROL_JD);
+        noc_if.m_resp_header = build_noc_header_mem_response(8'h50, NODE_L2_CACHE, NOC_NODE_CONTROL_JD);
         noc_if.m_resp_data = test_base.test_patterns[i];
         noc_if.m_resp_status = RESP_OKAY;
         noc_if.m_resp_last = 1'b1;

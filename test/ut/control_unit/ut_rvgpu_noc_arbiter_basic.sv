@@ -560,7 +560,7 @@ module rvgpu_noc_arbiter_baisc_unit_test;
       test_base.initialize_signals();
       step(5);      
       // Test response with unknown local_addr (0x02 - not in defined range)
-      unknown_resp_packet.header = test_base.create_unknown_response_header(8'h90, 8'h02);
+      unknown_resp_packet.header = build_noc_header_mem_response(8'h90, NODE_L2_CACHE, 8'h02);
       unknown_resp_packet.data = 256'hFFFFFFFF_FFFFFFFF_FFFFFFFF_FFFFFFFF_FFFFFFFF_FFFFFFFF_FFFFFFFF_FFFFFFFF;
       unknown_resp_packet.strb = 32'hFFFFFFFF;
       

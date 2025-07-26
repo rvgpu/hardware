@@ -181,7 +181,8 @@ class rvgpu_l2cache_test_base;
         header.src_node = src_node;
         header.dest_node = NODE_L2_CACHE;
         header.trans_id = trans_id;
-        header.local_addr = 8'h00;
+        header.src_local = 2'b00;
+        header.dst_local = 2'b00;
         
         // 构建数据
         data[63:0] = addr;
@@ -227,7 +228,8 @@ class rvgpu_l2cache_test_base;
         header.src_node = src_node;
         header.dest_node = NODE_L2_CACHE;
         header.trans_id = trans_id;
-        header.local_addr = 8'h00;
+        header.src_local = 2'b00;
+        header.dst_local = 2'b00;
         
         // 构建数据
         req_data[63:0] = addr;

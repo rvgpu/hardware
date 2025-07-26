@@ -323,11 +323,6 @@ class rvgpu_noc_arbiter_test_base;
     return build_noc_header(MSG_MEM_READ_RESP, trans_id, NODE_CONTROL, NODE_L2_CACHE, local_addr);
   endfunction
 
-  // Create unknown response header (for testing error handling)
-  function noc_header_t create_unknown_response_header(logic [7:0] trans_id, logic [7:0] local_addr);
-    return build_noc_header(MSG_MEM_READ_RESP, trans_id, NODE_L2_CACHE, NODE_CONTROL, local_addr);
-  endfunction
-
   // Create slave write request header (NOC to MMU)
   function noc_header_t create_slave_write_request_header(logic [7:0] trans_id, logic [7:0] local_addr);
     return build_noc_header(MSG_MEM_WRITE_REQ, trans_id, NODE_L2_CACHE, NODE_CONTROL, local_addr);
@@ -378,10 +373,9 @@ class rvgpu_noc_arbiter_test_base;
   endfunction
 
   // Create standard response packet
-  function noc_packet_t create_mem_read_response_packet(logic [7:0] trans_id, logic [7:0] local_addr, 
-                                                        logic [255:0] data);
+  function noc_packet_t create_mem_read_response_packet(logic [7:0] trans_id, logic [7:0] local_addr, logic [255:0] data);
     noc_packet_t packet;
-    packet.header = create_mem_read_resp_header(trans_id, local_addr);
+    packet.header = build_noc_header_mem_response(trans_id, NODE_L2_CACHE, local_addr);
     packet.data = data;
     packet.strb = 32'hFFFFFFFF;  // Response packets typically have full strobe
     return packet;

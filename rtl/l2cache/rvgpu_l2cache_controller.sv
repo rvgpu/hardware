@@ -81,6 +81,7 @@ module rvgpu_l2cache_controller #(
         logic write;
         logic [7:0] trans_id;
         logic [7:0] src_node;
+        logic [1:0] src_local;
         logic [255:0] data;
         logic [31:0] strb;
     } l2cache_request_t;
@@ -89,7 +90,7 @@ module rvgpu_l2cache_controller #(
         logic [255:0] data;
         logic [1:0] status;
         logic [7:0] trans_id;
-        logic [7:0] dest_node;
+        logic [3:0] dest_node;
         logic hit;
         logic dirty;
     } l2cache_response_t;
@@ -498,12 +499,7 @@ module rvgpu_l2cache_controller #(
         // 响应发送逻辑
         if (current_resp_r.trans_id != 0) begin
             noc_if.resp_valid = 1'b1;
-            noc_if.resp_header = build_noc_header(
-                current_req_r.read ? MSG_MEM_READ_RESP : MSG_MEM_WRITE_RESP,
-                current_resp_r.trans_id,
-                NODE_L2_CACHE,
-                current_resp_r.dest_node
-            );
+            noc_if.resp_header = build_noc_header_mem_response(current_resp_r.trans_id, current_resp_r.dest_node, current_req_r.src_local);
             noc_if.resp_data = current_resp_r.data;
             noc_if.resp_status = current_resp_r.status;
             noc_if.resp_last = 1'b1;
@@ -545,6 +541,7 @@ module rvgpu_l2cache_controller #(
         req.write = (noc_header.msg_type == MSG_MEM_WRITE_REQ);
         req.trans_id = noc_header.trans_id;
         req.src_node = noc_header.src_node;
+        req.src_local = noc_header.src_local;
         req.data = payload.payload_256b;
         
         return req;
@@ -587,24 +584,6 @@ module rvgpu_l2cache_controller #(
         for (int i = 0; i < WAYS; i++) begin
             if (way_vector[i]) result = i[2:0];
         end
-        return result;
-    endfunction
-    
-    // 构建NOC头部
-    function automatic logic [31:0] build_noc_header(
-        input logic [7:0] msg_type,
-        input logic [7:0] trans_id,
-        input logic [7:0] src_node,
-        input logic [7:0] dest_node
-    );
-        noc_header_t header;
-        logic [31:0] result;
-        header.msg_type = noc_msg_type_t'(msg_type);
-        header.trans_id = trans_id;
-        header.src_node = noc_node_id_t'(src_node);
-        header.dest_node = noc_node_id_t'(dest_node);
-        header.local_addr = 2'b00;
-        result = {header.msg_type, header.trans_id, header.src_node, header.dest_node, header.local_addr};
         return result;
     endfunction
     

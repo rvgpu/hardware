@@ -60,16 +60,19 @@ typedef enum l4_t {
 } noc_node_id_t;
 
 typedef l8_t noc_trans_id_t;
-typedef l8_t noc_local_addr_t;
-localparam noc_local_addr_t NOC_NODE_CONTROL_MMU = 8'h00;
-localparam noc_local_addr_t NOC_NODE_CONTROL_JD  = 8'h01;
+typedef l2_t noc_local_addr_t;
+localparam noc_local_addr_t NOC_NODE_LOCAL_ADDR_NONE    = 2'b00;
+localparam noc_local_addr_t NOC_NODE_CONTROL_MMU        = 2'b00;
+localparam noc_local_addr_t NOC_NODE_CONTROL_JD         = 2'b01;
 
 typedef struct packed {
     noc_msg_type_t          msg_type;   // [31:24] 消息类型
     noc_trans_id_t          trans_id;   // [23:16] 事务ID
     noc_node_id_t           src_node;   // [15:12] 源节点ID
     noc_node_id_t           dest_node;  // [11:8]  目标节点ID
-    noc_local_addr_t        local_addr; // [7:0]   节点内本地地址
+    l4_t                    reserved;   // [7:4]   保留 
+    noc_local_addr_t        dst_local; // [3:2]    DST节点内本地地址
+    noc_local_addr_t        src_local; // [1:0]    SRC节点内本地地址
 } noc_header_t;
 
 // 响应状态码
@@ -114,8 +117,12 @@ function automatic noc_node_id_t get_noc_header_dest_node(input noc_header_t hea
     return header.dest_node;
 endfunction
 
-function automatic noc_local_addr_t get_noc_header_local_addr(input noc_header_t header);
-    return header.local_addr;
+function automatic noc_local_addr_t get_noc_header_src_local(input noc_header_t header);
+    return header.src_local;
+endfunction
+
+function automatic noc_local_addr_t get_noc_header_dst_local(input noc_header_t header);
+    return header.dst_local;
 endfunction
 
 // 构建NOC header
@@ -124,31 +131,33 @@ function automatic noc_header_t build_noc_header(
     input noc_trans_id_t    trans_id,
     input noc_node_id_t     src_node,
     input noc_node_id_t     dest_node,
-    input noc_local_addr_t  local_addr = 8'h00
+    input noc_local_addr_t  src_local = NOC_NODE_LOCAL_ADDR_NONE,
+    input noc_local_addr_t  dst_local = NOC_NODE_LOCAL_ADDR_NONE
 );
     noc_header_t header;
     header.msg_type         = msg_type;
     header.trans_id         = trans_id;
     header.src_node         = src_node;
     header.dest_node        = dest_node;
-    header.local_addr       = local_addr;
+    header.src_local        = src_local;
+    header.dst_local        = dst_local;
     return header;
 endfunction
 
 function automatic noc_header_t build_noc_header_mem_request(
     input noc_trans_id_t    trans_id,
     input noc_node_id_t     src_node,
-    input noc_local_addr_t  local_addr = 8'h00
+    input noc_local_addr_t  src_local = NOC_NODE_LOCAL_ADDR_NONE
 );
-    return build_noc_header(MSG_MEM_READ_REQ, trans_id, src_node, NODE_L2_CACHE, local_addr);
+    return build_noc_header(MSG_MEM_READ_REQ, trans_id, src_node, NODE_L2_CACHE, src_local, NOC_NODE_LOCAL_ADDR_NONE);
 endfunction
 
 function automatic noc_header_t build_noc_header_mem_response(
     input noc_trans_id_t    trans_id,
     input noc_node_id_t     dst_node,
-    input noc_local_addr_t  local_addr = 8'h00
+    input noc_local_addr_t  dst_local = NOC_NODE_LOCAL_ADDR_NONE
 );
-    return build_noc_header(MSG_MEM_READ_RESP, trans_id, NODE_L2_CACHE, dst_node, local_addr); 
+    return build_noc_header(MSG_MEM_READ_RESP, trans_id, NODE_L2_CACHE, dst_node, NOC_NODE_LOCAL_ADDR_NONE, dst_local);
 endfunction
 
 function automatic noc_header_t build_noc_header_jobcluster_dispatch(
@@ -189,13 +198,15 @@ function automatic void parse_noc_header(
     output noc_trans_id_t trans_id,
     output noc_node_id_t src_node,
     output noc_node_id_t dest_node,
-    output logic [7:0] local_addr
+    output noc_local_addr_t src_local,
+    output noc_local_addr_t dst_local
 );
     msg_type = noc_msg_type_t'(header.msg_type);
     trans_id = header.trans_id;
     src_node = noc_node_id_t'(header.src_node);
     dest_node = noc_node_id_t'(header.dest_node);
-    local_addr = header.local_addr;
+    src_local = header.src_local;
+    dst_local = header.dst_local;
 endfunction
 
 function automatic noc_payload_t build_noc_payload_request_mem_read(

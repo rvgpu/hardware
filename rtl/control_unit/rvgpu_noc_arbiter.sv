@@ -44,10 +44,6 @@ module rvgpu_noc_arbiter (
     // Local Parameters and Types
     //=============================================================================
     
-    // local_addr分配定义
-    localparam logic [3:0] LOCAL_ADDR_CP_RANGE  = 4'h0;
-    localparam logic [3:0] LOCAL_ADDR_MMU_RANGE = 4'h1;
-    
     // 请求仲裁状态机
     typedef enum logic [1:0] {
         REQ_ARB_IDLE    = 2'b00,
@@ -196,9 +192,9 @@ module rvgpu_noc_arbiter (
         case (route_state)
             RESP_ROUTE_IDLE: begin
                 if (noc_if.m_resp_valid) begin
-                    if (get_noc_header_local_addr(noc_if.m_resp_header) == NOC_NODE_CONTROL_MMU) begin
+                    if (get_noc_header_dst_local(noc_if.m_resp_header) == NOC_NODE_CONTROL_MMU) begin
                         route_state_next = RESP_ROUTE_MMU;
-                    end else if (get_noc_header_local_addr(noc_if.m_resp_header) == NOC_NODE_CONTROL_JD) begin
+                    end else if (get_noc_header_dst_local(noc_if.m_resp_header) == NOC_NODE_CONTROL_JD) begin
                         route_state_next = RESP_ROUTE_CP;
                     end else begin
                         route_state_next = RESP_ROUTE_IDLE;
@@ -247,8 +243,8 @@ module rvgpu_noc_arbiter (
             RESP_ROUTE_IDLE: begin
                 // 检查是否为未知地址范围，如果是则丢弃响应
                 if (noc_if.m_resp_valid) begin
-                    if (get_noc_header_local_addr(noc_if.m_resp_header) != NOC_NODE_CONTROL_MMU && 
-                        get_noc_header_local_addr(noc_if.m_resp_header) != NOC_NODE_CONTROL_JD) begin
+                    if (get_noc_header_dst_local(noc_if.m_resp_header) != NOC_NODE_CONTROL_MMU && 
+                        get_noc_header_dst_local(noc_if.m_resp_header) != NOC_NODE_CONTROL_JD) begin
                         noc_if.m_resp_ready = 1'b1;  // 丢弃未知地址的响应
                     end
                 end

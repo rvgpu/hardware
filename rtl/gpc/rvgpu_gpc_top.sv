@@ -54,7 +54,7 @@ module rvgpu_gpc_top #(
     logic [7:0] sm_utilization[GPC_CONFIG.num_tpc];      // 每个TPC的SM利用率
     
     // NOC Adapter实例化
-    rvgpu_gpc_noc_adapter u_noc_adapter (
+    rvgpu_gpc_noc_adapter #(.GPC_ID(GPC_ID)) u_noc_adapter (
         .clk(clk),
         .rst_n(rst_n),
         .noc_external_if(noc_if),
@@ -78,7 +78,7 @@ module rvgpu_gpc_top #(
     );
     
     // Block Scheduler实例化
-    rvgpu_gpc_block_scheduler u_block_scheduler (
+    rvgpu_gpc_block_scheduler #(.GPC_ID(GPC_ID)) u_block_scheduler (
         .clk(clk),
         .rst_n(rst_n),
         .noc_if(scheduler_noc_if.device),

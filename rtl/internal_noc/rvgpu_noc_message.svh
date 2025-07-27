@@ -145,6 +145,7 @@ function automatic noc_header_t build_noc_header(
     header.dest_node        = dest_node;
     header.src_local        = src_local;
     header.dst_local        = dst_local;
+    header.reserved         = 4'h0;
     return header;
 endfunction
 

@@ -26,6 +26,7 @@
 // GPC Block Scheduler模块
 // 负责接收job_cluster并将其调度到合适的TPC
 module rvgpu_gpc_block_scheduler #(
+    parameter int GPC_ID = 0,
     parameter int NUM_TPC = 4,           // TPC数量
     parameter int MAX_WARPS_PER_BLOCK = 32, // 每个Block最大Warp数
     parameter int ADDR_WIDTH = 40        // 地址宽度
@@ -200,6 +201,7 @@ module rvgpu_gpc_block_scheduler #(
                         parse_job_cluster(noc_if.s_req_data);
                         noc_if.s_req_ready <= 1'b0;
                         state <= PARSE_JOB;
+                        $display("GPC %d received job cluster", GPC_ID);
                     end
                 end
                 

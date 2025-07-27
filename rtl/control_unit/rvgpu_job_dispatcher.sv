@@ -253,15 +253,17 @@ module rvgpu_job_dispatcher #(
                     noc_if.m_req_strb   = 32'hFF;
                     noc_if.m_req_last   = 1'b1;
                     
-                    // 标记 GPC 为忙状态
-                    gpc_busy_n[selected_gpc - 2] = 1'b1;
-                    cluster_gpc_fifo_n = cluster_gpc_fifo_r;
-                    cluster_gpc_fifo_n[fifo_tail_r].gpc_id = selected_gpc;
-                    cluster_gpc_fifo_n[fifo_tail_r].cluster_id = curr_cluster_id_r;
-                    fifo_tail_n = (fifo_tail_r + 1) % 8;
-                    
-                    `DEBUG_PRINT("JD", $sformatf("Dispatch cluster %0d to GPC.%0d", curr_cluster_id_r, selected_gpc-NODE_SHADER_0));
-                    state_n = STATE_DISPATCH_WAIT;
+                    if (noc_if.m_req_valid && noc_if.m_req_ready) begin
+                        // 标记 GPC 为忙状态
+                        gpc_busy_n[selected_gpc - 2] = 1'b1;
+                        cluster_gpc_fifo_n = cluster_gpc_fifo_r;
+                        cluster_gpc_fifo_n[fifo_tail_r].gpc_id = selected_gpc;
+                        cluster_gpc_fifo_n[fifo_tail_r].cluster_id = curr_cluster_id_r;
+                        fifo_tail_n = (fifo_tail_r + 1) % 8;
+                        
+                        `DEBUG_PRINT("JD", $sformatf("Dispatch cluster %0d to GPC.%0d", curr_cluster_id_r, selected_gpc-NODE_SHADER_0));
+                        state_n = STATE_DISPATCH_WAIT;
+                    end
                 end else if (cluster_idx_r >= total_clusters_r) begin
                     state_n = STATE_DONE;
                 end

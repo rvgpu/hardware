@@ -28,8 +28,7 @@ import rvgpu_control_unit_pkg::*;
 // RVGPU AXI-Lite to Control Interface Adapter
 //=============================================================================
 module rvgpu_axi_adapter #(
-    parameter int ADDR_WIDTH = 64,
-    parameter int DATA_WIDTH = 64
+    parameter host_axi_config_t HOST_CONFIG = DEFAULT_HOST_AXI_CONFIG
 ) (
     // Clock and Reset Interface
     input  logic clk,
@@ -73,9 +72,9 @@ module rvgpu_axi_adapter #(
     logic                   state_clken;
     
     // 地址和数据寄存器
-    reg [ADDR_WIDTH-1:0]    addr_r, addr_nxt;
-    reg [DATA_WIDTH-1:0]    data_r, data_nxt;
-    reg [DATA_WIDTH/8-1:0]  strb_r, strb_nxt;
+    reg [HOST_CONFIG.addr_width-1:0]    addr_r, addr_nxt;
+    reg [HOST_CONFIG.data_width-1:0]    data_r, data_nxt;
+    reg [HOST_CONFIG.strb_width-1:0]  strb_r, strb_nxt;
     reg [1:0]               resp_r, resp_nxt;
     
     // 控制信号
@@ -246,7 +245,7 @@ module rvgpu_axi_adapter #(
             strb_nxt = axi_if.wstrb;
         end else if (ctrl_re) begin
             data_nxt = ctrl_cp.ctrl_rdata;  // 直接从CP获取读数据
-            strb_nxt = {(DATA_WIDTH/8){1'b1}};
+            strb_nxt = {(HOST_CONFIG.strb_width){1'b1}};
         end else begin
             data_nxt = data_r;
             strb_nxt = strb_r;
@@ -269,7 +268,7 @@ module rvgpu_axi_adapter #(
         if (!rst_n) begin
             state_r <= STATE_EXPECT_RD;
             ctrl_we_r <= 1'b0;
-            addr_r <= {ADDR_WIDTH{1'b0}};
+            addr_r <= {HOST_CONFIG.addr_width{1'b0}};
         end else begin
             if (state_clken) begin
                 state_r <= state_nxt;

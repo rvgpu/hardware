@@ -18,59 +18,65 @@
 
 `include "rvgpu_config.svh"
 
+`include "rvgpu_axi_config.svh"
+
 //=============================================================================
 // Host Interface (AXI-Lite Slave)
 //=============================================================================
 
 interface host_if #(
-    parameter int unsigned         DATA_WIDTH = 64,
-    parameter int unsigned         ADDR_WIDTH = 64
+    parameter host_axi_config_t HOST_CONFIG     = DEFAULT_HOST_AXI_CONFIG
 );
     // Write Address Channel
-    logic [ADDR_WIDTH-1:0]         awaddr;
-    logic [7:0]                    awlen;
-    logic [2:0]                    awsize;
-    logic [1:0]                    awburst;
-    logic                          awvalid;
-    logic                          awready;
+    logic [HOST_CONFIG.addr_width-1:0]          awaddr;
+    logic [7:0]                                 awlen;
+    logic [2:0]                                 awsize;
+    logic [1:0]                                 awburst;
+    logic                                       awvalid;
+    logic                                       awready;
     
     // Write Data Channel
-    logic [DATA_WIDTH-1:0]         wdata;
-    logic [DATA_WIDTH/8-1:0]       wstrb;
-    logic                          wlast;
-    logic                          wvalid;
-    logic                          wready;
+    logic [HOST_CONFIG.data_width-1:0]          wdata;
+    logic [HOST_CONFIG.strb_width-1:0]          wstrb;
+    logic                                       wlast;
+    logic                                       wvalid;
+    logic                                       wready;
     
     // Write Response Channel
-    logic [1:0]                    bresp;
-    logic                          bvalid;
-    logic                          bready;
+    logic [1:0]                                 bresp;
+    logic                                       bvalid;
+    logic                                       bready;
     
     // Read Address Channel
-    logic [ADDR_WIDTH-1:0]         araddr;
-    logic [7:0]                    arlen;
-    logic [2:0]                    arsize;
-    logic [1:0]                    arburst;
-    logic                          arvalid;
-    logic                          arready;
+    logic [HOST_CONFIG.addr_width-1:0]          araddr;
+    logic [7:0]                                 arlen;
+    logic [2:0]                                 arsize;
+    logic [1:0]                                 arburst;
+    logic                                       arvalid;
+    logic                                       arready;
     
     // Read Data Channel
-    logic [DATA_WIDTH-1:0]         rdata;
-    logic [1:0]                    rresp;
-    logic                          rlast;
-    logic                          rvalid;
-    logic                          rready;
+    logic [HOST_CONFIG.data_width-1:0]          rdata;
+    logic [1:0]                                 rresp;
+    logic                                       rlast;
+    logic                                       rvalid;
+    logic                                       rready;
     
     // Master Port (Host)
     modport master (
+        // Write Address
         output awaddr, awlen, awsize, awburst, awvalid,
         input  awready,
+        // Write Data
         output wdata, wstrb, wlast, wvalid,
         input  wready,
+        // Write Response,
         input  bresp, bvalid,
         output bready,
+        // Read Address
         output araddr, arlen, arsize, arburst, arvalid,
         input  arready,
+        // Read Data
         input  rdata, rresp, rlast, rvalid,
         output rready
     );
@@ -96,48 +102,46 @@ endinterface : host_if
 //=============================================================================
 
 interface memory_if #(
-    parameter int unsigned         DATA_WIDTH = `MEMORY_INTERFACE_DATA_WIDTH,
-    parameter int unsigned         ADDR_WIDTH = 48,
-    parameter int unsigned         ID_WIDTH = 8
+    parameter memory_axi_config_t MEMORY_CONFIG     = DEFAULT_MEMORY_AXI_CONFIG
 );
     // Write Address Channel
-    logic [ADDR_WIDTH-1:0]         awaddr;
-    logic [7:0]                    awlen;
-    logic [2:0]                    awsize;
-    logic [1:0]                    awburst;
-    logic [ID_WIDTH-1:0]           awid;
-    logic                          awvalid;
-    logic                          awready;
+    logic [MEMORY_CONFIG.addr_width-1:0]            awaddr;
+    logic [7:0]                                     awlen;
+    logic [2:0]                                     awsize;
+    logic [1:0]                                     awburst;
+    logic [MEMORY_CONFIG.id_width-1:0]              awid;
+    logic                                           awvalid;
+    logic                                           awready;
     
     // Write Data Channel
-    logic [DATA_WIDTH-1:0]         wdata;
-    logic [DATA_WIDTH/8-1:0]       wstrb;
-    logic                          wlast;
-    logic                          wvalid;
-    logic                          wready;
+    logic [MEMORY_CONFIG.data_width-1:0]            wdata;
+    logic [MEMORY_CONFIG.strb_width-1:0]            wstrb;
+    logic                                           wlast;
+    logic                                           wvalid;
+    logic                                           wready;
     
     // Write Response Channel
-    logic [1:0]                    bresp;
-    logic [ID_WIDTH-1:0]           bid;
-    logic                          bvalid;
-    logic                          bready;
+    logic [1:0]                                     bresp;
+    logic [MEMORY_CONFIG.id_width-1:0]              bid;
+    logic                                           bvalid;
+    logic                                           bready;
     
     // Read Address Channel
-    logic [ADDR_WIDTH-1:0]         araddr;
-    logic [7:0]                    arlen;
-    logic [2:0]                    arsize;
-    logic [1:0]                    arburst;
-    logic [ID_WIDTH-1:0]           arid;
-    logic                          arvalid;
-    logic                          arready;
+    logic [MEMORY_CONFIG.addr_width-1:0]            araddr;
+    logic [7:0]                                     arlen;
+    logic [2:0]                                     arsize;
+    logic [1:0]                                     arburst;
+    logic [MEMORY_CONFIG.id_width-1:0]              arid;
+    logic                                           arvalid;
+    logic                                           arready;
     
     // Read Data Channel
-    logic [DATA_WIDTH-1:0]         rdata;
-    logic [1:0]                    rresp;
-    logic [ID_WIDTH-1:0]           rid;
-    logic                          rlast;
-    logic                          rvalid;
-    logic                          rready;
+    logic [MEMORY_CONFIG.data_width-1:0]            rdata;
+    logic [1:0]                                     rresp;
+    logic [MEMORY_CONFIG.id_width-1:0]              rid;
+    logic                                           rlast;
+    logic                                           rvalid;
+    logic                                           rready;
     
     // Master Port (RVGPU)
     modport master (

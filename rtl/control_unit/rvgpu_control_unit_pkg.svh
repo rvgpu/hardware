@@ -19,6 +19,7 @@
 `include "rvgpu_constant.svh"
 `include "rvgpu_internal_noc_pkg.svh"
 `include "rvgpu_internal_noc_if.svh"
+`include "../gpu_top/rvgpu_axi_config.svh"
 `include "../gpu_top/rvgpu_interface_axi.svh"
 
 package rvgpu_control_unit_pkg;
@@ -31,8 +32,6 @@ package rvgpu_control_unit_pkg;
         int unsigned tlb_entries;            // TLB条目数量
         int unsigned va_width;               // 虚拟地址位宽(位)
         int unsigned pa_width;               // 物理地址位宽(位)
-        int unsigned axi_addr_width;         // AXI地址位宽(位)
-        int unsigned axi_data_width;         // AXI数据位宽(位)
     } cu_parameter_t;
     
     // 默认配置参数
@@ -40,9 +39,7 @@ package rvgpu_control_unit_pkg;
         page_size: `RVGPU_CONST_CU_PAGE_SIZE,
         tlb_entries: `RVGPU_CONST_CU_TLB_ENTRIES,
         va_width: `RVGPU_CONST_CU_VA_WIDTH,
-        pa_width: `RVGPU_CONST_CU_PA_WIDTH,
-        axi_addr_width: `RVGPU_CONST_CU_AXI_ADDR_WIDTH,
-        axi_data_width: `RVGPU_CONST_CU_AXI_DATA_WIDTH
+        pa_width: `RVGPU_CONST_CU_PA_WIDTH
     };
 
     typedef struct packed {

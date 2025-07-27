@@ -18,6 +18,7 @@
 
 `include "rvgpu_sram_if.svh"
 `include "rvgpu_control_unit_pkg.svh"
+`include "rvgpu_axi_config.svh"
 
 `ifndef RVGPU_CONTROL_UNIT_PKG_IMPORTED
 `define RVGPU_CONTROL_UNIT_PKG_IMPORTED
@@ -39,12 +40,12 @@ interface control_if #(
     parameter control_unit_config_t CU_CONFIG = DEFAULT_CONTROL_UNIT_CONFIG
 );
     // Write Control Signals (AXI Adapter → Command Processor)
-    logic                                               ctrl_we;    // 写使能
-    logic [CU_CONFIG.cu_parameter.axi_addr_width-1:0]   ctrl_addr;  // 地址
-    logic [CU_CONFIG.cu_parameter.axi_data_width-1:0]   ctrl_wdata; // 写数据
+    logic                                            ctrl_we;    // 写使能
+    logic [DEFAULT_HOST_AXI_CONFIG.addr_width-1:0]   ctrl_addr;  // 地址
+    logic [DEFAULT_HOST_AXI_CONFIG.data_width-1:0]   ctrl_wdata; // 写数据
     
     // Read Data Signal (Command Processor → AXI Adapter)
-    logic [CU_CONFIG.cu_parameter.axi_data_width-1:0]   ctrl_rdata; // 读数据
+    logic [DEFAULT_HOST_AXI_CONFIG.data_width-1:0]   ctrl_rdata; // 读数据
     
     // AXI Adapter port (initiates transactions)
     modport axiadapter_port (

@@ -113,31 +113,19 @@ module rvgpu_job_dispatcher #(
     // 新增：计算总 cluster 数
     function automatic logic [31:0] calculate_total_clusters(input command_compute_t cmd);
         logic [31:0] total_clusters_num;
-        logic [31:0] total_grid_num;
-
-        total_clusters_num = 0;
-        if ((cmd.header.job_dim.cluster_x == 0) && (cmd.header.job_dim.cluster_y == 0) && (cmd.header.job_dim.cluster_z == 0)) begin
-            total_clusters_num = 0;
-        end else if ((cmd.header.job_dim.cluster_y == 0) && (cmd.header.job_dim.cluster_z == 0)) begin
-            total_clusters_num = cmd.header.job_dim.cluster_x;
-        end else if ((cmd.header.job_dim.cluster_z == 0)) begin
-            total_clusters_num = cmd.header.job_dim.cluster_x * cmd.header.job_dim.cluster_y;
-        end else begin
-            total_clusters_num = cmd.header.job_dim.cluster_x * cmd.header.job_dim.cluster_y * cmd.header.job_dim.cluster_z;
-        end
         
-        total_grid_num = 0;
+        total_clusters_num = 0;
         if ((cmd.header.job_dim.grid_x == 0) && (cmd.header.job_dim.grid_y == 0) && (cmd.header.job_dim.grid_z == 0)) begin
-            total_grid_num = 0;
+            total_clusters_num = 0;
         end else if ((cmd.header.job_dim.grid_y == 0) && (cmd.header.job_dim.grid_z == 0)) begin
-            total_grid_num = cmd.header.job_dim.grid_x;
+            total_clusters_num = cmd.header.job_dim.grid_x;
         end else if ((cmd.header.job_dim.grid_z == 0)) begin
-            total_grid_num = cmd.header.job_dim.grid_x * cmd.header.job_dim.grid_y;
+            total_clusters_num = cmd.header.job_dim.grid_x * cmd.header.job_dim.grid_y;
         end else begin
-            total_grid_num = cmd.header.job_dim.grid_x * cmd.header.job_dim.grid_y * cmd.header.job_dim.grid_z;
+            total_clusters_num = cmd.header.job_dim.grid_x * cmd.header.job_dim.grid_y * cmd.header.job_dim.grid_z;
         end
 
-        return total_grid_num * total_clusters_num;
+        return total_clusters_num;
     endfunction
 
     always_comb begin

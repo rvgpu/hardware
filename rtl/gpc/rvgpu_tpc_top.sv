@@ -102,42 +102,42 @@ module rvgpu_tpc_top #(
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             round_robin_counter <= '0;
-            block_dispatch_if.warp_ready <= 1'b0;
+            block_dispatch_if.block_ready <= 1'b0;
             // 复位所有SM接口
             sm_dispatch_if[0].warp_valid <= 1'b0;
             sm_dispatch_if[1].warp_valid <= 1'b0;
         end else begin
             // 默认状态
-            block_dispatch_if.warp_ready <= 1'b0;
+            block_dispatch_if.block_ready <= 1'b0;
             
             // 处理来自Block Scheduler的任务
-            if (block_dispatch_if.warp_valid && sm_available[next_sm_id]) begin
+            if (block_dispatch_if.block_valid && sm_available[next_sm_id]) begin
                 // 将任务分发给选中的SM
                 case (next_sm_id)
                     0: begin
                         sm_dispatch_if[0].warp_valid <= 1'b1;
-                        sm_dispatch_if[0].warp_id <= block_dispatch_if.warp_id;
-                        sm_dispatch_if[0].block_id <= block_dispatch_if.block_id;
-                        sm_dispatch_if[0].program_addr <= block_dispatch_if.program_addr;
-                        sm_dispatch_if[0].arglist_ptr <= block_dispatch_if.arglist_ptr;
-                        sm_dispatch_if[0].argument_size <= block_dispatch_if.argument_size;
-                        sm_dispatch_if[0].thread_mask <= block_dispatch_if.thread_mask;
-                        sm_dispatch_if[0].arglist_data <= block_dispatch_if.arglist_data;
+                        sm_dispatch_if[0].warp_id <= block_dispatch_if.block_id;  // 使用block_id作为warp_id
+                        sm_dispatch_if[0].warp_block_id <= block_dispatch_if.block_id;
+                        sm_dispatch_if[0].warp_program_addr <= block_dispatch_if.program_addr;
+                        sm_dispatch_if[0].warp_arglist_ptr <= block_dispatch_if.arglist_ptr;
+                        sm_dispatch_if[0].warp_argument_size <= block_dispatch_if.argument_size;
+                        sm_dispatch_if[0].thread_mask <= 32'hFFFFFFFF;  // 默认所有线程都活跃
+                        sm_dispatch_if[0].warp_arglist_data <= block_dispatch_if.arglist_data;
                     end
                     1: begin
                         sm_dispatch_if[1].warp_valid <= 1'b1;
-                        sm_dispatch_if[1].warp_id <= block_dispatch_if.warp_id;
-                        sm_dispatch_if[1].block_id <= block_dispatch_if.block_id;
-                        sm_dispatch_if[1].program_addr <= block_dispatch_if.program_addr;
-                        sm_dispatch_if[1].arglist_ptr <= block_dispatch_if.arglist_ptr;
-                        sm_dispatch_if[1].argument_size <= block_dispatch_if.argument_size;
-                        sm_dispatch_if[1].thread_mask <= block_dispatch_if.thread_mask;
-                        sm_dispatch_if[1].arglist_data <= block_dispatch_if.arglist_data;
+                        sm_dispatch_if[1].warp_id <= block_dispatch_if.block_id;  // 使用block_id作为warp_id
+                        sm_dispatch_if[1].warp_block_id <= block_dispatch_if.block_id;
+                        sm_dispatch_if[1].warp_program_addr <= block_dispatch_if.program_addr;
+                        sm_dispatch_if[1].warp_arglist_ptr <= block_dispatch_if.arglist_ptr;
+                        sm_dispatch_if[1].warp_argument_size <= block_dispatch_if.argument_size;
+                        sm_dispatch_if[1].thread_mask <= 32'hFFFFFFFF;  // 默认所有线程都活跃
+                        sm_dispatch_if[1].warp_arglist_data <= block_dispatch_if.arglist_data;
                     end
                 endcase
                 
                 // 确认接收任务
-                block_dispatch_if.warp_ready <= 1'b1;
+                block_dispatch_if.block_ready <= 1'b1;
                 
                 // 更新轮询计数器
                 round_robin_counter <= (round_robin_counter + 1) % NUM_SM;
@@ -369,7 +369,7 @@ module rvgpu_tpc_top #(
                 
                 // 完成信号
                 .warp_complete(sm_dispatch_if[i].complete_valid),
-                .warp_id(sm_dispatch_if[i].complete_warp_id)
+                .warp_id(sm_dispatch_if[i].complete_block_id)
             );
         end
     endgenerate

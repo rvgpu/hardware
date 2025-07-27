@@ -19,8 +19,8 @@
 `include "rvgpu_constant.svh"
 `include "rvgpu_internal_noc_pkg.svh"
 `include "rvgpu_internal_noc_if.svh"
-`include "../gpu_top/rvgpu_axi_config.svh"
-`include "../gpu_top/rvgpu_interface_axi.svh"
+`include "rvgpu_axi_config.svh"
+`include "rvgpu_interface_axi.svh"
 
 package rvgpu_control_unit_pkg;
     //=============================================================================

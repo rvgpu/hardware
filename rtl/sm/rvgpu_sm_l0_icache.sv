@@ -49,7 +49,7 @@ module rvgpu_sm_l0_icache #(
     // TLB接口
     output logic        tlb_req_valid,
     output logic [38:0] tlb_req_vaddr,
-    output logic [2:0]  tlb_req_type,
+    output mmu_access_type_e tlb_req_type,
     output logic [31:0] tlb_req_warp_id,
     input  logic        tlb_req_ready,
     input  logic        tlb_resp_valid,

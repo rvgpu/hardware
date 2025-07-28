@@ -56,7 +56,7 @@ module rvgpu_gpc_mmu #(
     typedef struct packed {
         logic        valid;          // 有效位
         logic [38:0] vaddr;          // 虚拟地址
-        logic [2:0]  req_type;       // 访问类型
+        mmu_access_type_e req_type;  // 访问类型
         logic [31:0] warp_id;        // Warp ID
         logic [3:0]  source_id;      // 请求源ID
         logic [3:0]  tpc_id;         // TPC ID (0-3表示TPC, 4表示Block Scheduler)

@@ -19,6 +19,15 @@
 `include "rvgpu_constant.svh"
 
 //=============================================================================
+// MMU访问类型定义
+//=============================================================================
+typedef enum logic [2:0] {
+    MMU_READ    = 3'b001,
+    MMU_WRITE   = 3'b010,
+    MMU_EXECUTE = 3'b100
+} mmu_access_type_e;
+
+//=============================================================================
 // MMU Interface - 基本的MMU请求/响应接口
 // 用于地址转换请求和响应，不包含配置信号
 //=============================================================================
@@ -29,8 +38,7 @@ interface mmu_if;
     // Request Channel
     logic                               req_valid;
     logic [VA_WIDTH-1:0]                req_vaddr;
-    logic                               req_read;
-    logic                               req_write;
+    mmu_access_type_e                   req_type;       // 访问类型：READ/WRITE/EXECUTE
     logic                               req_ready;
     
     // Response Channel
@@ -42,7 +50,7 @@ interface mmu_if;
     
     // Requestor port (发起地址转换请求)
     modport requester_port (
-        output req_valid, req_vaddr, req_read, req_write,
+        output req_valid, req_vaddr, req_type,
         input  req_ready,
         input  resp_valid, resp_paddr, resp_hit, resp_status,
         output resp_ready
@@ -50,7 +58,7 @@ interface mmu_if;
     
     // MMU port (执行地址转换)
     modport mmu_port (
-        input  req_valid, req_vaddr, req_read, req_write,
+        input  req_valid, req_vaddr, req_type,
         output req_ready,
         output resp_valid, resp_paddr, resp_hit, resp_status,
         input  resp_ready

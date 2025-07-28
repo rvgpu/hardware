@@ -91,8 +91,7 @@ class rvgpu_mmu_test_base;
         // MMU interface - initialize to idle state
         mmu_if.req_valid = 1'b0;
         mmu_if.req_vaddr = 48'h0;
-        mmu_if.req_read = 1'b0;
-        mmu_if.req_write = 1'b0;
+        mmu_if.req_type = MMU_READ;
         mmu_if.resp_ready = 1'b1;  // MMU ready to accept responses
         mmu_if.resp_valid = 1'b0;
         mmu_if.resp_paddr = 48'h0;
@@ -134,8 +133,7 @@ class rvgpu_mmu_test_base;
     task clear_mmu_signals();
         mmu_if.req_valid = 1'b0;
         mmu_if.req_vaddr = '0;
-        mmu_if.req_read = 1'b0;
-        mmu_if.req_write = 1'b0;
+        mmu_if.req_type = MMU_READ;
         mmu_if.resp_ready = 1'b1;  // Keep ready
     endtask
 
@@ -198,13 +196,24 @@ class rvgpu_mmu_test_base;
 
     // Send MMU translation request
     task send_mmu_request(logic [47:0] vaddr, logic read, logic write);
-        $display("@%0t: Sending MMU request: vaddr=0x%012x, read=%0d, write=%0d", 
-                 $time, vaddr, read, write);
+        mmu_access_type_e req_type;
+        
+        // 根据read和write参数构建req_type
+        req_type = MMU_READ;  // 默认值
+        if (read && write) begin
+            req_type = MMU_READ | MMU_WRITE;
+        end else if (read) begin
+            req_type = MMU_READ;
+        end else if (write) begin
+            req_type = MMU_WRITE;
+        end
+        
+        $display("@%0t: Sending MMU request: vaddr=0x%012x, read=%0d, write=%0d, req_type=%s", 
+                 $time, vaddr, read, write, req_type.name());
         
         mmu_if.req_valid = 1'b1;
         mmu_if.req_vaddr = vaddr;
-        mmu_if.req_read = read;
-        mmu_if.req_write = write;
+        mmu_if.req_type = req_type;
         
         // Wait for handshake completion
         while (!(mmu_if.req_valid && mmu_if.req_ready)) begin
@@ -395,11 +404,11 @@ class rvgpu_mmu_test_base;
     // Monitor MMU interface
     task monitor_mmu_interface();
         if (mmu_if.req_valid && mmu_if.req_ready) begin
-            $display("@%0t: Monitor - MMU request detected: vaddr=0x%012x, read=%0d, write=%0d", 
-                     $time, mmu_if.req_vaddr, mmu_if.req_read, mmu_if.req_write);
+            $display("@%0t: Monitor - MMU request detected: vaddr=0x%012x, req_type=%s", 
+                     $time, mmu_if.req_vaddr, mmu_if.req_type.name());
             captured_mmu_trans.vaddr = mmu_if.req_vaddr;
-            captured_mmu_trans.read = mmu_if.req_read;
-            captured_mmu_trans.write = mmu_if.req_write;
+            captured_mmu_trans.read = (mmu_if.req_type == MMU_READ) || (mmu_if.req_type == (MMU_READ | MMU_WRITE));
+            captured_mmu_trans.write = (mmu_if.req_type == MMU_WRITE) || (mmu_if.req_type == (MMU_READ | MMU_WRITE));
             mmu_req_detected = 1'b1;
         end else begin
             mmu_req_detected = 1'b0;
@@ -439,8 +448,7 @@ class rvgpu_mmu_test_base;
         // Check MMU interface outputs (should be in reset state)
         `FAIL_IF(mmu_if.req_valid !== 1'b0)
         `FAIL_IF(mmu_if.req_vaddr !== 48'h0)
-        `FAIL_IF(mmu_if.req_read !== 1'b0)
-        `FAIL_IF(mmu_if.req_write !== 1'b0)
+        `FAIL_IF(mmu_if.req_type !== MMU_READ)
         `FAIL_IF(mmu_if.resp_valid !== 1'b0)
         `FAIL_IF(mmu_if.resp_paddr !== 48'h0)
         `FAIL_IF(mmu_if.resp_hit !== 1'b0)

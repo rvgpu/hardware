@@ -152,8 +152,7 @@ module rvgpu_job_dispatcher #(
         // MMU/NOC接口默认
         mmu_if.req_valid = 1'b0;
         mmu_if.req_vaddr = package_addr_r[47:0];
-        mmu_if.req_read = 1'b1;
-        mmu_if.req_write = 1'b0;
+        mmu_if.req_type = MMU_READ;
         mmu_if.resp_ready = 1'b0;
         mmu_config_if.cfg_en = 1'b0;
         mmu_config_if.cfg_base_addr = jd_if.mmu_addr[47:0];
@@ -179,8 +178,7 @@ module rvgpu_job_dispatcher #(
             STATE_MMU_REQ: begin
                 mmu_if.req_valid = 1'b1;
                 mmu_if.req_vaddr = package_addr_r[47:0];
-                mmu_if.req_read = 1'b1;
-                mmu_if.req_write = 1'b0;
+                mmu_if.req_type = MMU_READ;
                 if (mmu_if.req_valid && mmu_if.req_ready) begin
                     state_n = STATE_MMU_WAIT;
                 end

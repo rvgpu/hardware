@@ -17,13 +17,7 @@
 `define GPC_MMU_IF_SVH
 
 `include "rvgpu_typedef.svh"
-
-// 访问类型定义
-typedef enum logic [2:0] {
-    MMU_READ    = 3'b001,
-    MMU_WRITE   = 3'b010,
-    MMU_EXECUTE = 3'b100
-} mmu_access_type_e;
+`include "rvgpu_mmu_if.svh"  // 包含通用的MMU接口定义，包括mmu_access_type_e
 
 // GPC MMU查询接口，用于地址翻译请求/响应
 interface gpc_mmu_if;
@@ -31,7 +25,7 @@ interface gpc_mmu_if;
     logic                req_valid;      // 请求有效
     logic                req_ready;      // MMU准备好接收请求
     logic [38:0]         req_vaddr;      // 虚拟地址
-    logic [2:0]          req_type;       // 访问类型 (读/写/执行)
+    mmu_access_type_e    req_type;       // 访问类型 (读/写/执行)
     logic [31:0]         req_warp_id;    // Warp ID (用于跟踪)
     logic [3:0]          req_source_id;  // 请求源ID (用于区分不同的请求者)
     

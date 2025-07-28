@@ -70,8 +70,7 @@ module rvgpu_mmu #(
     // 数据寄存器
     logic [VA_WIDTH-1:0] vaddr_r, vaddr_nxt;
     logic [PA_WIDTH-1:0] paddr_r, paddr_nxt;
-    logic req_read_r, req_read_nxt;
-    logic req_write_r, req_write_nxt;
+    mmu_access_type_e req_type_r, req_type_nxt;
     
     // TLB接口
     tlb_if #(
@@ -136,8 +135,7 @@ module rvgpu_mmu #(
         state_nxt = state_r;
         vaddr_nxt = vaddr_r;
         paddr_nxt = paddr_r;
-        req_read_nxt = req_read_r;
-        req_write_nxt = req_write_r;
+        req_type_nxt = req_type_r;
         current_pt_base_nxt = current_pt_base_r;
         page_level_nxt = page_level_r;
         tlb_hit_count_nxt = tlb_hit_count_r;
@@ -161,8 +159,7 @@ module rvgpu_mmu #(
                 if (req_accept) begin
                     state_nxt = MMU_STATE_TLB_LOOKUP;
                     vaddr_nxt = mmu_if.req_vaddr;
-                    req_read_nxt = mmu_if.req_read;
-                    req_write_nxt = mmu_if.req_write;
+                    req_type_nxt = mmu_if.req_type;
                     page_level_nxt = L1_LEVEL;  // 从L1开始
                     current_pt_base_nxt = page_table_base_r;  // 使用配置的页表基地址
                 end
@@ -299,8 +296,7 @@ module rvgpu_mmu #(
             state_r <= MMU_STATE_IDLE;
             vaddr_r <= '0;
             paddr_r <= '0;
-            req_read_r <= 1'b0;
-            req_write_r <= 1'b0;
+            req_type_r <= MMU_READ;
             page_level_r <= L1_LEVEL;
             current_pt_base_r <= '0;
             tlb_hit_count_r <= '0;
@@ -324,8 +320,7 @@ module rvgpu_mmu #(
             state_r <= state_nxt;
             vaddr_r <= vaddr_nxt;
             paddr_r <= paddr_nxt;
-            req_read_r <= req_read_nxt;
-            req_write_r <= req_write_nxt;
+            req_type_r <= req_type_nxt;
             page_level_r <= page_level_nxt;
             current_pt_base_r <= current_pt_base_nxt;
             tlb_hit_count_r <= tlb_hit_count_nxt;
@@ -405,7 +400,7 @@ module rvgpu_mmu #(
     if (CU_CONFIG.debug) begin : gen_debug
         always_ff @(posedge clk) begin
             if (state_r == MMU_STATE_IDLE && req_accept) begin
-                `DEBUG_PRINT("MMU", $sformatf("MMU Request, vaddr: 0x%h, req_read: %b, req_write: %b", mmu_if.req_vaddr, req_read_r, req_write_r));
+                `DEBUG_PRINT("MMU", $sformatf("MMU Request, vaddr: 0x%h, req_type: %s", mmu_if.req_vaddr, req_type_r.name()));
             end
 
             if ((state_r == MMU_STATE_PAGE_WAIT) && noc_resp_accept) begin

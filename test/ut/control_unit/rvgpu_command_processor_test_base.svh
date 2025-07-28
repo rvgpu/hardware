@@ -107,8 +107,7 @@ class rvgpu_command_processor_test_base;
         // MMU interface - initialize to idle state
         mmu_if.req_valid = 0;
         mmu_if.req_vaddr = 0;
-        mmu_if.req_read = 0;
-        mmu_if.req_write = 0;
+        mmu_if.req_type = MMU_READ;
         mmu_if.resp_ready = 1;  // MMU ready to accept requests
         mmu_if.resp_valid = 0;
         mmu_if.resp_paddr = 0;
@@ -141,8 +140,7 @@ class rvgpu_command_processor_test_base;
     task clear_mmu_signals();
         mmu_if.req_valid = 1'b0;
         mmu_if.req_vaddr = '0;
-        mmu_if.req_read = 1'b0;
-        mmu_if.req_write = 1'b0;
+        mmu_if.req_type = MMU_READ;
         mmu_if.resp_ready = 1'b0;
         
         // Clear MMU config interface signals

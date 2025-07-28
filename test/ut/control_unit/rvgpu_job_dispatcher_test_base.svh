@@ -121,8 +121,7 @@ class rvgpu_job_dispatcher_test_base;
         // MMU interface
         mmu_if.req_valid = 1'b0;
         mmu_if.req_vaddr = 48'h0;
-        mmu_if.req_read = 1'b0;
-        mmu_if.req_write = 1'b0;
+        mmu_if.req_type = MMU_READ;
         mmu_if.req_ready = 1'b1;  // 设置req_ready为1，允许DUT发送请求
         mmu_if.resp_ready = 1'b1;
         mmu_if.resp_valid = 1'b0;
@@ -153,8 +152,7 @@ class rvgpu_job_dispatcher_test_base;
     task clear_mmu_signals();
         mmu_if.req_valid = 1'b0;
         mmu_if.req_vaddr = 48'h0;
-        mmu_if.req_read = 1'b0;
-        mmu_if.req_write = 1'b0;
+        mmu_if.req_type = MMU_READ;
         mmu_if.req_ready = 1'b1;  // 保持req_ready为1
         mmu_if.resp_ready = 1'b1;  // 保持resp_ready为1
     endtask
@@ -312,8 +310,8 @@ class rvgpu_job_dispatcher_test_base;
             `FAIL_IF(1)
         end else begin
             vaddr = mmu_if.req_vaddr;
-            read = mmu_if.req_read;
-            write = mmu_if.req_write;
+            read = mmu_if.req_type == MMU_READ;
+            write = mmu_if.req_type == MMU_WRITE;
             $display("@%0t: MMU request received after %0d cycles: vaddr=0x%012x, read=%0d, write=%0d", 
                      $time, cycle_count, vaddr, read, write);
             

@@ -216,7 +216,7 @@ module rvgpu_gpc_block_scheduler #(
             WAIT_MMU: begin
                 // 等待MMU响应
                 if (mmu_if.resp_valid) begin
-                    if (mmu_if.resp_status == 2'b00) begin  // 使用resp_status替代resp_fault
+                    if (mmu_if.resp_status == MMU_RESP_OKAY) begin  // 使用MMU状态码
                         // MMU命中，保存物理地址
                         arglist_paddr_n = mmu_if.resp_paddr;  // 使用resp_paddr替代resp_ppn
                         state_n = REQUEST_CACHE;

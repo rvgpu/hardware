@@ -232,7 +232,7 @@ module rvgpu_sm #(
         .tlb_resp_valid(tlb_if.resp_valid),
         .tlb_resp_hit(tlb_if.resp_hit),
         .tlb_resp_ppn(tlb_if.resp_paddr[38:12]),  // 从resp_paddr提取PPN
-        .tlb_resp_fault(tlb_if.resp_status != 2'b00)  // 使用resp_status替代resp_fault
+        .tlb_resp_fault(tlb_if.resp_status != MMU_RESP_OKAY)  // 使用MMU状态码
     );
     
     // =========================================================================

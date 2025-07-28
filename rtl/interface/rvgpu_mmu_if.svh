@@ -28,6 +28,16 @@ typedef enum logic [2:0] {
 } mmu_access_type_e;
 
 //=============================================================================
+// MMU响应状态码定义
+//=============================================================================
+typedef enum logic [1:0] {
+    MMU_RESP_OKAY      = 2'b00,    // 地址转换成功
+    MMU_RESP_TLB_MISS  = 2'b01,    // TLB未命中
+    MMU_RESP_FAULT     = 2'b10,    // 页错误（权限错误、无效地址等）
+    MMU_RESP_ERROR     = 2'b11     // 其他错误
+} mmu_resp_status_e;
+
+//=============================================================================
 // MMU Interface - 基本的MMU请求/响应接口
 // 用于地址转换请求和响应，不包含配置信号
 //=============================================================================
@@ -38,14 +48,14 @@ interface mmu_if;
     // Request Channel
     logic                               req_valid;
     logic [VA_WIDTH-1:0]                req_vaddr;
-    mmu_access_type_e                   req_type;       // 访问类型：READ/WRITE/EXECUTE
+    mmu_access_type_e                   req_type;       // 使用枚举类型
     logic                               req_ready;
     
     // Response Channel
     logic                               resp_valid;
     logic [PA_WIDTH-1:0]                resp_paddr;
     logic                               resp_hit;
-    logic [1:0]                         resp_status;
+    mmu_resp_status_e                   resp_status;    // 使用枚举类型
     logic                               resp_ready;
     
     // Requestor port (发起地址转换请求)

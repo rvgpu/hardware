@@ -380,7 +380,7 @@ module rvgpu_mmu #(
     assign mmu_if.resp_valid = (state_r == MMU_STATE_RESPONSE) || (state_r == MMU_STATE_ERROR);
     assign mmu_if.resp_paddr = paddr_r;
     assign mmu_if.resp_hit = (state_r == MMU_STATE_RESPONSE);
-    assign mmu_if.resp_status = (state_r == MMU_STATE_ERROR) ? 2'b10 : 2'b00;
+    assign mmu_if.resp_status = (state_r == MMU_STATE_ERROR) ? MMU_RESP_FAULT : MMU_RESP_OKAY;  // 使用MMU状态码
     
     function automatic logic [63:0] select_resp_data(input logic [255:0] data);
         logic [63:0] result;

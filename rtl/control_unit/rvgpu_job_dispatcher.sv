@@ -186,7 +186,7 @@ module rvgpu_job_dispatcher #(
             STATE_MMU_WAIT: begin
                 mmu_if.resp_ready = 1'b1;
                 if (mmu_if.resp_valid && mmu_if.resp_ready) begin
-                    if (mmu_if.resp_status == 2'b00) begin
+                    if (mmu_if.resp_status == MMU_RESP_OKAY) begin  // 使用MMU状态码
                         mmu_paddr_n = mmu_if.resp_paddr;
                         state_n = STATE_NOC_REQ;
                     end else begin

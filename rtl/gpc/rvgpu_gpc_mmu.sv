@@ -19,7 +19,7 @@
 `include "rvgpu_typedef.svh"
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_noc_message.svh"
-`include "gpc_mmu_if.svh"
+`include "rvgpu_mmu_if.svh"  // 使用通用MMU接口
 
 module rvgpu_gpc_mmu #(
     parameter int TLB_ENTRIES = 128,   // L1 TLB条目数量
@@ -29,24 +29,31 @@ module rvgpu_gpc_mmu #(
     input  logic clk,
     input  logic rst_n,
     
-    // Block Scheduler请求接口
-    gpc_mmu_if.provider bs_if,
+    // Block Scheduler请求接口 - 使用通用mmu_if
+    mmu_if.mmu_port bs_if,
     
-    // TPC请求接口 (支持多个TPC)
-    gpc_mmu_if.provider tpc_if[4],
+    // TPC请求接口 (支持多个TPC) - 使用通用mmu_if
+    mmu_if.mmu_port tpc_if[4],
     
-    // L0 TLB更新接口 (支持多个TPC的L0 TLB)
-    gpc_tlb_update_if.initiator l0_tlb_if[4],
+    // L0 TLB更新接口 - 使用通用tlb_update_if
+    tlb_update_if.initiator l0_tlb_if[4],
     
     // NOC Adapter接口 (连接到控制单元MMU)
     rvgpu_internal_noc_if.device noc_if
 );
 
+    // 地址位宽参数
+    localparam int VA_WIDTH = `RVGPU_CONST_CU_VA_WIDTH;
+    localparam int PA_WIDTH = `RVGPU_CONST_CU_PA_WIDTH;
+    localparam int PAGE_OFFSET_BITS = `RVGPU_CONST_CU_PAGE_OFFSET_BITS;
+    localparam int VPN_BITS = VA_WIDTH - PAGE_OFFSET_BITS;
+    localparam int PPN_BITS = PA_WIDTH - PAGE_OFFSET_BITS;
+
     // TLB表项定义
     typedef struct packed {
         logic        valid;          // 有效位
-        logic [26:0] vpn;            // 虚拟页号 (39位地址的高27位)
-        logic [26:0] ppn;            // 物理页号
+        logic [VPN_BITS-1:0] vpn;    // 虚拟页号
+        logic [PA_WIDTH-1:0] paddr;  // 完整物理地址
         logic [2:0]  perm;           // 权限 (读/写/执行)
         logic        accessed;       // 访问位
         logic [3:0]  plru;           // PLRU位
@@ -55,10 +62,8 @@ module rvgpu_gpc_mmu #(
     // 请求队列表项定义
     typedef struct packed {
         logic        valid;          // 有效位
-        logic [38:0] vaddr;          // 虚拟地址
+        logic [VA_WIDTH-1:0] vaddr;  // 虚拟地址
         mmu_access_type_e req_type;  // 访问类型
-        logic [31:0] warp_id;        // Warp ID
-        logic [3:0]  source_id;      // 请求源ID
         logic [3:0]  tpc_id;         // TPC ID (0-3表示TPC, 4表示Block Scheduler)
         logic        pending;        // 请求是否正在处理中
     } req_entry_t;
@@ -88,13 +93,13 @@ module rvgpu_gpc_mmu #(
     mmu_state_t state;
     logic [$clog2(TLB_ENTRIES)-1:0] replace_index;
     logic [$clog2(TLB_ENTRIES)-1:0] hit_index;
-    logic [26:0] req_vpn;
+    logic [VPN_BITS-1:0] req_vpn;
     logic tlb_hit;
     logic tlb_fault;
     
     // 当前处理的请求
     req_entry_t current_req;
-    logic [26:0] current_ppn;
+    logic [PA_WIDTH-1:0] current_paddr;  // 完整物理地址
     
     // 仲裁器 - 简单的轮询策略
     logic [2:0] arbiter_ptr;
@@ -175,34 +180,24 @@ module rvgpu_gpc_mmu #(
                     // Block Scheduler请求
                     req_queue[req_tail].vaddr <= bs_if.req_vaddr;
                     req_queue[req_tail].req_type <= bs_if.req_type;
-                    req_queue[req_tail].warp_id <= bs_if.req_warp_id;
-                    req_queue[req_tail].source_id <= bs_if.req_source_id;
                     req_queue[req_tail].tpc_id <= 4; // 4表示Block Scheduler
                 end else begin
                     // TPC请求 - 简化处理
                     if (req_grant_array[0]) begin
                         req_queue[req_tail].vaddr <= tpc_if[0].req_vaddr;
                         req_queue[req_tail].req_type <= tpc_if[0].req_type;
-                        req_queue[req_tail].warp_id <= tpc_if[0].req_warp_id;
-                        req_queue[req_tail].source_id <= tpc_if[0].req_source_id;
                         req_queue[req_tail].tpc_id <= 0;
                     end else if (req_grant_array[1]) begin
                         req_queue[req_tail].vaddr <= tpc_if[1].req_vaddr;
                         req_queue[req_tail].req_type <= tpc_if[1].req_type;
-                        req_queue[req_tail].warp_id <= tpc_if[1].req_warp_id;
-                        req_queue[req_tail].source_id <= tpc_if[1].req_source_id;
                         req_queue[req_tail].tpc_id <= 1;
                     end else if (req_grant_array[2]) begin
                         req_queue[req_tail].vaddr <= tpc_if[2].req_vaddr;
                         req_queue[req_tail].req_type <= tpc_if[2].req_type;
-                        req_queue[req_tail].warp_id <= tpc_if[2].req_warp_id;
-                        req_queue[req_tail].source_id <= tpc_if[2].req_source_id;
                         req_queue[req_tail].tpc_id <= 2;
                     end else if (req_grant_array[3]) begin
                         req_queue[req_tail].vaddr <= tpc_if[3].req_vaddr;
                         req_queue[req_tail].req_type <= tpc_if[3].req_type;
-                        req_queue[req_tail].warp_id <= tpc_if[3].req_warp_id;
-                        req_queue[req_tail].source_id <= tpc_if[3].req_source_id;
                         req_queue[req_tail].tpc_id <= 3;
                     end
                 end
@@ -249,7 +244,7 @@ module rvgpu_gpc_mmu #(
     end
     
     // 提取虚拟页号
-    assign req_vpn = current_req.vaddr[38:12];
+    assign req_vpn = current_req.vaddr[VA_WIDTH-1:PAGE_OFFSET_BITS];
     
     // TLB查找逻辑
     always_comb begin
@@ -311,21 +306,21 @@ module rvgpu_gpc_mmu #(
         if (!rst_n) begin
             state <= IDLE;
             current_req <= '0;
-            current_ppn <= '0;
+            current_paddr <= '0;
             noc_if.m_req_valid <= 1'b0;
             noc_if.m_resp_ready <= 1'b0;
             
             // 初始化TLB条目 - 简化处理
             tlb_entries[0].valid <= 1'b0;
             tlb_entries[0].vpn <= '0;
-            tlb_entries[0].ppn <= '0;
+            tlb_entries[0].paddr <= '0;
             tlb_entries[0].perm <= '0;
             tlb_entries[0].accessed <= 1'b0;
             tlb_entries[0].plru <= 4'h0;
             
             tlb_entries[1].valid <= 1'b0;
             tlb_entries[1].vpn <= '0;
-            tlb_entries[1].ppn <= '0;
+            tlb_entries[1].paddr <= '0;
             tlb_entries[1].perm <= '0;
             tlb_entries[1].accessed <= 1'b0;
             tlb_entries[1].plru <= 4'h1;
@@ -360,7 +355,7 @@ module rvgpu_gpc_mmu #(
                 LOOKUP: begin
                     if (tlb_hit) begin
                         // TLB命中，更新PLRU并准备响应
-                        current_ppn <= tlb_entries[hit_index].ppn;
+                        current_paddr <= tlb_entries[hit_index].paddr;
                         
                         // 更新命中条目的PLRU和访问位
                         tlb_entries[hit_index].accessed <= 1'b1;
@@ -383,18 +378,18 @@ module rvgpu_gpc_mmu #(
                 
                 SEND_TO_NOC: begin
                     // 发送请求到NOC Adapter
-                                noc_if.m_req_valid <= 1'b1;
-            noc_if.m_req_header <= build_noc_header_mmu_request(
-                current_req.source_id,
-                NODE_CONTROL,
-                NOC_NODE_CONTROL_MMU
-            );
-            noc_if.m_req_data <= {current_req.vaddr, current_req.req_type, current_req.warp_id, current_req.source_id, GPC_ID};
-            noc_if.m_req_strb <= '1;
-            noc_if.m_req_last <= 1'b1;
-            
-            if (noc_if.m_req_ready) begin
-                noc_if.m_req_valid <= 1'b0;
+                    noc_if.m_req_valid <= 1'b1;
+                    noc_if.m_req_header <= build_noc_header_mmu_request(
+                        current_req.tpc_id,  // 使用tpc_id替代source_id
+                        NODE_CONTROL,
+                        NOC_NODE_CONTROL_MMU
+                    );
+                    noc_if.m_req_data <= {current_req.vaddr, current_req.req_type, 32'h0, current_req.tpc_id, GPC_ID};  // 使用默认值替代warp_id和source_id
+                    noc_if.m_req_strb <= '1;
+                    noc_if.m_req_last <= 1'b1;
+                    
+                    if (noc_if.m_req_ready) begin
+                        noc_if.m_req_valid <= 1'b0;
                         state <= WAIT_NOC;
                     end
                 end
@@ -407,7 +402,7 @@ module rvgpu_gpc_mmu #(
                         noc_if.m_resp_ready <= 1'b0;
                         
                         // 从响应数据中提取信息
-                        current_ppn <= noc_if.m_resp_data[26:0];
+                        current_paddr <= noc_if.m_resp_data[PA_WIDTH-1:PAGE_OFFSET_BITS];
                         
                         if (!noc_if.m_resp_data[28]) begin // 假设fault位在data[28]
                             // 如果没有错误，更新TLB
@@ -423,7 +418,7 @@ module rvgpu_gpc_mmu #(
                     // 更新TLB
                     tlb_entries[replace_index].valid <= 1'b1;
                     tlb_entries[replace_index].vpn <= req_vpn;
-                    tlb_entries[replace_index].ppn <= current_ppn;
+                    tlb_entries[replace_index].paddr <= current_paddr;
                     tlb_entries[replace_index].perm <= current_req.req_type; // 简化实现，实际应使用MMU返回的权限
                     tlb_entries[replace_index].accessed <= 1'b1;
                     tlb_entries[replace_index].plru <= '1; // 最近使用
@@ -450,7 +445,7 @@ module rvgpu_gpc_mmu #(
                         0: begin
                             l0_tlb_if[0].update_valid <= 1'b1;
                             l0_tlb_if[0].update_vaddr <= current_req.vaddr;
-                            l0_tlb_if[0].update_ppn <= current_ppn;
+                            l0_tlb_if[0].update_paddr <= current_paddr;
                             l0_tlb_if[0].update_perm <= current_req.req_type;
                             
                             if (l0_tlb_if[0].update_ready) begin
@@ -461,7 +456,7 @@ module rvgpu_gpc_mmu #(
                         1: begin
                             l0_tlb_if[1].update_valid <= 1'b1;
                             l0_tlb_if[1].update_vaddr <= current_req.vaddr;
-                            l0_tlb_if[1].update_ppn <= current_ppn;
+                            l0_tlb_if[1].update_paddr <= current_paddr;
                             l0_tlb_if[1].update_perm <= current_req.req_type;
                             
                             if (l0_tlb_if[1].update_ready) begin
@@ -472,7 +467,7 @@ module rvgpu_gpc_mmu #(
                         2: begin
                             l0_tlb_if[2].update_valid <= 1'b1;
                             l0_tlb_if[2].update_vaddr <= current_req.vaddr;
-                            l0_tlb_if[2].update_ppn <= current_ppn;
+                            l0_tlb_if[2].update_paddr <= current_paddr;
                             l0_tlb_if[2].update_perm <= current_req.req_type;
                             
                             if (l0_tlb_if[2].update_ready) begin
@@ -483,7 +478,7 @@ module rvgpu_gpc_mmu #(
                         3: begin
                             l0_tlb_if[3].update_valid <= 1'b1;
                             l0_tlb_if[3].update_vaddr <= current_req.vaddr;
-                            l0_tlb_if[3].update_ppn <= current_ppn;
+                            l0_tlb_if[3].update_paddr <= current_paddr;
                             l0_tlb_if[3].update_perm <= current_req.req_type;
                             
                             if (l0_tlb_if[3].update_ready) begin
@@ -500,11 +495,9 @@ module rvgpu_gpc_mmu #(
                     if (current_req.tpc_id == 4) begin
                         // 响应Block Scheduler
                         bs_if.resp_valid <= 1'b1;
-                        bs_if.resp_ppn <= current_ppn;
+                        bs_if.resp_paddr <= current_paddr;
                         bs_if.resp_hit <= tlb_hit;
-                        bs_if.resp_fault <= tlb_fault;
-                        bs_if.resp_warp_id <= current_req.warp_id;
-                        bs_if.resp_source_id <= current_req.source_id;
+                        bs_if.resp_status <= tlb_fault ? 2'b10 : 2'b00;  // 使用resp_status替代resp_fault
                         
                         if (bs_if.resp_ready) begin
                             bs_if.resp_valid <= 1'b0;
@@ -515,11 +508,9 @@ module rvgpu_gpc_mmu #(
                         case (current_req.tpc_id)
                             0: begin
                                 tpc_if[0].resp_valid <= 1'b1;
-                                tpc_if[0].resp_ppn <= current_ppn;
+                                tpc_if[0].resp_paddr <= current_paddr;
                                 tpc_if[0].resp_hit <= tlb_hit;
-                                tpc_if[0].resp_fault <= tlb_fault;
-                                tpc_if[0].resp_warp_id <= current_req.warp_id;
-                                tpc_if[0].resp_source_id <= current_req.source_id;
+                                tpc_if[0].resp_status <= tlb_fault ? 2'b10 : 2'b00;  // 使用resp_status替代resp_fault
                                 
                                 if (tpc_if[0].resp_ready) begin
                                     tpc_if[0].resp_valid <= 1'b0;
@@ -528,11 +519,9 @@ module rvgpu_gpc_mmu #(
                             end
                             1: begin
                                 tpc_if[1].resp_valid <= 1'b1;
-                                tpc_if[1].resp_ppn <= current_ppn;
+                                tpc_if[1].resp_paddr <= current_paddr;
                                 tpc_if[1].resp_hit <= tlb_hit;
-                                tpc_if[1].resp_fault <= tlb_fault;
-                                tpc_if[1].resp_warp_id <= current_req.warp_id;
-                                tpc_if[1].resp_source_id <= current_req.source_id;
+                                tpc_if[1].resp_status <= tlb_fault ? 2'b10 : 2'b00;  // 使用resp_status替代resp_fault
                                 
                                 if (tpc_if[1].resp_ready) begin
                                     tpc_if[1].resp_valid <= 1'b0;
@@ -541,11 +530,9 @@ module rvgpu_gpc_mmu #(
                             end
                             2: begin
                                 tpc_if[2].resp_valid <= 1'b1;
-                                tpc_if[2].resp_ppn <= current_ppn;
+                                tpc_if[2].resp_paddr <= current_paddr;
                                 tpc_if[2].resp_hit <= tlb_hit;
-                                tpc_if[2].resp_fault <= tlb_fault;
-                                tpc_if[2].resp_warp_id <= current_req.warp_id;
-                                tpc_if[2].resp_source_id <= current_req.source_id;
+                                tpc_if[2].resp_status <= tlb_fault ? 2'b10 : 2'b00;  // 使用resp_status替代resp_fault
                                 
                                 if (tpc_if[2].resp_ready) begin
                                     tpc_if[2].resp_valid <= 1'b0;
@@ -554,11 +541,9 @@ module rvgpu_gpc_mmu #(
                             end
                             3: begin
                                 tpc_if[3].resp_valid <= 1'b1;
-                                tpc_if[3].resp_ppn <= current_ppn;
+                                tpc_if[3].resp_paddr <= current_paddr;
                                 tpc_if[3].resp_hit <= tlb_hit;
-                                tpc_if[3].resp_fault <= tlb_fault;
-                                tpc_if[3].resp_warp_id <= current_req.warp_id;
-                                tpc_if[3].resp_source_id <= current_req.source_id;
+                                tpc_if[3].resp_status <= tlb_fault ? 2'b10 : 2'b00;  // 使用resp_status替代resp_fault
                                 
                                 if (tpc_if[3].resp_ready) begin
                                     tpc_if[3].resp_valid <= 1'b0;

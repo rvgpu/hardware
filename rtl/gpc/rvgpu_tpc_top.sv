@@ -19,7 +19,9 @@
 `include "rvgpu_typedef.svh"
 `include "gpc_block_tpc_if.svh"
 `include "gpc_l15_cache_if.svh"
-`include "gpc_mmu_if.svh"
+`include "rvgpu_internal_noc_if.svh"
+`include "rvgpu_noc_message.svh"
+`include "rvgpu_mmu_if.svh"  // 使用通用MMU接口
 `include "ldst_sm_if.svh"
 
 // TPC顶层模块 - 简化版本
@@ -34,16 +36,16 @@ module rvgpu_tpc_top #(
     input  logic rst_n,
     
     // Block Scheduler接口
-    gpc_block_tpc_if.tpc block_dispatch_if,
+    gpc_block_tpc_if.tpc tpc_if,
     
     // L1.5 Cache接口（汇聚所有SM的缓存请求）
     gpc_l15_cache_if.requester l15_if,
     
     // GPC MMU接口（汇聚所有SM的TLB请求）
-    gpc_mmu_if.requester tlb_if,
+    mmu_if.requester_port tlb_if,
     
     // GPC TLB更新接口（接收来自MMU的TLB更新）
-    gpc_tlb_update_if.receiver tlb_update_if,
+    tlb_update_if.receiver tlb_update_if,
     
     // 状态输出（简化）
     output logic [7:0] active_warps_count,   // 活跃warp数量
@@ -70,8 +72,8 @@ module rvgpu_tpc_top #(
     
     // SM接口信号
     gpc_l15_cache_if sm_l15_if[NUM_SM]();     // 每个SM的L1.5 Cache接口
-    gpc_mmu_if sm_tlb_if[NUM_SM]();        // 每个SM的TLB接口
-    gpc_tlb_update_if sm_tlb_update_if[NUM_SM](); // 每个SM的TLB更新接口
+    mmu_if sm_tlb_if[NUM_SM]();        // 每个SM的TLB接口
+    tlb_update_if sm_tlb_update_if[NUM_SM](); // 每个SM的TLB更新接口
     gpc_block_tpc_if sm_dispatch_if[NUM_SM](); // 每个SM的任务分发接口
     ldst_sm_if sm_ldst_if[NUM_SM]();          // 每个SM的LDST接口（暂时保留）
     
@@ -106,42 +108,42 @@ module rvgpu_tpc_top #(
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             round_robin_counter <= '0;
-            block_dispatch_if.block_ready <= 1'b0;
+            tpc_if.block_ready <= 1'b0;
             // 复位所有SM接口
             sm_dispatch_if[0].warp_valid <= 1'b0;
             sm_dispatch_if[1].warp_valid <= 1'b0;
         end else begin
             // 默认状态
-            block_dispatch_if.block_ready <= 1'b0;
+            tpc_if.block_ready <= 1'b0;
             
             // 处理来自Block Scheduler的任务
-            if (block_dispatch_if.block_valid && sm_available[next_sm_id]) begin
+            if (tpc_if.block_valid && sm_available[next_sm_id]) begin
                 // 将任务分发给选中的SM
                 case (next_sm_id)
                     0: begin
                         sm_dispatch_if[0].warp_valid <= 1'b1;
-                        sm_dispatch_if[0].warp_id <= block_dispatch_if.block_id;  // 使用block_id作为warp_id
-                        sm_dispatch_if[0].warp_block_id <= block_dispatch_if.block_id;
-                        sm_dispatch_if[0].warp_program_addr <= block_dispatch_if.program_addr;
-                        sm_dispatch_if[0].warp_arglist_ptr <= block_dispatch_if.arglist_ptr;
-                        sm_dispatch_if[0].warp_argument_size <= block_dispatch_if.argument_size;
+                        sm_dispatch_if[0].warp_id <= tpc_if.block_id;  // 使用block_id作为warp_id
+                        sm_dispatch_if[0].warp_block_id <= tpc_if.block_id;
+                        sm_dispatch_if[0].warp_program_addr <= tpc_if.program_addr;
+                        sm_dispatch_if[0].warp_arglist_ptr <= tpc_if.arglist_ptr;
+                        sm_dispatch_if[0].warp_argument_size <= tpc_if.argument_size;
                         sm_dispatch_if[0].thread_mask <= 32'hFFFFFFFF;  // 默认所有线程都活跃
-                        sm_dispatch_if[0].warp_arglist_data <= block_dispatch_if.arglist_data;
+                        sm_dispatch_if[0].warp_arglist_data <= tpc_if.arglist_data;
                     end
                     1: begin
                         sm_dispatch_if[1].warp_valid <= 1'b1;
-                        sm_dispatch_if[1].warp_id <= block_dispatch_if.block_id;  // 使用block_id作为warp_id
-                        sm_dispatch_if[1].warp_block_id <= block_dispatch_if.block_id;
-                        sm_dispatch_if[1].warp_program_addr <= block_dispatch_if.program_addr;
-                        sm_dispatch_if[1].warp_arglist_ptr <= block_dispatch_if.arglist_ptr;
-                        sm_dispatch_if[1].warp_argument_size <= block_dispatch_if.argument_size;
+                        sm_dispatch_if[1].warp_id <= tpc_if.block_id;  // 使用block_id作为warp_id
+                        sm_dispatch_if[1].warp_block_id <= tpc_if.block_id;
+                        sm_dispatch_if[1].warp_program_addr <= tpc_if.program_addr;
+                        sm_dispatch_if[1].warp_arglist_ptr <= tpc_if.arglist_ptr;
+                        sm_dispatch_if[1].warp_argument_size <= tpc_if.argument_size;
                         sm_dispatch_if[1].thread_mask <= 32'hFFFFFFFF;  // 默认所有线程都活跃
-                        sm_dispatch_if[1].warp_arglist_data <= block_dispatch_if.arglist_data;
+                        sm_dispatch_if[1].warp_arglist_data <= tpc_if.arglist_data;
                     end
                 endcase
                 
                 // 确认接收任务
-                block_dispatch_if.block_ready <= 1'b1;
+                tpc_if.block_ready <= 1'b1;
                 
                 // 更新轮询计数器
                 round_robin_counter <= (round_robin_counter + 1) % NUM_SM;
@@ -369,7 +371,7 @@ module rvgpu_tpc_top #(
                 .l15_if(sm_l15_if[i].requester),
                 
                 // TLB接口
-                .tlb_if(sm_tlb_if[i].requester),
+                .tlb_if(sm_tlb_if[i]),
                 
                 // 完成信号
                 .warp_complete(sm_dispatch_if[i].complete_valid),

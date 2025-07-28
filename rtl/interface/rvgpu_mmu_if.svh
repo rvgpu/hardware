@@ -87,4 +87,32 @@ interface cp_mmu_config_if;
     );
 endinterface : cp_mmu_config_if
 
+//=============================================================================
+// TLB更新接口 - 通用的TLB更新接口
+// 用于MMU向TLB发送更新请求
+//=============================================================================
+interface tlb_update_if;
+    localparam int VA_WIDTH = `RVGPU_CONST_CU_VA_WIDTH;
+    localparam int PA_WIDTH = `RVGPU_CONST_CU_PA_WIDTH;
+
+    // TLB更新通道
+    logic                               update_valid;     // 更新请求有效
+    logic                               update_ready;     // TLB准备好接收更新
+    logic [VA_WIDTH-1:0]                update_vaddr;     // 要更新的虚拟地址
+    logic [PA_WIDTH-1:0]                update_paddr;     // 新的物理地址
+    logic [2:0]                         update_perm;      // 页权限
+    
+    // 更新发起者端口 (MMU)
+    modport initiator (
+        output update_valid, update_vaddr, update_paddr, update_perm,
+        input  update_ready
+    );
+    
+    // 更新接收者端口 (TLB)
+    modport receiver (
+        input  update_valid, update_vaddr, update_paddr, update_perm,
+        output update_ready
+    );
+endinterface : tlb_update_if
+
 `endif // RVGPU_MMU_IF_SVH

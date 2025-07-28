@@ -41,8 +41,8 @@ module rvgpu_sm #(
     // L1.5 Cache接口 (用于指令获取)
     gpc_l15_cache_if.requester l15_if,
     
-    // L0 TLB接口 (用于指令地址转换)
-    gpc_mmu_if.requester tlb_if,
+    // TLB接口
+    mmu_if.requester_port tlb_if,
     
     // 完成信号
     output logic warp_complete,
@@ -228,13 +228,11 @@ module rvgpu_sm #(
         .tlb_req_valid(tlb_if.req_valid),
         .tlb_req_vaddr(tlb_if.req_vaddr),
         .tlb_req_type(tlb_if.req_type),
-        .tlb_req_warp_id(tlb_if.req_warp_id),
         .tlb_req_ready(tlb_if.req_ready),
         .tlb_resp_valid(tlb_if.resp_valid),
         .tlb_resp_hit(tlb_if.resp_hit),
-        .tlb_resp_ppn(tlb_if.resp_ppn),
-        .tlb_resp_fault(tlb_if.resp_fault),
-        .tlb_resp_warp_id(tlb_if.resp_warp_id)
+        .tlb_resp_ppn(tlb_if.resp_paddr[38:12]),  // 从resp_paddr提取PPN
+        .tlb_resp_fault(tlb_if.resp_status != 2'b00)  // 使用resp_status替代resp_fault
     );
     
     // =========================================================================

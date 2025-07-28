@@ -17,16 +17,13 @@
 `define RVGPU_GPC_BLOCK_SCHEDULER_SV
 
 `include "rvgpu_typedef.svh"
-`include "rvgpu_job_cluster_block.svh"
-`include "gpc_block_tpc_if.svh"
-`include "gpc_block_raster_if.svh"
-`include "gpc_l15_cache_if.svh"
-`include "gpc_mmu_if.svh"
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_noc_message.svh"
+`include "rvgpu_mmu_if.svh"  // 使用通用MMU接口
 
-// GPC Block Scheduler模块
-// 负责接收job_cluster并将其调度到合适的TPC
+`include "gpc_block_raster_if.svh"
+`include "gpc_l15_cache_if.svh"
+
 module rvgpu_gpc_block_scheduler #(
     parameter int GPC_ID = 0,
     parameter int NUM_TPC = 4,           // TPC数量
@@ -48,8 +45,8 @@ module rvgpu_gpc_block_scheduler #(
     // L1.5 Cache接口
     gpc_l15_cache_if.requester l15_if,
     
-    // GPC MMU接口
-    gpc_mmu_if.requester mmu_if
+    // MMU接口
+    mmu_if.requester_port mmu_if
 );
     // 状态机状态
     typedef enum logic [3:0] {
@@ -208,8 +205,6 @@ module rvgpu_gpc_block_scheduler #(
                 mmu_if.req_valid = 1'b1;
                 mmu_if.req_vaddr = current_job_r.program_ptr + {args_counter_r, 5'b0};
                 mmu_if.req_type = MMU_READ;
-                mmu_if.req_warp_id = '0;
-                mmu_if.req_source_id = '0;
                 
                 if (mmu_if.req_valid && mmu_if.req_ready) begin
                     mmu_if.req_valid = 1'b0;
@@ -221,9 +216,9 @@ module rvgpu_gpc_block_scheduler #(
             WAIT_MMU: begin
                 // 等待MMU响应
                 if (mmu_if.resp_valid) begin
-                    if (!mmu_if.resp_fault) begin
+                    if (mmu_if.resp_status == 2'b00) begin  // 使用resp_status替代resp_fault
                         // MMU命中，保存物理地址
-                        arglist_paddr_n = {mmu_if.resp_ppn, (current_job_r.program_ptr[11:0] + {args_counter_r, 5'b0})};
+                        arglist_paddr_n = mmu_if.resp_paddr;  // 使用resp_paddr替代resp_ppn
                         state_n = REQUEST_CACHE;
                     end else begin
                         // MMU未命中，返回空闲状态

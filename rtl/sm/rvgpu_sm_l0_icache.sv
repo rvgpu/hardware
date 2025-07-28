@@ -17,7 +17,7 @@
 `define RVGPU_SM_L0_ICACHE_SV
 
 `include "rvgpu_typedef.svh"
-`include "gpc_mmu_if.svh"
+`include "rvgpu_mmu_if.svh"  // 使用通用MMU接口
 `include "gpc_l15_cache_if.svh"
 
 // SM L0 ICache模块

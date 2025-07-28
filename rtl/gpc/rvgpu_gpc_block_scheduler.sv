@@ -49,7 +49,7 @@ module rvgpu_gpc_block_scheduler #(
     gpc_l15_cache_if.requester l15_if,
     
     // GPC MMU接口
-    gpc_mmu_if.requester tlb_if
+    gpc_mmu_if.requester mmu_if
 );
     // 状态机状态
     typedef enum logic [3:0] {
@@ -59,6 +59,7 @@ module rvgpu_gpc_block_scheduler #(
         WAIT_MMU,
         REQUEST_CACHE,
         WAIT_CACHE,
+        STORE_ARGS,
         DISPATCH_BLOCK,
         WAIT_DISPATCH
     } scheduler_state_t;
@@ -79,6 +80,8 @@ module rvgpu_gpc_block_scheduler #(
     scheduler_state_t state_r, state_n;
     job_cluster_t current_job_r, current_job_n;
     logic [63:0] arglist_paddr_r, arglist_paddr_n;
+    logic [3:0] args_counter_r, args_counter_n;
+    logic [63:0] args_r[16];
     logic [31:0] current_block_id_r, current_block_id_n;
     logic [31:0] block_count_r, block_count_n;
     logic [$clog2(NUM_TPC)-1:0] target_tpc_r, target_tpc_n;
@@ -116,7 +119,7 @@ module rvgpu_gpc_block_scheduler #(
     function automatic block_t create_block(
         input logic [31:0] block_id,
         input job_cluster_t job,
-        input logic [255:0] arglist_data
+        input logic [63:0] args_array[16]
     );
         block_t block;
         
@@ -125,7 +128,8 @@ module rvgpu_gpc_block_scheduler #(
         block.program_addr = job.program_ptr;
         block.arglist_ptr = job.program_ptr + 64'd8;
         block.argument_size = job.arg_size;
-        block.arglist_data = arglist_data;
+        // 将args_array转换为256位数据
+        block.arglist_data = {args_array[3], args_array[2], args_array[1], args_array[0]};
         // block的维度由job_dim.block_x/y/z定义
         block.block_x = job.job_dim.block_x;
         block.block_y = job.job_dim.block_y;
@@ -149,6 +153,7 @@ module rvgpu_gpc_block_scheduler #(
         target_tpc_n = target_tpc_r;
         current_block_n = current_block_r;
         tpc_load_n = tpc_load_r;
+        args_counter_n = args_counter_r;
         
         // 接口默认值
         noc_if.s_req_ready = 1'b0;
@@ -165,7 +170,7 @@ module rvgpu_gpc_block_scheduler #(
         
         raster_if.cmd_valid = 1'b0;
         l15_if.req_valid = 1'b0;
-        tlb_if.req_valid = 1'b0;
+        mmu_if.req_valid = 1'b0;
         
         case (state_r)
             IDLE: begin
@@ -177,8 +182,9 @@ module rvgpu_gpc_block_scheduler #(
                         current_job_n = noc_if.s_req_data;
                         block_count_n = calculate_block_count(noc_if.s_req_data);
                         current_block_id_n = 0;
+                        args_counter_n = 0;
                         state_n = RESP_JD;
-                        `GPC_PRINT("Scheduler", $sformatf("Received job cluster %0d with %0d blocks", current_job_n.curr_cluster_id, block_count_n));
+                        `GPC_PRINT("Scheduler", $sformatf("Received job cluster: %s", job_cluster_to_string(current_job_n)));
                     end
                 end
             end
@@ -198,26 +204,26 @@ module rvgpu_gpc_block_scheduler #(
             end
             
             REQUEST_MMU: begin
-                // 请求MMU翻译地址
-                tlb_if.req_valid = 1'b1;
-                tlb_if.req_vaddr = current_job_r.program_ptr + 64'd8;
-                tlb_if.req_type = MMU_READ;
-                tlb_if.req_warp_id = '0;
-                tlb_if.req_source_id = '0;
+                // 请求MMU翻译参数列表地址
+                mmu_if.req_valid = 1'b1;
+                mmu_if.req_vaddr = current_job_r.program_ptr + {args_counter_r, 5'b0};
+                mmu_if.req_type = MMU_READ;
+                mmu_if.req_warp_id = '0;
+                mmu_if.req_source_id = '0;
                 
-                if (tlb_if.req_valid && tlb_if.req_ready) begin
-                    tlb_if.req_valid = 1'b0;
+                if (mmu_if.req_valid && mmu_if.req_ready) begin
+                    mmu_if.req_valid = 1'b0;
                     state_n = WAIT_MMU;
                 end
-                `GPC_PRINT("Scheduler", $sformatf("Requesting MMU translation for program at %h", current_job_r.program_ptr + 64'd8));
+                `GPC_PRINT("Scheduler", $sformatf("Requesting MMU translation for args[%d] at %h", args_counter_r, current_job_r.program_ptr + {args_counter_r, 5'b0}));
             end
             
             WAIT_MMU: begin
                 // 等待MMU响应
-                if (tlb_if.resp_valid) begin
-                    if (!tlb_if.resp_fault) begin
+                if (mmu_if.resp_valid) begin
+                    if (!mmu_if.resp_fault) begin
                         // MMU命中，保存物理地址
-                        arglist_paddr_n = {tlb_if.resp_ppn, current_job_r.program_ptr[11:0]};
+                        arglist_paddr_n = {mmu_if.resp_ppn, (current_job_r.program_ptr[11:0] + {args_counter_r, 5'b0})};
                         state_n = REQUEST_CACHE;
                     end else begin
                         // MMU未命中，返回空闲状态
@@ -231,7 +237,7 @@ module rvgpu_gpc_block_scheduler #(
                 l15_if.req_valid = 1'b1;
                 l15_if.req_is_read = 1'b1;
                 l15_if.req_paddr = arglist_paddr_r;
-                l15_if.req_size = 4'b0100; // 16字节
+                l15_if.req_size = 4'b0100; // 32字节 (256位)
                 l15_if.req_type = L15_CACHE_NORMAL;
                 l15_if.req_data = '0;
                 l15_if.req_mask = '0;
@@ -250,6 +256,24 @@ module rvgpu_gpc_block_scheduler #(
                 if (l15_if.resp_valid && l15_if.resp_ready) begin
                     l15_if.resp_ready = 1'b0;
                     
+                    // 存储获取到的参数数据
+                    state_n = STORE_ARGS;
+                end
+            end
+            
+            STORE_ARGS: begin
+                // 将256位数据分解为4个64位参数并存储
+                // 从L1.5 Cache获取的数据是256位，包含4个64位参数
+                // 注意：这里不直接更新args_r，而是在时序逻辑中更新
+                
+                args_counter_n = args_counter_r + 4; // 每次+4，因为每次请求4个参数
+                
+                // 检查是否还需要请求更多参数
+                if (args_counter_n < current_job_r.arg_size) begin
+                    // 继续请求下一个参数块
+                    state_n = REQUEST_MMU;
+                end else begin
+                    // 所有参数都已获取，开始分发Block
                     // 选择目标TPC
                     target_tpc_n = select_tpc(tpc_load_r);
                     
@@ -257,11 +281,14 @@ module rvgpu_gpc_block_scheduler #(
                     current_block_n = create_block(
                         current_block_id_r,
                         current_job_r,
-                        l15_if.resp_data
+                        args_r
                     );
                     
                     state_n = DISPATCH_BLOCK;
                 end
+                
+                `GPC_PRINT("Scheduler", $sformatf("Stored args[%d-%d], counter=%d", 
+                    args_counter_r, args_counter_r + 3, args_counter_n));
             end
             
             DISPATCH_BLOCK: begin
@@ -372,11 +399,11 @@ module rvgpu_gpc_block_scheduler #(
                     // 选择下一个目标TPC
                     target_tpc_n = select_tpc(tpc_load_n);
                     
-                    // 创建下一个Block
+                    // 创建下一个Block（使用相同的参数）
                     current_block_n = create_block(
                         current_block_id_n,
                         current_job_r,
-                        current_block_r.arglist_data
+                        args_r
                     );
                     
                     state_n = DISPATCH_BLOCK;
@@ -396,6 +423,7 @@ module rvgpu_gpc_block_scheduler #(
             state_r <= IDLE;
             current_job_r <= '0;
             arglist_paddr_r <= '0;
+            args_counter_r <= '0;
             current_block_id_r <= '0;
             block_count_r <= '0;
             target_tpc_r <= '0;
@@ -404,10 +432,14 @@ module rvgpu_gpc_block_scheduler #(
             tpc_load_r[1] <= '0;
             tpc_load_r[2] <= '0;
             tpc_load_r[3] <= '0;
+            for (int i = 0; i < 16; i++) begin
+                args_r[i] <= '0;
+            end
         end else begin
             state_r <= state_n;
             current_job_r <= current_job_n;
             arglist_paddr_r <= arglist_paddr_n;
+            args_counter_r <= args_counter_n;
             current_block_id_r <= current_block_id_n;
             block_count_r <= block_count_n;
             target_tpc_r <= target_tpc_n;
@@ -416,6 +448,15 @@ module rvgpu_gpc_block_scheduler #(
             tpc_load_r[1] <= tpc_load_n[1];
             tpc_load_r[2] <= tpc_load_n[2];
             tpc_load_r[3] <= tpc_load_n[3];
+            
+            // 在STORE_ARGS状态下直接更新args_r数组
+            if (state_r == STORE_ARGS) begin
+                // 将256位数据分解为4个64位参数并存储
+                args_r[args_counter_r * 4 + 0] <= l15_if.resp_data[63:0];    // 第1个参数
+                args_r[args_counter_r * 4 + 1] <= l15_if.resp_data[127:64];  // 第2个参数
+                args_r[args_counter_r * 4 + 2] <= l15_if.resp_data[191:128]; // 第3个参数
+                args_r[args_counter_r * 4 + 3] <= l15_if.resp_data[255:192]; // 第4个参数
+            end
             
             // TPC完成处理
             if (tpc_if[0].complete_valid && tpc_if[0].complete_ready) begin

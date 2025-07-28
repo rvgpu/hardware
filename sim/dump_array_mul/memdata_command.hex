@@ -3,7 +3,7 @@
 # command.header.size = 1; // 3'b1
 # command.header.last = 1; // 1'b1
 # command.header.job_dim = {{1, 1, 1}, {2, 1, 1}, {32, 4, 1}};   // {grid, cluster, block}
-# command.prog.program_addr = 0x1234567100;
+# command.prog.program_addr = 0x1234000000;  -> memdata_program.hex
 # command.prog.argument_size = 3;
 # 
 # data[31:0] = 8'b10010000 = 0x00000090
@@ -16,3 +16,6 @@
 # data[127:32] = 10042020 00011001 00010001
 
 0x20000100: 00000090 10042020 00011001 00010001
+0x20000110: 34000000 00000012 00000003 00000000
+0x20000120: 12345670 12345671 12345672 12345673   # parameter list
+0x20000130: 12345674 12345675 12345676 12345677

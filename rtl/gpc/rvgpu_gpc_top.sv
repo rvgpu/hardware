@@ -85,7 +85,7 @@ module rvgpu_gpc_top #(
         .tpc_if(block_tpc_if),
         .raster_if(block_raster_if.scheduler),
         .l15_if(l15_cache_if[GPC_CONFIG.num_tpc].requester),
-        .tlb_if(gpc_mmu_if[GPC_CONFIG.num_tpc].requester)
+        .mmu_if(gpc_mmu_if[GPC_CONFIG.num_tpc].requester)
     );
     
     // L1.5 Cache实例化

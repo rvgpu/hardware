@@ -18,16 +18,16 @@
 
 `include "rvgpu_typedef.svh"
 
-// 访问类型定义 (与L0 TLB保持一致)
+// 访问类型定义
 typedef enum logic [2:0] {
     MMU_READ    = 3'b001,
     MMU_WRITE   = 3'b010,
     MMU_EXECUTE = 3'b100
 } mmu_access_type_e;
 
-// GPC MMU接口，用于处理L0 TLB未命中的地址转换请求
+// GPC MMU查询接口，用于地址翻译请求/响应
 interface gpc_mmu_if;
-    // 请求通道
+    // 请求通道 (用于MMU地址转换请求)
     logic                req_valid;      // 请求有效
     logic                req_ready;      // MMU准备好接收请求
     logic [38:0]         req_vaddr;      // 虚拟地址
@@ -35,7 +35,7 @@ interface gpc_mmu_if;
     logic [31:0]         req_warp_id;    // Warp ID (用于跟踪)
     logic [3:0]          req_source_id;  // 请求源ID (用于区分不同的请求者)
     
-    // 响应通道
+    // 响应通道 (用于MMU地址转换响应)
     logic                resp_valid;     // 响应有效
     logic                resp_ready;     // 请求者准备好接收响应
     logic [26:0]         resp_ppn;       // 物理页号
@@ -44,15 +44,15 @@ interface gpc_mmu_if;
     logic [31:0]         resp_warp_id;   // Warp ID
     logic [3:0]          resp_source_id; // 请求源ID
     
-
-    
-    // 模块端口
-    modport gpc_mmu (
+    // 模块端口定义
+    // 服务提供者端口 (MMU/TLB)
+    modport provider (
         input  req_valid, req_vaddr, req_type, req_warp_id, req_source_id,
         output resp_ready,
         output req_ready, resp_valid, resp_ppn, resp_hit, resp_fault, resp_warp_id, resp_source_id
     );
     
+    // 服务使用者端口 (TPC/SM)
     modport requester (
         output req_valid, req_vaddr, req_type, req_warp_id, req_source_id,
         input  resp_ready,
@@ -60,5 +60,29 @@ interface gpc_mmu_if;
     );
     
 endinterface : gpc_mmu_if
+
+// GPC TLB更新接口，用于L0 TLB更新
+interface gpc_tlb_update_if;
+    // TLB更新通道
+    logic                update_valid;     // 更新请求有效
+    logic                update_ready;     // TLB准备好接收更新
+    logic [38:0]         update_vaddr;     // 要更新的虚拟地址
+    logic [26:0]         update_ppn;       // 新的物理页号
+    logic [2:0]          update_perm;      // 页权限
+    
+    // 模块端口定义
+    // 更新发起者端口 (MMU)
+    modport initiator (
+        output update_valid, update_vaddr, update_ppn, update_perm,
+        input  update_ready
+    );
+    
+    // 更新接收者端口 (TLB)
+    modport receiver (
+        input  update_valid, update_vaddr, update_ppn, update_perm,
+        output update_ready
+    );
+    
+endinterface : gpc_tlb_update_if
 
 `endif // GPC_MMU_IF_SVH 

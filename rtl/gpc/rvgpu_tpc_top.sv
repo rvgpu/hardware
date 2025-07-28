@@ -19,7 +19,7 @@
 `include "rvgpu_typedef.svh"
 `include "gpc_block_tpc_if.svh"
 `include "gpc_l15_cache_if.svh"
-`include "gpc_l0_tlb_if.svh"
+`include "gpc_mmu_if.svh"
 `include "ldst_sm_if.svh"
 
 // TPC顶层模块 - 简化版本
@@ -40,7 +40,10 @@ module rvgpu_tpc_top #(
     gpc_l15_cache_if.requester l15_if,
     
     // GPC MMU接口（汇聚所有SM的TLB请求）
-    gpc_l0_tlb_if.tpc tlb_if,
+    gpc_mmu_if.requester tlb_if,
+    
+    // GPC TLB更新接口（接收来自MMU的TLB更新）
+    gpc_tlb_update_if.receiver tlb_update_if,
     
     // 状态输出（简化）
     output logic [7:0] active_warps_count,   // 活跃warp数量
@@ -67,7 +70,8 @@ module rvgpu_tpc_top #(
     
     // SM接口信号
     gpc_l15_cache_if sm_l15_if[NUM_SM]();     // 每个SM的L1.5 Cache接口
-    gpc_l0_tlb_if sm_tlb_if[NUM_SM]();        // 每个SM的TLB接口
+    gpc_mmu_if sm_tlb_if[NUM_SM]();        // 每个SM的TLB接口
+    gpc_tlb_update_if sm_tlb_update_if[NUM_SM](); // 每个SM的TLB更新接口
     gpc_block_tpc_if sm_dispatch_if[NUM_SM](); // 每个SM的任务分发接口
     ldst_sm_if sm_ldst_if[NUM_SM]();          // 每个SM的LDST接口（暂时保留）
     

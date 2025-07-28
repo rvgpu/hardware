@@ -21,8 +21,6 @@
 `include "rvgpu_noc_message.svh"
 `include "gpc_mmu_if.svh"
 
-`include "gpc_l0_tlb_if.svh"
-
 module rvgpu_gpc_mmu #(
     parameter int TLB_ENTRIES = 128,   // L1 TLB条目数量
     parameter int MAX_REQUESTS = 16,    // 最大并发请求数
@@ -32,13 +30,13 @@ module rvgpu_gpc_mmu #(
     input  logic rst_n,
     
     // Block Scheduler请求接口
-    gpc_mmu_if.gpc_mmu bs_if,
+    gpc_mmu_if.provider bs_if,
     
     // TPC请求接口 (支持多个TPC)
-    gpc_mmu_if.gpc_mmu tpc_if[4],
+    gpc_mmu_if.provider tpc_if[4],
     
     // L0 TLB更新接口 (支持多个TPC的L0 TLB)
-    gpc_l0_tlb_if.gpc_mmu l0_tlb_if[4],
+    gpc_tlb_update_if.initiator l0_tlb_if[4],
     
     // NOC Adapter接口 (连接到控制单元MMU)
     rvgpu_internal_noc_if.device noc_if

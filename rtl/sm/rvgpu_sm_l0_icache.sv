@@ -17,7 +17,7 @@
 `define RVGPU_SM_L0_ICACHE_SV
 
 `include "rvgpu_typedef.svh"
-`include "gpc_l0_tlb_if.svh"
+`include "gpc_mmu_if.svh"
 `include "gpc_l15_cache_if.svh"
 
 // SM L0 ICache模块
@@ -191,7 +191,7 @@ module rvgpu_sm_l0_icache #(
                     // 请求TLB进行地址转换
                     tlb_req_valid <= 1'b1;
                     tlb_req_vaddr <= current_vaddr[38:0];
-                    tlb_req_type <= TLB_EXECUTE;
+                    tlb_req_type <= MMU_EXECUTE;
                     tlb_req_warp_id <= current_warp_id;
                     
                     if (tlb_req_ready) begin

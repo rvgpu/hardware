@@ -42,7 +42,7 @@ module rvgpu_sm #(
     gpc_l15_cache_if.requester l15_if,
     
     // L0 TLB接口 (用于指令地址转换)
-    gpc_l0_tlb_if.requester tlb_if,
+    gpc_mmu_if.requester tlb_if,
     
     // 完成信号
     output logic warp_complete,
@@ -225,15 +225,15 @@ module rvgpu_sm #(
         .l1_resp_valid(l15_if.resp_valid),
         .l1_resp_data(l15_if.resp_data[255:0]),
         .l1_resp_ready(l15_if.resp_ready),
-        .tlb_req_valid(tlb_if.lookup_valid),
-        .tlb_req_vaddr(tlb_if.vaddr),
-        .tlb_req_type(tlb_if.access_type),
-        .tlb_req_warp_id(tlb_if.warp_id),
-        .tlb_req_ready(tlb_if.lookup_ready),
-        .tlb_resp_valid(tlb_if.lookup_resp_valid),
-        .tlb_resp_hit(tlb_if.lookup_hit),
-        .tlb_resp_ppn(tlb_if.ppn),
-        .tlb_resp_fault(tlb_if.access_fault),
+        .tlb_req_valid(tlb_if.req_valid),
+        .tlb_req_vaddr(tlb_if.req_vaddr),
+        .tlb_req_type(tlb_if.req_type),
+        .tlb_req_warp_id(tlb_if.req_warp_id),
+        .tlb_req_ready(tlb_if.req_ready),
+        .tlb_resp_valid(tlb_if.resp_valid),
+        .tlb_resp_hit(tlb_if.resp_hit),
+        .tlb_resp_ppn(tlb_if.resp_ppn),
+        .tlb_resp_fault(tlb_if.resp_fault),
         .tlb_resp_warp_id(tlb_if.resp_warp_id)
     );
     

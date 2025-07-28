@@ -21,7 +21,7 @@
 `include "rvgpu_internal_noc_pkg.svh"
 `include "gpc_l15_cache_if.svh"
 `include "gpc_mmu_if.svh"
-`include "gpc_l0_tlb_if.svh"
+
 `include "ldst_sm_if.svh"
 `include "gpc_block_tpc_if.svh"
 `include "rvgpu_gpc_pkg.svh"
@@ -47,7 +47,7 @@ module rvgpu_gpc_top #(
     gpc_mmu_if               gpc_mmu_if[GPC_CONFIG.num_tpc+1]();    // NUM_TPC个TPC + Block Scheduler
     rvgpu_internal_noc_if    mmu_noc_if();                          // MMU NOC接口
     rvgpu_internal_noc_if    scheduler_noc_if();                    // Scheduler NOC接口
-    gpc_l0_tlb_if            l0_tlb_if[GPC_CONFIG.num_tpc]();
+    gpc_tlb_update_if        l0_tlb_if[GPC_CONFIG.num_tpc]();
     
     // 内部信号
     logic [7:0] active_warps_count[GPC_CONFIG.num_tpc];  // 每个TPC的活跃warp数量
@@ -71,7 +71,7 @@ module rvgpu_gpc_top #(
     ) u_gpc_mmu (
         .clk(clk),
         .rst_n(rst_n),
-        .bs_if(gpc_mmu_if[GPC_CONFIG.num_tpc].gpc_mmu),
+        .bs_if(gpc_mmu_if[GPC_CONFIG.num_tpc].provider),
         .tpc_if(gpc_mmu_if[0:GPC_CONFIG.num_tpc-1]),
         .l0_tlb_if(l0_tlb_if),
         .noc_if(mmu_noc_if.device)
@@ -119,7 +119,8 @@ module rvgpu_gpc_top #(
                 .rst_n(rst_n),
                 .block_dispatch_if(block_tpc_if[i].tpc),
                 .l15_if(l15_cache_if[i].requester),
-                .tlb_if(l0_tlb_if[i].tpc),
+                .tlb_if(gpc_mmu_if[i].requester),
+                .tlb_update_if(l0_tlb_if[i].receiver),
                 .active_warps_count(active_warps_count[i]),
                 .sm_utilization(sm_utilization[i])
             );

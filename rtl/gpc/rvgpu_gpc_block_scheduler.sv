@@ -178,6 +178,7 @@ module rvgpu_gpc_block_scheduler #(
                         block_count_n = calculate_block_count(noc_if.s_req_data);
                         current_block_id_n = 0;
                         state_n = RESP_JD;
+                        $display("GPC %d: Received job cluster %d with %d blocks", GPC_ID, current_job_r.curr_cluster_id, block_count_n);
                     end
                 end
             end
@@ -185,20 +186,14 @@ module rvgpu_gpc_block_scheduler #(
             RESP_JD: begin
                 // 发送响应给Job Dispatcher
                 noc_if.s_resp_valid = 1'b1;
-                noc_if.s_resp_header = build_noc_header(
-                    MSG_COMPUTE_RESP,
-                    8'h01,
-                    noc_node_id_t'(NODE_SHADER_0 + GPC_ID),
-                    NODE_CONTROL,
-                    NOC_NODE_LOCAL_ADDR_NONE,
-                    NOC_NODE_CONTROL_JD
-                );
+                noc_if.s_resp_header = build_noc_header_jobcluster_response(8'h01, NODE_SHADER_0 + GPC_ID);
                 noc_if.s_resp_data = 32'h0; // 成功响应
                 noc_if.s_resp_status = 2'b00; // 成功状态
                 noc_if.s_resp_last = 1'b1;
                 
                 if (noc_if.s_resp_valid && noc_if.s_resp_ready) begin
                     state_n = REQUEST_MMU;
+                    $display("GPC %d: Sent job cluster response", GPC_ID);
                 end
             end
             
@@ -214,6 +209,7 @@ module rvgpu_gpc_block_scheduler #(
                     tlb_if.req_valid = 1'b0;
                     state_n = WAIT_MMU;
                 end
+                $display("GPC %d: Requesting MMU translation for program at %h", GPC_ID, current_job_r.program_ptr + 64'd8);
             end
             
             WAIT_MMU: begin

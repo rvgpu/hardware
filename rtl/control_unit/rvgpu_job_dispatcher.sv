@@ -268,7 +268,7 @@ module rvgpu_job_dispatcher #(
                     // 更新 cluster ID - 直接使用计数器
                     curr_cluster_id_n = cluster_idx_r + 1;
                     
-                    `DEBUG_PRINT("JD", $sformatf("GPC %0d finished cluster %0d", resp_gpc_id, cluster_gpc_fifo_r[fifo_head_r].cluster_id));
+                    `DEBUG_PRINT("JD", $sformatf("GPC.%0d finished cluster %0d", resp_gpc_id-NODE_SHADER_0, cluster_gpc_fifo_r[fifo_head_r].cluster_id));
                     if ((cluster_idx_r + 1) < total_clusters_r) begin
                         state_n = STATE_CLUSTER_DISPATCH;
                     end else begin

@@ -167,9 +167,16 @@ endfunction
 
 function automatic noc_header_t build_noc_header_jobcluster_dispatch(
     input noc_trans_id_t    trans_id,
-    input noc_node_id_t     dst_node
+    input noc_node_id_t     dest_node
 );
-    return build_noc_header(MSG_COMPUTE_REQ, trans_id, NODE_CONTROL, dst_node, NOC_NODE_CONTROL_JD);
+    return build_noc_header(MSG_COMPUTE_REQ, trans_id, NODE_CONTROL, dest_node, NOC_NODE_CONTROL_JD, NOC_NODE_LOCAL_ADDR_NONE);
+endfunction
+
+function automatic noc_header_t build_noc_header_jobcluster_response(
+    input noc_trans_id_t    trans_id,
+    input noc_node_id_t     src_node
+);
+    return build_noc_header(MSG_COMPUTE_RESP, trans_id, src_node, NODE_CONTROL, NOC_NODE_LOCAL_ADDR_NONE, NOC_NODE_CONTROL_JD);
 endfunction
 
 function automatic noc_header_t build_noc_header_mmu_request(

@@ -80,9 +80,9 @@ module rvgpu_gpc_noc_adapter #(
     // Internal Signals and Registers
     //=============================================================================
     
-    req_arb_state_t req_arb_state, req_arb_state_next;
-    resp_route_state_t resp_route_state, resp_route_state_next;
-    ext_req_state_t ext_req_state, ext_req_state_next;
+    req_arb_state_t req_arb_state_r, req_arb_state_next;
+    resp_route_state_t resp_route_state_r, resp_route_state_next;
+    ext_req_state_t ext_req_state_r, ext_req_state_next;
     
     // 仲裁优先级轮转计数器
     logic [1:0] arb_priority, arb_priority_next;
@@ -109,9 +109,9 @@ module rvgpu_gpc_noc_adapter #(
     
     always_ff @(posedge clk) begin
         if (!rst_n) begin
-            req_arb_state <= REQ_ARB_IDLE;
-            resp_route_state <= RESP_ROUTE_IDLE;
-            ext_req_state <= EXT_REQ_IDLE;
+            req_arb_state_r <= REQ_ARB_IDLE;
+            resp_route_state_r <= RESP_ROUTE_IDLE;
+            ext_req_state_r <= EXT_REQ_IDLE;
             arb_priority <= 2'b00;
             req_valid_buffer <= 1'b0;
             resp_valid_buffer <= 1'b0;
@@ -123,13 +123,13 @@ module rvgpu_gpc_noc_adapter #(
             resp_data_buffer <= '0;
             resp_last_buffer <= 1'b0;
         end else begin
-            req_arb_state <= req_arb_state_next;
-            resp_route_state <= resp_route_state_next;
-            ext_req_state <= ext_req_state_next;
+            req_arb_state_r <= req_arb_state_next;
+            resp_route_state_r <= resp_route_state_next;
+            ext_req_state_r <= ext_req_state_next;
             arb_priority <= arb_priority_next;
             
             // Buffer 变量赋值逻辑
-            case (ext_req_state)
+            case (ext_req_state_r)
                 EXT_REQ_IDLE: begin
                     if (noc_external_if.s_req_valid) begin
                         // 捕获请求数据到 buffer
@@ -158,9 +158,9 @@ module rvgpu_gpc_noc_adapter #(
     //=============================================================================
     
     always_comb begin
-        req_arb_state_next = req_arb_state;
+        req_arb_state_next = req_arb_state_r;
         
-        case (req_arb_state)
+        case (req_arb_state_r)
             REQ_ARB_IDLE: begin
                 // 根据轮转优先级选择主设备
                 case (arb_priority)
@@ -250,7 +250,7 @@ module rvgpu_gpc_noc_adapter #(
     always_comb begin
         arb_priority_next = arb_priority;
         // 每次从空闲状态开始仲裁时切换优先级
-        if (req_arb_state == REQ_ARB_IDLE && req_arb_state_next != REQ_ARB_IDLE) begin
+        if (req_arb_state_r == REQ_ARB_IDLE && req_arb_state_next != REQ_ARB_IDLE) begin
             arb_priority_next = arb_priority + 1;
         end
     end
@@ -260,9 +260,9 @@ module rvgpu_gpc_noc_adapter #(
     //=============================================================================
     
     always_comb begin
-        resp_route_state_next = resp_route_state;
+        resp_route_state_next = resp_route_state_r;
         
-        case (resp_route_state)
+        case (resp_route_state_r)
             RESP_ROUTE_IDLE: begin
                 if (noc_external_if.m_resp_valid) begin
                     case (get_noc_header_msg_type(noc_external_if.m_resp_header))
@@ -311,9 +311,9 @@ module rvgpu_gpc_noc_adapter #(
     //=============================================================================
     
     always_comb begin
-        ext_req_state_next = ext_req_state;
+        ext_req_state_next = ext_req_state_r;
         
-        case (ext_req_state)
+        case (ext_req_state_r)
             EXT_REQ_IDLE: begin
                 if (noc_external_if.s_req_valid) begin
                     // 直接根据消息类型转换到目标状态
@@ -335,25 +335,31 @@ module rvgpu_gpc_noc_adapter #(
             end
             
             EXT_REQ_L15: begin
-                if (l15_cache_if.s_req_ready) begin
+                // 等待请求传输完成
+                if (l15_cache_if.s_req_ready && req_last_buffer) begin
                     ext_req_state_next = EXT_REQ_RESPONSE;
                 end
             end
             
             EXT_REQ_MMU: begin
-                if (mmu_if.s_req_ready) begin
+                // 等待请求传输完成
+                if (mmu_if.s_req_ready && req_last_buffer) begin
                     ext_req_state_next = EXT_REQ_RESPONSE;
                 end
             end
             
             EXT_REQ_SCHED: begin
-                if (scheduler_if.s_req_ready) begin
-                    ext_req_state_next = EXT_REQ_IDLE;
+                // 等待Scheduler请求传输完成
+                if (scheduler_if.s_req_ready && req_last_buffer) begin
+                    ext_req_state_next = EXT_REQ_RESPONSE;
                 end
             end
             
             EXT_REQ_RESPONSE: begin
-                if (l15_cache_if.s_resp_valid || mmu_if.s_resp_valid) begin
+                // 等待L15 Cache、MMU或Scheduler的响应握手完成
+                if ((l15_cache_if.s_resp_valid && noc_external_if.s_resp_ready) ||
+                    (mmu_if.s_resp_valid && noc_external_if.s_resp_ready) ||
+                    (scheduler_if.s_resp_valid && noc_external_if.s_resp_ready)) begin
                     ext_req_state_next = EXT_REQ_IDLE;
                 end
             end
@@ -380,7 +386,7 @@ module rvgpu_gpc_noc_adapter #(
         mmu_if.m_req_ready = 1'b0;
         scheduler_if.m_req_ready = 1'b0;
         
-        case (req_arb_state)
+        case (req_arb_state_r)
             REQ_ARB_L15: begin
                 // 转发L15 Cache的请求到NOC
                 l15_cache_if.m_req_ready = noc_external_if.m_req_ready;
@@ -443,7 +449,7 @@ module rvgpu_gpc_noc_adapter #(
         
         noc_external_if.m_resp_ready = 1'b0;
         
-        case (resp_route_state)
+        case (resp_route_state_r)
             RESP_ROUTE_IDLE: begin
                 noc_external_if.m_resp_ready = 1'b1;
             end
@@ -509,7 +515,7 @@ module rvgpu_gpc_noc_adapter #(
         scheduler_if.s_req_valid = 1'b0;
         scheduler_if.s_req_data = '0;
         
-        case (ext_req_state)
+        case (ext_req_state_r)
             EXT_REQ_IDLE: begin
                 noc_external_if.s_req_ready = 1'b1;
             end
@@ -567,8 +573,9 @@ module rvgpu_gpc_noc_adapter #(
         
         l15_cache_if.s_resp_ready = 1'b0;
         mmu_if.s_resp_ready = 1'b0;
+        scheduler_if.s_resp_ready = 1'b0;
         
-        case (ext_req_state)
+        case (ext_req_state_r)
             EXT_REQ_RESPONSE: begin
                 if (l15_cache_if.s_resp_valid) begin
                     noc_external_if.s_resp_valid = 1'b1;
@@ -584,6 +591,13 @@ module rvgpu_gpc_noc_adapter #(
                     noc_external_if.s_resp_status = mmu_if.s_resp_status;
                     noc_external_if.s_resp_last = mmu_if.s_resp_last;
                     mmu_if.s_resp_ready = noc_external_if.s_resp_ready;
+                end else if (scheduler_if.s_resp_valid) begin
+                    noc_external_if.s_resp_valid = 1'b1;
+                    noc_external_if.s_resp_header = scheduler_if.s_resp_header;
+                    noc_external_if.s_resp_data = scheduler_if.s_resp_data;
+                    noc_external_if.s_resp_status = scheduler_if.s_resp_status;
+                    noc_external_if.s_resp_last = scheduler_if.s_resp_last;
+                    scheduler_if.s_resp_ready = noc_external_if.s_resp_ready;
                 end
             end
             

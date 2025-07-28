@@ -45,11 +45,11 @@ module rvgpu_gpc_top #(
     gpc_l15_cache_if         l15_cache_if[GPC_CONFIG.num_tpc+2]();  // NUM_TPC个TPC + Block Scheduler + Raster
     rvgpu_internal_noc_if    l15_noc_if();                          // L1.5缓存NOC接口
     // GPC MMU接口
-    mmu_if               gpc_mmu_if[GPC_CONFIG.num_tpc+1]();    // NUM_TPC个TPC + Block Scheduler
+    mmu_if                   gpc_mmu_if[GPC_CONFIG.num_tpc+1]();    // NUM_TPC个TPC + Block Scheduler
     rvgpu_internal_noc_if    mmu_noc_if();                          // MMU NOC接口
     rvgpu_internal_noc_if    scheduler_noc_if();                    // Scheduler NOC接口
     // L0 TLB更新接口
-    tlb_update_if        l0_tlb_if[GPC_CONFIG.num_tpc]();
+    gpc_tlb_update_if        l0_tlb_if[GPC_CONFIG.num_tpc]();
     
     // 内部信号
     logic [7:0] active_warps_count[GPC_CONFIG.num_tpc];  // 每个TPC的活跃warp数量

@@ -29,14 +29,14 @@ module rvgpu_gpc_mmu #(
     input  logic clk,
     input  logic rst_n,
     
-    // Block Scheduler请求接口 - 使用通用mmu_if
+    // Block Scheduler请求接口
     mmu_if.mmu_port bs_if,
     
-    // TPC请求接口 (支持多个TPC) - 使用通用mmu_if
+    // TPC请求接口 (支持多个TPC)
     mmu_if.mmu_port tpc_if[4],
     
-    // L0 TLB更新接口 - 使用通用tlb_update_if
-    tlb_update_if.initiator l0_tlb_if[4],
+    // L0 TLB更新接口
+    gpc_tlb_update_if.initiator l0_tlb_if[4],
     
     // NOC Adapter接口 (连接到控制单元MMU)
     rvgpu_internal_noc_if.device noc_if
@@ -497,7 +497,7 @@ module rvgpu_gpc_mmu #(
                         bs_if.resp_valid <= 1'b1;
                         bs_if.resp_paddr <= current_paddr;
                         bs_if.resp_hit <= tlb_hit;
-                        bs_if.resp_status <= tlb_fault ? MMU_RESP_FAULT : MMU_RESP_OKAY;  // 使用MMU状态码
+                        bs_if.resp_status <= tlb_fault ? MMU_RESP_FAULT : MMU_RESP_OKAY;
                         
                         if (bs_if.resp_ready) begin
                             bs_if.resp_valid <= 1'b0;
@@ -510,7 +510,7 @@ module rvgpu_gpc_mmu #(
                                 tpc_if[0].resp_valid <= 1'b1;
                                 tpc_if[0].resp_paddr <= current_paddr;
                                 tpc_if[0].resp_hit <= tlb_hit;
-                                tpc_if[0].resp_status <= tlb_fault ? MMU_RESP_FAULT : MMU_RESP_OKAY;  // 使用MMU状态码
+                                tpc_if[0].resp_status <= tlb_fault ? MMU_RESP_FAULT : MMU_RESP_OKAY;
                                 
                                 if (tpc_if[0].resp_ready) begin
                                     tpc_if[0].resp_valid <= 1'b0;
@@ -521,7 +521,7 @@ module rvgpu_gpc_mmu #(
                                 tpc_if[1].resp_valid <= 1'b1;
                                 tpc_if[1].resp_paddr <= current_paddr;
                                 tpc_if[1].resp_hit <= tlb_hit;
-                                tpc_if[1].resp_status <= tlb_fault ? MMU_RESP_FAULT : MMU_RESP_OKAY;  // 使用MMU状态码
+                                tpc_if[1].resp_status <= tlb_fault ? MMU_RESP_FAULT : MMU_RESP_OKAY;
                                 
                                 if (tpc_if[1].resp_ready) begin
                                     tpc_if[1].resp_valid <= 1'b0;
@@ -532,7 +532,7 @@ module rvgpu_gpc_mmu #(
                                 tpc_if[2].resp_valid <= 1'b1;
                                 tpc_if[2].resp_paddr <= current_paddr;
                                 tpc_if[2].resp_hit <= tlb_hit;
-                                tpc_if[2].resp_status <= tlb_fault ? MMU_RESP_FAULT : MMU_RESP_OKAY;  // 使用MMU状态码
+                                tpc_if[2].resp_status <= tlb_fault ? MMU_RESP_FAULT : MMU_RESP_OKAY;
                                 
                                 if (tpc_if[2].resp_ready) begin
                                     tpc_if[2].resp_valid <= 1'b0;
@@ -543,7 +543,7 @@ module rvgpu_gpc_mmu #(
                                 tpc_if[3].resp_valid <= 1'b1;
                                 tpc_if[3].resp_paddr <= current_paddr;
                                 tpc_if[3].resp_hit <= tlb_hit;
-                                tpc_if[3].resp_status <= tlb_fault ? MMU_RESP_FAULT : MMU_RESP_OKAY;  // 使用MMU状态码
+                                tpc_if[3].resp_status <= tlb_fault ? MMU_RESP_FAULT : MMU_RESP_OKAY;
                                 
                                 if (tpc_if[3].resp_ready) begin
                                     tpc_if[3].resp_valid <= 1'b0;

@@ -48,14 +48,14 @@ interface mmu_if;
     // Request Channel
     logic                               req_valid;
     logic [VA_WIDTH-1:0]                req_vaddr;
-    mmu_access_type_e                   req_type;       // 使用枚举类型
+    mmu_access_type_e                   req_type;
     logic                               req_ready;
     
     // Response Channel
     logic                               resp_valid;
     logic [PA_WIDTH-1:0]                resp_paddr;
     logic                               resp_hit;
-    mmu_resp_status_e                   resp_status;    // 使用枚举类型
+    mmu_resp_status_e                   resp_status;
     logic                               resp_ready;
     
     // Requestor port (发起地址转换请求)
@@ -98,10 +98,10 @@ interface cp_mmu_config_if;
 endinterface : cp_mmu_config_if
 
 //=============================================================================
-// TLB更新接口 - 通用的TLB更新接口
+// GPC TLB Updata Interface - GPC MMU -> L0 TLB
 // 用于MMU向TLB发送更新请求
 //=============================================================================
-interface tlb_update_if;
+interface gpc_tlb_update_if;
     localparam int VA_WIDTH = `RVGPU_CONST_CU_VA_WIDTH;
     localparam int PA_WIDTH = `RVGPU_CONST_CU_PA_WIDTH;
 
@@ -123,6 +123,6 @@ interface tlb_update_if;
         input  update_valid, update_vaddr, update_paddr, update_perm,
         output update_ready
     );
-endinterface : tlb_update_if
+endinterface : gpc_tlb_update_if
 
 `endif // RVGPU_MMU_IF_SVH

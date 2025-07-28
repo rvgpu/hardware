@@ -19,6 +19,7 @@
 `include "rvgpu_control_unit_if.svh"
 `include "rvgpu_sram_if.svh"
 `include "rvgpu_mmu_pkg.svh"
+`include "rvgpu_mmu_if.svh"
 
 `ifndef RVGPU_MMU_PKG_IMPORTED
 `define RVGPU_MMU_PKG_IMPORTED
@@ -32,8 +33,7 @@ module rvgpu_mmu_tlb #(
     input  logic clk,
     input  logic rst_n,
 
-    // TLB接口
-    tlb_if.tlb_port tlb_if
+    mmu_tlb_if.tlb_port tlb_if
 );  
     //=============================================================================
     // 2. 状态机定义 - 明确定义所有状态
@@ -70,6 +70,10 @@ module rvgpu_mmu_tlb #(
     logic [TLB_ADDR_WIDTH-1:0] update_addr_r, update_addr_nxt;
     logic [TLB_DATA_WIDTH-1:0] update_data_r, update_data_nxt;
     logic update_pending_r, update_pending_nxt;
+    
+    // 临时变量用于函数调用结果
+    logic [TLB_TAG_BITS+TLB_ADDR_WIDTH-1:0] lookup_addr_full;
+    logic [TLB_TAG_BITS+TLB_ADDR_WIDTH-1:0] update_addr_full;
     
     //=============================================================================
     // 4. SRAM实例化
@@ -126,21 +130,23 @@ module rvgpu_mmu_tlb #(
                 lookup_ready_nxt = 1'b1;
                 
                 // 如果有TLB更新请求，优先处理
-                if (tlb_if.tlb_update_valid && tlb_if.tlb_update_ready) begin
+                if (tlb_if.update_valid && tlb_if.update_ready) begin
                     state_nxt = TLB_WRITE;
-                    update_addr_nxt = tlb_if.tlb_update_addr[TLB_ADDR_WIDTH-1:0];
-                    update_data_nxt = tlb_if.tlb_update_data;
+                    update_addr_full = calc_tlb_addr(tlb_if.update_vaddr);
+                    update_addr_nxt = update_addr_full[TLB_ADDR_WIDTH-1:0];
+                    update_data_nxt = build_tlb_entry(tlb_if.update_vaddr, tlb_if.update_paddr);
                     update_pending_nxt = 1'b1;
                     lookup_ready_nxt = 1'b0;
-                    `DEBUG_PRINT("TLB", $sformatf("TLB Update, addr: 0x%h, data: 0x%h", tlb_if.tlb_update_addr, tlb_if.tlb_update_data));
+                    `DEBUG_PRINT("TLB", $sformatf("TLB Update, vaddr: 0x%h, paddr: 0x%h", tlb_if.update_vaddr, tlb_if.update_paddr));
                 end
                 // 如果有新的查找请求，进入读取状态
-                else if (tlb_if.tlb_lookup_valid && tlb_if.tlb_lookup_ready) begin
+                else if (tlb_if.lookup_valid && tlb_if.lookup_ready) begin
                     state_nxt = TLB_READ;
-                    lookup_addr_nxt = tlb_if.tlb_lookup_addr[TLB_ADDR_WIDTH-1:0];
-                    lookup_tag_nxt = tlb_if.tlb_lookup_addr[TLB_TAG_BITS+TLB_ADDR_WIDTH-1:TLB_ADDR_WIDTH];
+                    lookup_addr_full = calc_tlb_addr(tlb_if.lookup_vaddr);
+                    lookup_addr_nxt = lookup_addr_full;
+                    lookup_tag_nxt = lookup_addr_full[TLB_TAG_BITS+TLB_ADDR_WIDTH-1:TLB_ADDR_WIDTH];
                     lookup_ready_nxt = 1'b0;
-                    `DEBUG_PRINT("TLB", $sformatf("TLB Lookup, addr: 0x%h, tag: 0x%h", tlb_if.tlb_lookup_addr, tlb_if.tlb_lookup_addr[TLB_TAG_BITS+TLB_ADDR_WIDTH-1:TLB_ADDR_WIDTH]));
+                    `DEBUG_PRINT("TLB", $sformatf("TLB Lookup, vaddr: 0x%h", tlb_if.lookup_vaddr));
                 end
             end
             
@@ -215,15 +221,34 @@ module rvgpu_mmu_tlb #(
     //=============================================================================
     
     // TLB查找接口
-    assign tlb_if.tlb_lookup_ready = (state_r == TLB_IDLE) && !update_pending_r;
-    assign tlb_if.tlb_lookup_data = lookup_data_r;
-    assign tlb_if.tlb_lookup_hit = lookup_hit_r;
+    assign tlb_if.lookup_ready = (state_r == TLB_IDLE) && !update_pending_r;
+    assign tlb_if.lookup_hit = lookup_hit_r;
+    assign tlb_if.lookup_paddr = lookup_hit_r ? {lookup_data_r[PPN_START:PPN_END], tlb_if.lookup_vaddr[PAGE_OFFSET_BITS-1:0]} : '0;
     
     // TLB更新接口
-    assign tlb_if.tlb_update_ready = (state_r == TLB_IDLE) && !update_pending_r;
+    assign tlb_if.update_ready = (state_r == TLB_IDLE) && !update_pending_r;
     
     //=============================================================================
-    // 8. 调试输出 - 使用 generate 块进行条件编译
+    // 8. 辅助函数
+    //=============================================================================
+    
+    // 构建TLB条目函数
+    function automatic logic [TLB_DATA_WIDTH-1:0] build_tlb_entry(
+        input logic [VA_WIDTH-1:0] vaddr,
+        input logic [PA_WIDTH-1:0] paddr
+    );
+        tlb_entry_t entry;
+        entry.valid = 1'b1;
+        entry.dirty = 1'b0;
+        entry.accessed = 1'b1;
+        entry.permission = 2'b11;  // 读写权限
+        entry.tag = vaddr[VA_WIDTH-1:PAGE_OFFSET_BITS+TLB_INDEX_BITS];
+        entry.ppn = paddr[PA_WIDTH-1:PAGE_OFFSET_BITS];
+        return tlb_entry_to_raw(entry);
+    endfunction
+    
+    //=============================================================================
+    // 9. 调试输出 - 使用 generate 块进行条件编译
     //=============================================================================
     
     generate
@@ -240,16 +265,16 @@ module rvgpu_mmu_tlb #(
             end
             
             // TLB操作调试
-            if (tlb_if.tlb_lookup_valid && tlb_if.tlb_lookup_ready && tlb_if.tlb_lookup_hit) begin
-                $display("@%0t: [TLB] Hit: addr=0x%h, tag=0x%h, ppn=0x%h", 
-                         $time, tlb_if.tlb_lookup_addr, tlb_if.tlb_lookup_data[33:5], tlb_if.tlb_lookup_data[69:34]);
-            end else if (tlb_if.tlb_lookup_valid && tlb_if.tlb_lookup_ready && !tlb_if.tlb_lookup_hit) begin
-                $display("@%0t: [TLB] Miss: addr=0x%h", $time, tlb_if.tlb_lookup_addr);
+            if (tlb_if.lookup_valid && tlb_if.lookup_ready && tlb_if.lookup_hit) begin
+                $display("@%0t: [TLB] Hit: vaddr=0x%h, paddr=0x%h", 
+                         $time, tlb_if.lookup_vaddr, tlb_if.lookup_paddr);
+            end else if (tlb_if.lookup_valid && tlb_if.lookup_ready && !tlb_if.lookup_hit) begin
+                $display("@%0t: [TLB] Miss: vaddr=0x%h", $time, tlb_if.lookup_vaddr);
             end
             
-            if (tlb_if.tlb_update_valid && tlb_if.tlb_update_ready) begin
-                $display("@%0t: [TLB] Update: addr=0x%h, data=0x%h", 
-                         $time, tlb_if.tlb_update_addr, tlb_if.tlb_update_data);
+            if (tlb_if.update_valid && tlb_if.update_ready) begin
+                $display("@%0t: [TLB] Update: vaddr=0x%h, paddr=0x%h", 
+                         $time, tlb_if.update_vaddr, tlb_if.update_paddr);
             end
         end
     end

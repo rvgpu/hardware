@@ -20,6 +20,7 @@
 `include "rvgpu_control_unit_if.svh"
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_mmu_pkg.svh"
+`include "rvgpu_mmu_if.svh"
 `include "rvgpu_debug.svh"
 
 `include "rvgpu_mmu_tlb.sv"
@@ -72,12 +73,8 @@ module rvgpu_mmu #(
     logic [PA_WIDTH-1:0] paddr_r, paddr_nxt;
     mmu_access_type_e req_type_r, req_type_nxt;
     
-    // TLB接口
-    tlb_if #(
-        .TLB_ENTRIES(TLB_ENTRIES),
-        .TLB_TAG_BITS(TLB_TAG_BITS),
-        .PPN_BITS(PPN_BITS)
-    ) mmu_tlb();
+    // TLB接口 - 使用新的mmu_tlb_if
+    mmu_tlb_if mmu_tlb();
     
     // 页表基地址
     logic [PA_WIDTH-1:0] page_table_base_r, page_table_base_nxt;
@@ -93,10 +90,7 @@ module rvgpu_mmu #(
     
     // 输出控制寄存器 - 使用寄存器控制输出
     logic tlb_lookup_valid_r, tlb_lookup_valid_nxt;
-    logic [TLB_TAG_BITS + TLB_INDEX_BITS - 1:0] tlb_lookup_addr_r, tlb_lookup_addr_nxt;
     logic tlb_update_valid_r, tlb_update_valid_nxt;
-    logic [$clog2(TLB_ENTRIES)-1:0] tlb_update_addr_r, tlb_update_addr_nxt;
-    tlb_entry_t tlb_update_data_r, tlb_update_data_nxt;
     
     logic noc_req_valid_r, noc_req_valid_nxt;
     logic [31:0] noc_req_header_r, noc_req_header_nxt;
@@ -144,10 +138,7 @@ module rvgpu_mmu #(
         
         // 输出控制寄存器默认值
         tlb_lookup_valid_nxt = 1'b0;
-        tlb_lookup_addr_nxt = tlb_lookup_addr_r;
         tlb_update_valid_nxt = 1'b0;
-        tlb_update_addr_nxt = tlb_update_addr_r;
-        tlb_update_data_nxt = tlb_update_data_r;
         noc_req_valid_nxt = 1'b0;
         noc_req_header_nxt = noc_req_header_r;
         noc_req_data_nxt = noc_req_data_r;
@@ -168,10 +159,9 @@ module rvgpu_mmu #(
             MMU_STATE_TLB_LOOKUP: begin
                 // TLB查找 - 设置输出寄存器
                 tlb_lookup_valid_nxt = 1'b1;
-                tlb_lookup_addr_nxt = calc_tlb_addr(vaddr_r);
                 
                 // 等待TLB查找完成（同步查找需要等待一个周期）
-                if (tlb_lookup_valid_r && mmu_tlb.tlb_lookup_ready) begin
+                if (tlb_lookup_valid_r && mmu_tlb.lookup_ready) begin
                     // 等待下一个周期获取结果
                     state_nxt = MMU_STATE_TLB_WAIT;
                     tlb_lookup_valid_nxt = 1'b0;
@@ -180,10 +170,10 @@ module rvgpu_mmu #(
             
             MMU_STATE_TLB_WAIT: begin
                 // 等待TLB查找结果（延迟一个周期）
-                if (mmu_tlb.tlb_lookup_ready) begin
-                    if (mmu_tlb.tlb_lookup_hit) begin
+                if (mmu_tlb.lookup_ready) begin
+                    if (mmu_tlb.lookup_hit) begin
                         // TLB命中
-                        paddr_nxt = {mmu_tlb.tlb_lookup_data[51:25], vaddr_r[PAGE_OFFSET_BITS-1:0]};
+                        paddr_nxt = mmu_tlb.lookup_paddr;
                         tlb_hit_count_nxt = tlb_hit_count_r + 1;
                         state_nxt = MMU_STATE_RESPONSE;
                     end else begin
@@ -234,15 +224,6 @@ module rvgpu_mmu #(
                             
                             // 更新TLB - 设置输出寄存器
                             tlb_update_valid_nxt = 1'b1;
-                            tlb_update_addr_nxt = calc_tlb_addr(vaddr_r);
-                            tlb_update_data_nxt = '{ 
-                                valid: 1'b1,
-                                dirty: 1'b0,
-                                accessed: 1'b1,
-                                permission: 2'b11,  // 读写权限
-                                tag: vaddr_r[VA_WIDTH-1:PAGE_OFFSET_BITS+TLB_INDEX_BITS],
-                                ppn: respaddr[PA_WIDTH-1:PAGE_OFFSET_BITS]
-                            };
 
                             state_nxt = MMU_STATE_TLB_UPDATE;
                             noc_resp_ready_nxt = 1'b0;
@@ -260,7 +241,7 @@ module rvgpu_mmu #(
             end
             
             MMU_STATE_TLB_UPDATE: begin
-                if (tlb_update_valid_r && mmu_tlb.tlb_update_ready) begin
+                if (tlb_update_valid_r && mmu_tlb.update_ready) begin
                     state_nxt = MMU_STATE_RESPONSE;
                     tlb_update_valid_nxt = 1'b0;
                 end
@@ -305,10 +286,7 @@ module rvgpu_mmu #(
             
             // 输出控制寄存器复位
             tlb_lookup_valid_r <= 1'b0;
-            tlb_lookup_addr_r <= '0;
             tlb_update_valid_r <= 1'b0;
-            tlb_update_addr_r <= '0;
-            tlb_update_data_r <= '0;
             
             noc_req_valid_r <= 1'b0;
             noc_req_header_r <= '0;
@@ -329,10 +307,7 @@ module rvgpu_mmu #(
             
             // 输出控制寄存器更新
             tlb_lookup_valid_r <= tlb_lookup_valid_nxt;
-            tlb_lookup_addr_r <= tlb_lookup_addr_nxt;
             tlb_update_valid_r <= tlb_update_valid_nxt;
-            tlb_update_addr_r <= tlb_update_addr_nxt;
-            tlb_update_data_r <= tlb_update_data_nxt;
             noc_req_valid_r <= noc_req_valid_nxt;
             noc_req_header_r <= noc_req_header_nxt;
             noc_req_data_r <= noc_req_data_nxt;
@@ -361,11 +336,11 @@ module rvgpu_mmu #(
     //=============================================================================
     
     // TLB接口连接
-    assign mmu_tlb.tlb_lookup_valid = tlb_lookup_valid_r;
-    assign mmu_tlb.tlb_lookup_addr = tlb_lookup_addr_r;
-    assign mmu_tlb.tlb_update_valid = tlb_update_valid_r;
-    assign mmu_tlb.tlb_update_addr = tlb_update_addr_r;
-    assign mmu_tlb.tlb_update_data = tlb_entry_to_raw(tlb_update_data_r);
+    assign mmu_tlb.lookup_valid = tlb_lookup_valid_r;
+    assign mmu_tlb.lookup_vaddr = vaddr_r;
+    assign mmu_tlb.update_valid = tlb_update_valid_r;
+    assign mmu_tlb.update_vaddr = vaddr_r;
+    assign mmu_tlb.update_paddr = paddr_r;
     
     // NOC接口连接
     assign noc_if.m_req_valid = noc_req_valid_r;
@@ -411,19 +386,19 @@ module rvgpu_mmu #(
                 `DEBUG_PRINT("MMU", $sformatf("Page Walk, %s", noc_request_mem_read_to_string(noc_req_header_nxt, noc_req_data_nxt)));
             end
 
-            if ((state_r == MMU_STATE_TLB_WAIT) && mmu_tlb.tlb_lookup_ready) begin
-                if (mmu_tlb.tlb_lookup_hit) begin
-                    `DEBUG_PRINT("MMU", $sformatf("TLB Hit, paddr: 0x%h + 0x%h, data: 0x%h", mmu_tlb.tlb_lookup_data[69:34], vaddr_r[PAGE_OFFSET_BITS-1:0], mmu_tlb.tlb_lookup_data));
+            if ((state_r == MMU_STATE_TLB_WAIT) && mmu_tlb.lookup_ready) begin
+                if (mmu_tlb.lookup_hit) begin
+                    `DEBUG_PRINT("MMU", $sformatf("TLB Hit, paddr: 0x%h", mmu_tlb.lookup_paddr));
                 end else begin
                     `DEBUG_PRINT("MMU", $sformatf("TLB Miss, vaddr: 0x%h", vaddr_r));
                 end
             end
 
             // 监控TLB握手
-            if (tlb_lookup_valid_r && mmu_tlb.tlb_lookup_ready) begin
+            if (tlb_lookup_valid_r && mmu_tlb.lookup_ready) begin
                 `DEBUG_PRINT("MMU", $sformatf("TLB lookup handshake detected"));
             end
-            if (tlb_update_valid_r && mmu_tlb.tlb_update_ready) begin
+            if (tlb_update_valid_r && mmu_tlb.update_ready) begin
                 `DEBUG_PRINT("MMU", $sformatf("TLB update handshake detected"));
             end
             

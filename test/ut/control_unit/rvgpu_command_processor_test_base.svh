@@ -23,7 +23,8 @@ typedef struct packed {
 // Virtual interface types for task parameters
 typedef virtual control_if #(.ADDR_WIDTH(64), .DATA_WIDTH(64)) ctrl_vif_t;
 typedef virtual rvgpu_internal_noc_if #(.NOC_CONFIG(DEFAULT_NOC_CONFIG)) noc_vif_t;
-typedef virtual mmu_if #(.VA_WIDTH(48), .PA_WIDTH(48)) mmu_vif_t;
+typedef virtual mmu_if mmu_vif_t;
+typedef virtual cp_mmu_config_if mmu_config_vif_t;
 typedef virtual clk_rst_if clk_rst_vif_t;
 
 // Base class for RVGPU Command Processor testing (No Handshake Protocol)
@@ -33,6 +34,7 @@ class rvgpu_command_processor_test_base;
     ctrl_vif_t ctrl_cp;
     noc_vif_t noc_if;
     mmu_vif_t mmu_if;
+    mmu_config_vif_t mmu_config_if;
     clk_rst_vif_t clk_rst_if;
     
     // Clock manager for elegant time control
@@ -51,10 +53,11 @@ class rvgpu_command_processor_test_base;
     logic [63:0] captured_read_data;
 
     // Constructor
-    function new(ctrl_vif_t ctrl_cp, noc_vif_t noc_if, mmu_vif_t mmu_if, clk_rst_vif_t clk_rst_vif, rvgpu_clk_manager clk_manager);
+    function new(ctrl_vif_t ctrl_cp, noc_vif_t noc_if, mmu_vif_t mmu_if, mmu_config_vif_t mmu_config_if, clk_rst_vif_t clk_rst_vif, rvgpu_clk_manager clk_manager);
         this.ctrl_cp = ctrl_cp;
         this.noc_if = noc_if;
         this.mmu_if = mmu_if;
+        this.mmu_config_if = mmu_config_if;
         this.clk_rst_if = clk_rst_vif;
         this.clk_mgr = clk_manager;
         
@@ -111,6 +114,10 @@ class rvgpu_command_processor_test_base;
         mmu_if.resp_paddr = 0;
         mmu_if.resp_hit = 0;
         mmu_if.resp_status = 2'b00;
+        
+        // MMU config interface - initialize to idle state
+        mmu_config_if.cfg_en = 0;
+        mmu_config_if.cfg_base_addr = 0;
     endtask
 
     // Clear control interface signals
@@ -137,6 +144,10 @@ class rvgpu_command_processor_test_base;
         mmu_if.req_read = 1'b0;
         mmu_if.req_write = 1'b0;
         mmu_if.resp_ready = 1'b0;
+        
+        // Clear MMU config interface signals
+        mmu_config_if.cfg_en = 1'b0;
+        mmu_config_if.cfg_base_addr = '0;
     endtask
 
     // Initialize transaction monitoring variables

@@ -4,6 +4,7 @@
 `include "rvgpu_command_processor_test_base.svh"
 `include "rvgpu_clk_rst.svh"
 `include "rvgpu_internal_noc_if.svh"
+`include "rvgpu_mmu_if.svh"
 `include "rvgpu_command_processor.sv"
 
 // SVUnit中模块名必须以_unit_test结尾
@@ -32,6 +33,7 @@ module ut_rvgpu_command_processor_basic_unit_test;
   control_if #(.ADDR_WIDTH(64), .DATA_WIDTH(64)) ctrl_cp();
   rvgpu_internal_noc_if noc_if();
   mmu_if cp_mmu();
+  cp_mmu_config_if cp_mmu_config();
 
   // DUT instance - 真实的Command Processor（包含真实的Job Dispatcher）
   rvgpu_command_processor #(
@@ -41,7 +43,8 @@ module ut_rvgpu_command_processor_basic_unit_test;
     .rst_n(clk_rst_if.rst_n),
     .ctrl_cp(ctrl_cp.cp_port),
     .noc_if(noc_if.device),
-    .mmu_if(cp_mmu.cp_port),
+    .mmu_if(cp_mmu.requester_port),
+    .mmu_config_if(cp_mmu_config.cp_port),
     .gpu_irq()
   );
 
@@ -65,7 +68,7 @@ module ut_rvgpu_command_processor_basic_unit_test;
     svunit_ut = new(name);
     clk_mgr = new("cp_test_clk", 10.0, 10);
     clk_mgr.initialize(clk_rst_if);
-    test_base = new(ctrl_cp, noc_if, cp_mmu, clk_rst_if, clk_mgr);
+    test_base = new(ctrl_cp, noc_if, cp_mmu, cp_mmu_config, clk_rst_if, clk_mgr);
     $display("@%0t: Build completed", $time);
     clk_mgr.display_status();
   endfunction

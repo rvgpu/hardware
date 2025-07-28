@@ -19,6 +19,7 @@
 `include "rvgpu_sram_if.svh"
 `include "rvgpu_control_unit_pkg.svh"
 `include "rvgpu_axi_config.svh"
+`include "rvgpu_mmu_if.svh"
 
 `ifndef RVGPU_CONTROL_UNIT_PKG_IMPORTED
 `define RVGPU_CONTROL_UNIT_PKG_IMPORTED
@@ -102,49 +103,7 @@ interface job_dispatcher_if;
     );
 endinterface : job_dispatcher_if
 
-//=============================================================================
-// MMU Interface - Command Processor ↔ MMU
-// 用于Command Processor与MMU之间的地址转换请求和配置
-//=============================================================================
-interface mmu_if #(
-    parameter control_unit_config_t CU_CONFIG = DEFAULT_CONTROL_UNIT_CONFIG
-);
-    // Request Channel
-    logic                                               req_valid;
-    logic [CU_CONFIG.mmu_parameter.va_width-1:0]        req_vaddr;
-    logic                                               req_read;
-    logic                                               req_write;
-    logic                                               req_ready;
-    
-    // Response Channel
-    logic                                               resp_valid;
-    logic [CU_CONFIG.mmu_parameter.pa_width-1:0]        resp_paddr;
-    logic                                               resp_hit;
-    logic [1:0]                                         resp_status;
-    logic                                               resp_ready;
-    
-    // Configuration Channel
-    logic                                               cfg_en; // 配置使能
-    logic [CU_CONFIG.mmu_parameter.pa_width-1:0]        cfg_base_addr; // 页表基地址
-    
-    // Command Processor port (requests address translation and configures MMU)
-    modport cp_port (
-        output req_valid, req_vaddr, req_read, req_write,
-        input  req_ready,
-        input  resp_valid, resp_paddr, resp_hit, resp_status,
-        output resp_ready,
-        output cfg_en, cfg_base_addr
-    );
-    
-    // MMU port (performs address translation and accepts configuration)
-    modport mmu_port (
-        input  req_valid, req_vaddr, req_read, req_write,
-        output req_ready,
-        output resp_valid, resp_paddr, resp_hit, resp_status,
-        input  resp_ready,
-        input  cfg_en, cfg_base_addr
-    );
-endinterface : mmu_if
+
 
 //=============================================================================
 // TLB Interface - MMU <-> TLB SRAM

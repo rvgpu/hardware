@@ -39,7 +39,9 @@ module rvgpu_job_dispatcher #(
     rvgpu_internal_noc_if.device noc_if,
 
     // MMU Interface - 地址转换
-    mmu_if.cp_port mmu_if,
+    mmu_if.requester_port mmu_if,
+    // MMU Config Interface - 配置
+    cp_mmu_config_if.cp_port mmu_config_if,
 
     // Command Processor Interface
     job_dispatcher_if.jd_port jd_if
@@ -153,8 +155,8 @@ module rvgpu_job_dispatcher #(
         mmu_if.req_read = 1'b1;
         mmu_if.req_write = 1'b0;
         mmu_if.resp_ready = 1'b0;
-        mmu_if.cfg_en = 1'b0;
-        mmu_if.cfg_base_addr = jd_if.mmu_addr[47:0];
+        mmu_config_if.cfg_en = 1'b0;
+        mmu_config_if.cfg_base_addr = jd_if.mmu_addr[47:0];
         noc_if.m_req_valid  = 1'b0;
         noc_if.m_req_header = '0;
         noc_if.m_req_data   = '0;
@@ -169,8 +171,8 @@ module rvgpu_job_dispatcher #(
                     state_n = STATE_MMU_REQ;
                     package_addr_n = jd_if.package_addr;
                     mmu_base_n = jd_if.mmu_addr;
-                    mmu_if.cfg_en = 1'b1;
-                    mmu_if.cfg_base_addr = jd_if.mmu_addr[47:0];
+                    mmu_config_if.cfg_en = 1'b1;
+                    mmu_config_if.cfg_base_addr = jd_if.mmu_addr[47:0];
                     `DEBUG_PRINT("JD", $sformatf("JD enable, package_addr: 0x%h, mmu_addr: 0x%h", jd_if.package_addr, jd_if.mmu_addr));
                 end
             end

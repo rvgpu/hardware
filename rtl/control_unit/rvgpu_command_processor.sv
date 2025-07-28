@@ -36,7 +36,9 @@ module rvgpu_command_processor #(
     rvgpu_internal_noc_if.device noc_if,
 
     // MMU Interface
-    mmu_if.cp_port mmu_if,
+    mmu_if.requester_port mmu_if,
+    // MMU Config Interface
+    cp_mmu_config_if.cp_port mmu_config_if,
 
     // Interrupt Output
     output logic                           gpu_irq
@@ -80,6 +82,7 @@ module rvgpu_command_processor #(
         .rst_n(rst_n),
         .noc_if(noc_if),
         .mmu_if(mmu_if),
+        .mmu_config_if(mmu_config_if),
         .jd_if(cp_jd.jd_port)
     );
     

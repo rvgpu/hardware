@@ -44,12 +44,14 @@ module rvgpu_control_unit #(
     // Internal Signals
     //=============================================================================
     // adapter_cp: AXI Adapter <-> Command Processor
-    // cp_mmu: Command Processor <-> MMU
+    // cp_mmu: Command Processor <-> MMU (地址转换)
+    // cp_mmu_config: Command Processor <-> MMU (配置)
     // cp_noc: Command Processor <-> NOC Arbiter
     // mmu_noc: MMU <-> NOC Arbiter
     control_if adapter_cp();
     
     mmu_if cp_mmu();
+    cp_mmu_config_if cp_mmu_config();
     
     rvgpu_internal_noc_if cp_noc();
     
@@ -73,7 +75,8 @@ module rvgpu_control_unit #(
         .rst_n(rst_n),
         .ctrl_cp(adapter_cp.cp_port),
         .noc_if(cp_noc.device),
-        .mmu_if(cp_mmu.cp_port),
+        .mmu_if(cp_mmu.requester_port),
+        .mmu_config_if(cp_mmu_config.cp_port),
         .gpu_irq(gpu_irq)
     );
     
@@ -85,6 +88,7 @@ module rvgpu_control_unit #(
         .clk(clk),
         .rst_n(rst_n),
         .mmu_if(cp_mmu.mmu_port),
+        .mmu_config_if(cp_mmu_config.mmu_port),
         .noc_if(mmu_noc.device)
     );
     

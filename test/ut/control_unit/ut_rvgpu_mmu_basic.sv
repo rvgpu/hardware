@@ -4,6 +4,7 @@
 `include "rvgpu_mmu_test_base.svh"
 `include "rvgpu_clk_rst.svh"
 `include "rvgpu_internal_noc_if.svh"
+`include "rvgpu_mmu_if.svh"
 `include "rvgpu_sram_sp_sim.sv"
 `include "rvgpu_mmu.sv"
 
@@ -30,7 +31,8 @@ module ut_rvgpu_mmu_basic_unit_test;
   //===================================
   // Interface Instances
   //===================================
-  mmu_if #(.CU_CONFIG(DEFAULT_CONTROL_UNIT_CONFIG)) mmu_if();
+  mmu_if mmu_if();
+  cp_mmu_config_if mmu_config_if();
   rvgpu_internal_noc_if noc_if();
 
   // DUT instance - MMU
@@ -40,6 +42,7 @@ module ut_rvgpu_mmu_basic_unit_test;
     .clk(clk_rst_if.clk),
     .rst_n(clk_rst_if.rst_n),
     .mmu_if(mmu_if.mmu_port),
+    .mmu_config_if(mmu_config_if.mmu_port),
     .noc_if(noc_if.device)
   );
 
@@ -64,7 +67,7 @@ module ut_rvgpu_mmu_basic_unit_test;
     svunit_ut = new(name);
     clk_mgr = new("mmu_test_clk", 10.0, 10);
     clk_mgr.initialize(clk_rst_if);
-    test_base = new(mmu_if, noc_if, clk_rst_if, clk_mgr);
+    test_base = new(mmu_if, mmu_config_if, noc_if, clk_rst_if, clk_mgr);
     $display("@%0t: Build completed", $time);
     clk_mgr.display_status();
   endfunction
@@ -124,7 +127,7 @@ module ut_rvgpu_mmu_basic_unit_test;
     clk_mgr.wait_clks(2);
     
     // 验证配置是否生效
-    `FAIL_IF(mmu_if.cfg_en !== 1'b0)  // 配置信号应该已经清除
+    `FAIL_IF(mmu_config_if.cfg_en !== 1'b0)  // 配置信号应该已经清除
     
     $display("@%0t: MMU configuration test completed", $time);
   `SVTEST_END

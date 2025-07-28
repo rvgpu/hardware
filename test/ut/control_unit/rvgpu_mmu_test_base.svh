@@ -22,7 +22,8 @@ typedef struct packed {
 } mmu_transaction_t;
 
 // Virtual interface types for task parameters
-typedef virtual mmu_if #(.VA_WIDTH(48), .PA_WIDTH(48)) mmu_vif_t;
+typedef virtual mmu_if mmu_vif_t;
+typedef virtual cp_mmu_config_if mmu_config_vif_t;
 typedef virtual rvgpu_internal_noc_if noc_vif_t;
 typedef virtual clk_rst_if clk_rst_vif_t;
 
@@ -31,6 +32,7 @@ class rvgpu_mmu_test_base;
 
     // Interface references (to be connected from testbench)
     mmu_vif_t mmu_if;
+    mmu_config_vif_t mmu_config_if;
     noc_vif_t noc_if;
     clk_rst_vif_t clk_rst_if;
     
@@ -50,8 +52,9 @@ class rvgpu_mmu_test_base;
     logic tlb_miss_detected;
 
     // Constructor
-    function new(mmu_vif_t mmu_vif, noc_vif_t noc_vif, clk_rst_vif_t clk_rst_vif, rvgpu_clk_manager clk_manager);
+    function new(mmu_vif_t mmu_vif, mmu_config_vif_t mmu_config_vif, noc_vif_t noc_vif, clk_rst_vif_t clk_rst_vif, rvgpu_clk_manager clk_manager);
         this.mmu_if = mmu_vif;
+        this.mmu_config_if = mmu_config_vif;
         this.noc_if = noc_vif;
         this.clk_rst_if = clk_rst_vif;
         this.clk_mgr = clk_manager;
@@ -97,8 +100,8 @@ class rvgpu_mmu_test_base;
         mmu_if.resp_status = 2'b00;
         
         // MMU configuration interface
-        mmu_if.cfg_en = 1'b0;
-        mmu_if.cfg_base_addr = 48'h0;
+        mmu_config_if.cfg_en = 1'b0;
+        mmu_config_if.cfg_base_addr = 48'h0;
 
         // NOC interface - initialize to idle state
         noc_if.m_req_valid = 1'b0;
@@ -181,10 +184,10 @@ class rvgpu_mmu_test_base;
     task configure_mmu_page_table(logic [47:0] base_addr);
         $display("@%0t: Configuring MMU page table: base_addr=0x%012x", $time, base_addr);
         
-        mmu_if.cfg_en = 1'b1;
-        mmu_if.cfg_base_addr = base_addr;
+        mmu_config_if.cfg_en = 1'b1;
+        mmu_config_if.cfg_base_addr = base_addr;
         clk_mgr.wait_posedge_and_delay_ns(1);
-        mmu_if.cfg_en = 1'b0;
+        mmu_config_if.cfg_en = 1'b0;
         
         $display("@%0t: MMU page table configured", $time);
     endtask

@@ -38,6 +38,8 @@ module rvgpu_mmu #(
 
     // 命令处理器接口
     mmu_if.mmu_port mmu_if,
+    // MMU配置接口
+    cp_mmu_config_if.mmu_port mmu_config_if,
 
     // 页表访问NOC接口
     rvgpu_internal_noc_if.device noc_if
@@ -352,9 +354,9 @@ module rvgpu_mmu #(
         if (!rst_n) begin
             page_table_base_r <= '0;
         end else begin
-            if (mmu_if.cfg_en) begin
-                page_table_base_r <= mmu_if.cfg_base_addr;
-                `DEBUG_PRINT("MMU", $sformatf("MMU cfg_en, page_table_base: 0x%h", mmu_if.cfg_base_addr));
+                    if (mmu_config_if.cfg_en) begin
+            page_table_base_r <= mmu_config_if.cfg_base_addr;
+            `DEBUG_PRINT("MMU", $sformatf("MMU cfg_en, page_table_base: 0x%h", mmu_config_if.cfg_base_addr));
             end
         end
     end

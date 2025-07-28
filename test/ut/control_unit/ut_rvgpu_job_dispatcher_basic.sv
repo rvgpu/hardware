@@ -5,6 +5,7 @@
 `include "rvgpu_job_dispatcher_test_base.svh"
 `include "rvgpu_clk_rst.svh"
 `include "rvgpu_internal_noc_if.svh"
+`include "rvgpu_mmu_if.svh"
 `include "rvgpu_job_dispatcher.sv"
 
 // SVUnit中模块名必须以_unit_test结尾
@@ -33,13 +34,15 @@ module ut_rvgpu_job_dispatcher_basic_unit_test;
   job_dispatcher_if jd_if();
   rvgpu_internal_noc_if noc_if();
   mmu_if jd_mmu();
+  cp_mmu_config_if jd_mmu_config();
 
   // DUT instance - Job Dispatcher
   rvgpu_job_dispatcher dut (
     .clk(clk_rst_if.clk),
     .rst_n(clk_rst_if.rst_n),
     .noc_if(noc_if.device),
-    .mmu_if(jd_mmu.cp_port),
+    .mmu_if(jd_mmu.requester_port),
+    .mmu_config_if(jd_mmu_config.cp_port),
     .jd_if(jd_if.jd_port)
   );
 
@@ -63,7 +66,7 @@ module ut_rvgpu_job_dispatcher_basic_unit_test;
     svunit_ut = new(name);
     clk_mgr = new("jd_test_clk", 10.0, 10);
     clk_mgr.initialize(clk_rst_if);
-    test_base = new(jd_if, noc_if, jd_mmu, clk_rst_if, clk_mgr);
+    test_base = new(jd_if, noc_if, jd_mmu, jd_mmu_config, clk_rst_if, clk_mgr);
     $display("@%0t: Build completed", $time);
     clk_mgr.display_status();
   endfunction
@@ -164,14 +167,14 @@ module ut_rvgpu_job_dispatcher_basic_unit_test;
 
     jd_if.enable = 1'b1;
     clk_mgr.wait_posedge();
-    `FAIL_IF(mmu_if.cfg_en !== 1'b1)
-    `FAIL_IF(mmu_if.cfg_base_addr !== 48'h2000)
+    `FAIL_IF(jd_mmu_config.cfg_en !== 1'b1)
+    `FAIL_IF(jd_mmu_config.cfg_base_addr !== 48'h2000)
 
     clk_mgr.delay_ns(1);
     jd_if.enable = 1'b0;  // Single pulse
 
     clk_mgr.wait_posedge();    
-    `FAIL_IF(mmu_if.cfg_en !== 1'b0)
+    `FAIL_IF(jd_mmu_config.cfg_en !== 1'b0)
     
     $display("@%0t: MMU configuration test completed", $time);
   `SVTEST_END

@@ -27,6 +27,7 @@ typedef struct packed {
 typedef virtual job_dispatcher_if jd_vif_t;
 typedef virtual rvgpu_internal_noc_if noc_vif_t;
 typedef virtual mmu_if mmu_vif_t;
+typedef virtual cp_mmu_config_if mmu_config_vif_t;
 typedef virtual clk_rst_if clk_rst_vif_t;
 
 // Base class for RVGPU Job Dispatcher testing
@@ -36,6 +37,7 @@ class rvgpu_job_dispatcher_test_base;
     jd_vif_t jd_if;
     noc_vif_t noc_if;
     mmu_vif_t mmu_if;
+    mmu_config_vif_t mmu_config_if;
     clk_rst_vif_t clk_rst_if;
     
     // Clock manager for elegant time control
@@ -54,10 +56,11 @@ class rvgpu_job_dispatcher_test_base;
     logic jd_busy_detected;
 
     // Constructor
-    function new(jd_vif_t jd_vif, noc_vif_t noc_vif, mmu_vif_t mmu_vif, clk_rst_vif_t clk_rst_vif, rvgpu_clk_manager clk_manager);
+    function new(jd_vif_t jd_vif, noc_vif_t noc_vif, mmu_vif_t mmu_vif, mmu_config_vif_t mmu_config_vif, clk_rst_vif_t clk_rst_vif, rvgpu_clk_manager clk_manager);
         this.jd_if = jd_vif;
         this.noc_if = noc_vif;
         this.mmu_if = mmu_vif;
+        this.mmu_config_if = mmu_config_vif;
         this.clk_rst_if = clk_rst_vif;
         this.clk_mgr = clk_manager;
         
@@ -127,7 +130,6 @@ class rvgpu_job_dispatcher_test_base;
         mmu_if.resp_hit = 1'b0;
         mmu_if.resp_status = 2'b00;
         // MMU配置接口 - 这些是输入到MMU的信号，由Job Dispatcher驱动
-        // mmu_if.cfg_en 和 mmu_if.cfg_base_addr 由DUT驱动，不需要初始化
     endtask
 
     // Clear interface signals
@@ -325,7 +327,7 @@ class rvgpu_job_dispatcher_test_base;
         int cycle_count = 0;
         $display("@%0t: Waiting for MMU configuration", $time);
         
-        while (!mmu_if.cfg_en && (cycle_count < timeout_cycles)) begin
+        while (!mmu_config_if.cfg_en && (cycle_count < timeout_cycles)) begin
             clk_mgr.wait_posedge();
             cycle_count++;
         end
@@ -334,8 +336,8 @@ class rvgpu_job_dispatcher_test_base;
             $display("@%0t: ERROR: MMU configuration timeout after %0d cycles", $time, timeout_cycles);
             `FAIL_IF(1)
         end else begin
-            cfg_en = mmu_if.cfg_en;
-            cfg_base_addr = mmu_if.cfg_base_addr;
+            cfg_en = mmu_config_if.cfg_en;
+            cfg_base_addr = mmu_config_if.cfg_base_addr;
             $display("@%0t: MMU configuration received after %0d cycles: cfg_en=%0d, cfg_base_addr=0x%012x", 
                      $time, cycle_count, cfg_en, cfg_base_addr);
         end
@@ -349,7 +351,7 @@ class rvgpu_job_dispatcher_test_base;
         int cycle_count = 0;
         $display("@%0t: Waiting for MMU configuration with base address", $time);
         
-        while (!mmu_if.cfg_en && (cycle_count < timeout_cycles)) begin
+        while (!mmu_config_if.cfg_en && (cycle_count < timeout_cycles)) begin
             clk_mgr.wait_posedge();
             cycle_count++;
         end
@@ -358,8 +360,8 @@ class rvgpu_job_dispatcher_test_base;
             $display("@%0t: ERROR: MMU configuration timeout after %0d cycles", $time, timeout_cycles);
             `FAIL_IF(1)
         end else begin
-            cfg_en = mmu_if.cfg_en;
-            cfg_base_addr = mmu_if.cfg_base_addr;
+            cfg_en = mmu_config_if.cfg_en;
+            cfg_base_addr = mmu_config_if.cfg_base_addr;
             $display("@%0t: MMU configuration with base address: cfg_en=%0d, cfg_base_addr=0x%012x (expected=0x%012x)", 
                      $time, cfg_en, cfg_base_addr, expected_base_addr);
         end

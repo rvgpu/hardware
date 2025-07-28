@@ -17,7 +17,9 @@
 `define RVGPU_DEBUG_SVH
 
 // Debug打印宏 - SystemVerilog兼容
-`define DEBUG_PRINT(module, msg) \
-    $display("@%0t: [%s] %s", $time, module, msg)
+`define DEBUG_PRINT(modulename, msg) \
+    $display("@%0t: [%s] %s", $time, modulename, msg)
 
+`define GPC_PRINT(modulename, msg) \
+    $display("@%0t: [GPC.%0d.%s] : %s", $time, GPC_ID, modulename, msg)
 `endif // RVGPU_DEBUG_SVH

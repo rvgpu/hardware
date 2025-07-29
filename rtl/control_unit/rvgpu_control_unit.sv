@@ -84,7 +84,7 @@ module rvgpu_control_unit #(
     // MMU Instance - Memory Management Unit
     //=============================================================================
     
-    rvgpu_mmu #(.CU_CONFIG(CU_CONFIG)) u_mmu (
+    rvgpu_mmu u_mmu (
         .clk(clk),
         .rst_n(rst_n),
         .mmu_if(cp_mmu.mmu_port),

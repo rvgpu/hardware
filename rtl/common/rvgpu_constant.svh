@@ -40,12 +40,6 @@
 `define RVGPU_CONST_CU_PAGE_OFFSET_BITS         $clog2(`RVGPU_CONST_CU_PAGE_SIZE)
 `define RVGPU_CONST_CU_PAGE_INDEX_BITS          $clog2(`RVGPU_CONST_CU_PAGE_SIZE / 8)
 
-// MMU Configuration
-`define RVGPU_CONST_CU_TLB_ENTRIES              128
-`define RVGPU_CONST_CU_TLB_INDEX_BITS           $clog2(`RVGPU_CONST_CU_TLB_ENTRIES)
-`define RVGPU_CONST_CU_TLB_TAG_BITS             `RVGPU_CONST_CU_VA_WIDTH - `RVGPU_CONST_CU_TLB_INDEX_BITS - `RVGPU_CONST_CU_PAGE_OFFSET_BITS
-`define RVGPU_CONST_CU_TLB_PPN_BITS             `RVGPU_CONST_CU_PA_WIDTH - `RVGPU_CONST_CU_PAGE_OFFSET_BITS
-
 // ================================================
 //  L2Cache Configuration
 // ================================================

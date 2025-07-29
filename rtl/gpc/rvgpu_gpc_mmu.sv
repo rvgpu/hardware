@@ -19,10 +19,10 @@
 `include "rvgpu_typedef.svh"
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_noc_message.svh"
-`include "rvgpu_mmu_if.svh"  // 使用通用MMU接口
+`include "rvgpu_mmu_if.svh"
+`include "rvgpu_gpc_mmu_tlb.sv"
 
 module rvgpu_gpc_mmu #(
-    parameter int TLB_ENTRIES = 128,   // L1 TLB条目数量
     parameter int MAX_REQUESTS = 16,    // 最大并发请求数
     parameter int GPC_ID = 0           // GPC ID
 ) (
@@ -48,16 +48,6 @@ module rvgpu_gpc_mmu #(
     localparam int PAGE_OFFSET_BITS = `RVGPU_CONST_CU_PAGE_OFFSET_BITS;
     localparam int VPN_BITS = VA_WIDTH - PAGE_OFFSET_BITS;
     localparam int PPN_BITS = PA_WIDTH - PAGE_OFFSET_BITS;
-
-    // TLB表项定义
-    typedef struct packed {
-        logic        valid;          // 有效位
-        logic [VPN_BITS-1:0] vpn;    // 虚拟页号
-        logic [PA_WIDTH-1:0] paddr;  // 完整物理地址
-        logic [2:0]  perm;           // 权限 (读/写/执行)
-        logic        accessed;       // 访问位
-        logic [3:0]  plru;           // PLRU位
-    } tlb_entry_t;
     
     // 请求队列表项定义
     typedef struct packed {
@@ -79,8 +69,7 @@ module rvgpu_gpc_mmu #(
         UPDATE_L0_TLB
     } mmu_state_t;
     
-    // L1 TLB存储
-    tlb_entry_t tlb_entries[TLB_ENTRIES];
+    mmu_tlb_if mmu_tlb();
     
     // 请求队列
     req_entry_t req_queue[MAX_REQUESTS];
@@ -91,11 +80,8 @@ module rvgpu_gpc_mmu #(
     
     // 内部信号
     mmu_state_t state;
-    logic [$clog2(TLB_ENTRIES)-1:0] replace_index;
-    logic [$clog2(TLB_ENTRIES)-1:0] hit_index;
     logic [VPN_BITS-1:0] req_vpn;
     logic tlb_hit;
-    logic tlb_fault;
     
     // 当前处理的请求
     req_entry_t current_req;
@@ -107,8 +93,7 @@ module rvgpu_gpc_mmu #(
     logic [4:0] req_grant_array;
     
     // 将请求有效信号组合成数组，便于仲裁
-    assign req_valid_array = {bs_if.req_valid, 
-                             tpc_if[3].req_valid, 
+    assign req_valid_array = {bs_if.req_valid,                              tpc_if[3].req_valid, 
                              tpc_if[2].req_valid, 
                              tpc_if[1].req_valid, 
                              tpc_if[0].req_valid};
@@ -246,62 +231,39 @@ module rvgpu_gpc_mmu #(
     // 提取虚拟页号
     assign req_vpn = current_req.vaddr[VA_WIDTH-1:PAGE_OFFSET_BITS];
     
-    // TLB查找逻辑
-    always_comb begin
-        tlb_hit = 1'b0;
-        hit_index = '0;
-        tlb_fault = 1'b0;
-        
-        // 并行比较所有TLB条目 - 简化处理
-        if (tlb_entries[0].valid && tlb_entries[0].vpn == req_vpn) begin
-            tlb_hit = 1'b1;
-            hit_index = 0;
-            
-            // 检查访问权限
-            case (current_req.req_type)
-                MMU_READ:    tlb_fault = !(tlb_entries[0].perm[0]);
-                MMU_WRITE:   tlb_fault = !(tlb_entries[0].perm[1]);
-                MMU_EXECUTE: tlb_fault = !(tlb_entries[0].perm[2]);
-                default:     tlb_fault = 1'b1;
-            endcase
-        end else if (tlb_entries[1].valid && tlb_entries[1].vpn == req_vpn) begin
-            tlb_hit = 1'b1;
-            hit_index = 1;
-            
-            // 检查访问权限
-            case (current_req.req_type)
-                MMU_READ:    tlb_fault = !(tlb_entries[1].perm[0]);
-                MMU_WRITE:   tlb_fault = !(tlb_entries[1].perm[1]);
-                MMU_EXECUTE: tlb_fault = !(tlb_entries[1].perm[2]);
-                default:     tlb_fault = 1'b1;
-            endcase
-        end
-    end
+    //=============================================================================
+    // TLB模块实例化
+    //=============================================================================
     
-    // PLRU最小值
-    logic [3:0] min_plru;
+    rvgpu_gpc_mmu_tlb #(
+        .GPC_ID(GPC_ID)
+    ) u_gpc_mmu_tlb (
+        .clk(clk),
+        .rst_n(rst_n),
+        .tlb_if(mmu_tlb.tlb_port),
+        .l0_tlb_if(l0_tlb_if)
+    );
     
-    // 替换策略 (PLRU - Pseudo-LRU)
-    always_comb begin
-        replace_index = '0;
-        min_plru = '1;
-        
-        // 查找PLRU值最小的条目 - 简化处理
-        if (!tlb_entries[0].valid) begin
-            // 优先使用无效条目
-            replace_index = 0;
-        end else if (!tlb_entries[1].valid) begin
-            replace_index = 1;
-        end else if (tlb_entries[0].plru < min_plru) begin
-            min_plru = tlb_entries[0].plru;
-            replace_index = 0;
-        end else if (tlb_entries[1].plru < min_plru) begin
-            min_plru = tlb_entries[1].plru;
-            replace_index = 1;
-        end
-    end
+    //=============================================================================
+    // TLB接口连接
+    //=============================================================================
     
+    // TLB查找接口连接
+    assign mmu_tlb.lookup_valid = (state == LOOKUP);
+    assign mmu_tlb.lookup_vaddr = current_req.vaddr;
+    
+    // TLB更新接口连接
+    assign mmu_tlb.update_valid = (state == UPDATE_TLB);
+    assign mmu_tlb.update_vaddr = current_req.vaddr;
+    assign mmu_tlb.update_paddr = current_paddr;
+    
+    // 从TLB模块获取查找结果
+    assign tlb_hit = mmu_tlb.lookup_hit;
+    
+    //=============================================================================
     // 主状态机
+    //=============================================================================
+    
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             state <= IDLE;
@@ -310,31 +272,12 @@ module rvgpu_gpc_mmu #(
             noc_if.m_req_valid <= 1'b0;
             noc_if.m_resp_ready <= 1'b0;
             
-            // 初始化TLB条目 - 简化处理
-            tlb_entries[0].valid <= 1'b0;
-            tlb_entries[0].vpn <= '0;
-            tlb_entries[0].paddr <= '0;
-            tlb_entries[0].perm <= '0;
-            tlb_entries[0].accessed <= 1'b0;
-            tlb_entries[0].plru <= 4'h0;
-            
-            tlb_entries[1].valid <= 1'b0;
-            tlb_entries[1].vpn <= '0;
-            tlb_entries[1].paddr <= '0;
-            tlb_entries[1].perm <= '0;
-            tlb_entries[1].accessed <= 1'b0;
-            tlb_entries[1].plru <= 4'h1;
-            
             // 初始化响应信号
             bs_if.resp_valid <= 1'b0;
             tpc_if[0].resp_valid <= 1'b0;
             tpc_if[1].resp_valid <= 1'b0;
             tpc_if[2].resp_valid <= 1'b0;
             tpc_if[3].resp_valid <= 1'b0;
-            l0_tlb_if[0].update_valid <= 1'b0;
-            l0_tlb_if[1].update_valid <= 1'b0;
-            l0_tlb_if[2].update_valid <= 1'b0;
-            l0_tlb_if[3].update_valid <= 1'b0;
         end else begin
             case (state)
                 IDLE: begin
@@ -353,26 +296,16 @@ module rvgpu_gpc_mmu #(
                 end
                 
                 LOOKUP: begin
-                    if (tlb_hit) begin
-                        // TLB命中，更新PLRU并准备响应
-                        current_paddr <= tlb_entries[hit_index].paddr;
-                        
-                        // 更新命中条目的PLRU和访问位
-                        tlb_entries[hit_index].accessed <= 1'b1;
-                        tlb_entries[hit_index].plru <= '1; // 最近使用
-                        
-                        // 更新其他条目的PLRU值 - 简化处理
-                        if (tlb_entries[0].valid && 0 != hit_index && tlb_entries[0].plru > 0) begin
-                            tlb_entries[0].plru <= tlb_entries[0].plru - 1;
+                    // 等待TLB查找完成
+                    if (mmu_tlb.lookup_ready) begin
+                        if (mmu_tlb.lookup_hit) begin
+                            // TLB命中，获取物理地址
+                            current_paddr <= mmu_tlb.lookup_paddr;
+                            state <= SEND_RESPONSE;
+                        end else begin
+                            // TLB未命中，需要请求控制单元MMU
+                            state <= SEND_TO_NOC;
                         end
-                        if (tlb_entries[1].valid && 1 != hit_index && tlb_entries[1].plru > 0) begin
-                            tlb_entries[1].plru <= tlb_entries[1].plru - 1;
-                        end
-                        
-                        state <= SEND_RESPONSE;
-                    end else begin
-                        // TLB未命中，需要请求控制单元MMU
-                        state <= SEND_TO_NOC;
                     end
                 end
                 
@@ -401,8 +334,8 @@ module rvgpu_gpc_mmu #(
                     if (noc_if.m_resp_valid) begin
                         noc_if.m_resp_ready <= 1'b0;
                         
-                        // 从响应数据中提取信息
-                        current_paddr <= noc_if.m_resp_data[PA_WIDTH-1:PAGE_OFFSET_BITS];
+                        // 从响应数据中提取信息 - 构建完整的物理地址
+                        current_paddr <= {noc_if.m_resp_data[PA_WIDTH-1:PAGE_OFFSET_BITS], current_req.vaddr[PAGE_OFFSET_BITS-1:0]};
                         
                         if (!noc_if.m_resp_data[28]) begin // 假设fault位在data[28]
                             // 如果没有错误，更新TLB
@@ -415,79 +348,21 @@ module rvgpu_gpc_mmu #(
                 end
                 
                 UPDATE_TLB: begin
-                    // 更新TLB
-                    tlb_entries[replace_index].valid <= 1'b1;
-                    tlb_entries[replace_index].vpn <= req_vpn;
-                    tlb_entries[replace_index].paddr <= current_paddr;
-                    tlb_entries[replace_index].perm <= current_req.req_type; // 简化实现，实际应使用MMU返回的权限
-                    tlb_entries[replace_index].accessed <= 1'b1;
-                    tlb_entries[replace_index].plru <= '1; // 最近使用
-                    
-                    // 更新其他条目的PLRU值 - 简化处理
-                    if (tlb_entries[0].valid && 0 != replace_index && tlb_entries[0].plru > 0) begin
-                        tlb_entries[0].plru <= tlb_entries[0].plru - 1;
-                    end
-                    if (tlb_entries[1].valid && 1 != replace_index && tlb_entries[1].plru > 0) begin
-                        tlb_entries[1].plru <= tlb_entries[1].plru - 1;
-                    end
-                    
-                    // 如果请求来自TPC，还需要更新L0 TLB
-                    if (current_req.tpc_id < 4) begin
-                        state <= UPDATE_L0_TLB;
-                    end else begin
-                        state <= SEND_RESPONSE;
+                    // 等待TLB更新完成
+                    if (mmu_tlb.update_ready) begin
+                        // 如果请求来自TPC，还需要更新L0 TLB
+                        if (current_req.tpc_id < 4) begin
+                            state <= UPDATE_L0_TLB;
+                        end else begin
+                            state <= SEND_RESPONSE;
+                        end
                     end
                 end
                 
                 UPDATE_L0_TLB: begin
-                    // 更新TPC的L0 TLB - 使用case语句避免动态索引
-                    case (current_req.tpc_id)
-                        0: begin
-                            l0_tlb_if[0].update_valid <= 1'b1;
-                            l0_tlb_if[0].update_vaddr <= current_req.vaddr;
-                            l0_tlb_if[0].update_paddr <= current_paddr;
-                            l0_tlb_if[0].update_perm <= current_req.req_type;
-                            
-                            if (l0_tlb_if[0].update_ready) begin
-                                l0_tlb_if[0].update_valid <= 1'b0;
-                                state <= SEND_RESPONSE;
-                            end
-                        end
-                        1: begin
-                            l0_tlb_if[1].update_valid <= 1'b1;
-                            l0_tlb_if[1].update_vaddr <= current_req.vaddr;
-                            l0_tlb_if[1].update_paddr <= current_paddr;
-                            l0_tlb_if[1].update_perm <= current_req.req_type;
-                            
-                            if (l0_tlb_if[1].update_ready) begin
-                                l0_tlb_if[1].update_valid <= 1'b0;
-                                state <= SEND_RESPONSE;
-                            end
-                        end
-                        2: begin
-                            l0_tlb_if[2].update_valid <= 1'b1;
-                            l0_tlb_if[2].update_vaddr <= current_req.vaddr;
-                            l0_tlb_if[2].update_paddr <= current_paddr;
-                            l0_tlb_if[2].update_perm <= current_req.req_type;
-                            
-                            if (l0_tlb_if[2].update_ready) begin
-                                l0_tlb_if[2].update_valid <= 1'b0;
-                                state <= SEND_RESPONSE;
-                            end
-                        end
-                        3: begin
-                            l0_tlb_if[3].update_valid <= 1'b1;
-                            l0_tlb_if[3].update_vaddr <= current_req.vaddr;
-                            l0_tlb_if[3].update_paddr <= current_paddr;
-                            l0_tlb_if[3].update_perm <= current_req.req_type;
-                            
-                            if (l0_tlb_if[3].update_ready) begin
-                                l0_tlb_if[3].update_valid <= 1'b0;
-                                state <= SEND_RESPONSE;
-                            end
-                        end
-                        default: state <= SEND_RESPONSE;
-                    endcase
+                    // L0 TLB更新现在由TLB模块处理
+                    // 这里只需要等待更新完成
+                    state <= SEND_RESPONSE;
                 end
                 
                 SEND_RESPONSE: begin
@@ -496,8 +371,8 @@ module rvgpu_gpc_mmu #(
                         // 响应Block Scheduler
                         bs_if.resp_valid <= 1'b1;
                         bs_if.resp_paddr <= current_paddr;
-                        bs_if.resp_hit <= tlb_hit;
-                        bs_if.resp_status <= tlb_fault ? MMU_RESP_FAULT : MMU_RESP_OKAY;
+                        bs_if.resp_hit <= mmu_tlb.lookup_hit;
+                        bs_if.resp_status <= MMU_RESP_OKAY;
                         
                         if (bs_if.resp_ready) begin
                             bs_if.resp_valid <= 1'b0;
@@ -509,8 +384,8 @@ module rvgpu_gpc_mmu #(
                             0: begin
                                 tpc_if[0].resp_valid <= 1'b1;
                                 tpc_if[0].resp_paddr <= current_paddr;
-                                tpc_if[0].resp_hit <= tlb_hit;
-                                tpc_if[0].resp_status <= tlb_fault ? MMU_RESP_FAULT : MMU_RESP_OKAY;
+                                tpc_if[0].resp_hit <= mmu_tlb.lookup_hit;
+                                tpc_if[0].resp_status <= MMU_RESP_OKAY;
                                 
                                 if (tpc_if[0].resp_ready) begin
                                     tpc_if[0].resp_valid <= 1'b0;
@@ -520,8 +395,8 @@ module rvgpu_gpc_mmu #(
                             1: begin
                                 tpc_if[1].resp_valid <= 1'b1;
                                 tpc_if[1].resp_paddr <= current_paddr;
-                                tpc_if[1].resp_hit <= tlb_hit;
-                                tpc_if[1].resp_status <= tlb_fault ? MMU_RESP_FAULT : MMU_RESP_OKAY;
+                                tpc_if[1].resp_hit <= mmu_tlb.lookup_hit;
+                                tpc_if[1].resp_status <= MMU_RESP_OKAY;
                                 
                                 if (tpc_if[1].resp_ready) begin
                                     tpc_if[1].resp_valid <= 1'b0;
@@ -531,8 +406,8 @@ module rvgpu_gpc_mmu #(
                             2: begin
                                 tpc_if[2].resp_valid <= 1'b1;
                                 tpc_if[2].resp_paddr <= current_paddr;
-                                tpc_if[2].resp_hit <= tlb_hit;
-                                tpc_if[2].resp_status <= tlb_fault ? MMU_RESP_FAULT : MMU_RESP_OKAY;
+                                tpc_if[2].resp_hit <= mmu_tlb.lookup_hit;
+                                tpc_if[2].resp_status <= MMU_RESP_OKAY;
                                 
                                 if (tpc_if[2].resp_ready) begin
                                     tpc_if[2].resp_valid <= 1'b0;
@@ -542,8 +417,8 @@ module rvgpu_gpc_mmu #(
                             3: begin
                                 tpc_if[3].resp_valid <= 1'b1;
                                 tpc_if[3].resp_paddr <= current_paddr;
-                                tpc_if[3].resp_hit <= tlb_hit;
-                                tpc_if[3].resp_status <= tlb_fault ? MMU_RESP_FAULT : MMU_RESP_OKAY;
+                                tpc_if[3].resp_hit <= mmu_tlb.lookup_hit;
+                                tpc_if[3].resp_status <= MMU_RESP_OKAY;
                                 
                                 if (tpc_if[3].resp_ready) begin
                                     tpc_if[3].resp_valid <= 1'b0;

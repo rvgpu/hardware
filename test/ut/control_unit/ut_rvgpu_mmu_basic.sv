@@ -2,6 +2,7 @@
 
 `include "svunit_defines.svh"
 `include "rvgpu_mmu_test_base.svh"
+`include "rvgpu_constant_mmu.svh"
 `include "rvgpu_clk_rst.svh"
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_mmu_if.svh"
@@ -11,7 +12,6 @@
 // SVUnit中模块名必须以_unit_test结尾
 module ut_rvgpu_mmu_basic_unit_test;
   import svunit_pkg::svunit_testcase;
-  import rvgpu_mmu_pkg::*;
 
   string name = "ut_rvgpu_mmu_basic_unit_test";
   svunit_testcase svunit_ut;
@@ -36,9 +36,7 @@ module ut_rvgpu_mmu_basic_unit_test;
   rvgpu_internal_noc_if noc_if();
 
   // DUT instance - MMU
-  rvgpu_mmu #(
-    .CU_CONFIG(DEFAULT_CONTROL_UNIT_CONFIG)
-  ) dut (
+  rvgpu_mmu dut (
     .clk(clk_rst_if.clk),
     .rst_n(clk_rst_if.rst_n),
     .mmu_if(mmu_if.mmu_port),
@@ -52,6 +50,9 @@ module ut_rvgpu_mmu_basic_unit_test;
   //===================================
   // Test Variables
   //===================================
+  localparam int PA_WIDTH = `RVGPU_CONST_MMU_PA_WIDTH;
+  localparam int VA_WIDTH = `RVGPU_CONST_MMU_VA_WIDTH;
+  
   logic [PA_WIDTH-1:0] paddr;
   logic [VA_WIDTH-1:0] vaddr;
   logic hit;

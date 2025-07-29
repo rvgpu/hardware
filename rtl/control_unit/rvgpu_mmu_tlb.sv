@@ -18,17 +18,11 @@
 
 `include "rvgpu_control_unit_if.svh"
 `include "rvgpu_sram_if.svh"
-`include "rvgpu_mmu_pkg.svh"
 `include "rvgpu_mmu_if.svh"
+`include "rvgpu_mmu_common.svh"
+`include "rvgpu_constant_mmu.svh"
 
-`ifndef RVGPU_MMU_PKG_IMPORTED
-`define RVGPU_MMU_PKG_IMPORTED
-import rvgpu_mmu_pkg::*;
-`endif // RVGPU_MMU_PKG_IMPORTED
-
-module rvgpu_mmu_tlb #(
-    parameter control_unit_config_t CU_CONFIG = DEFAULT_CONTROL_UNIT_CONFIG
-) (
+module rvgpu_mmu_tlb (
     // Clock and Reset Interface
     input  logic clk,
     input  logic rst_n,
@@ -55,25 +49,25 @@ module rvgpu_mmu_tlb #(
     tlb_state_t state_r, state_nxt;
     
     // 查找请求寄存器
-    logic [TLB_TAG_BITS+TLB_ADDR_WIDTH-1:0] lookup_addr_r, lookup_addr_nxt;
-    logic [TLB_TAG_BITS-1:0] lookup_tag_r, lookup_tag_nxt;
+    logic [CU_TLB_TAG_BITS+CU_TLB_INDEX_BITS-1:0] lookup_addr_r, lookup_addr_nxt;
+    logic [CU_TLB_TAG_BITS-1:0] lookup_tag_r, lookup_tag_nxt;
     
     // SRAM数据寄存器
-    logic [TLB_DATA_WIDTH-1:0] sram_data_r, sram_data_nxt;
-    logic [TLB_DATA_WIDTH-1:0] lookup_data_r, lookup_data_nxt;
+    logic [$bits(cu_tlb_entry_t)-1:0] sram_data_r, sram_data_nxt;
+    logic [$bits(cu_tlb_entry_t)-1:0] lookup_data_r, lookup_data_nxt;
     
     // 查找结果寄存器
     logic lookup_hit_r, lookup_hit_nxt;
     logic lookup_ready_r, lookup_ready_nxt;
     
     // TLB更新请求寄存器
-    logic [TLB_ADDR_WIDTH-1:0] update_addr_r, update_addr_nxt;
-    logic [TLB_DATA_WIDTH-1:0] update_data_r, update_data_nxt;
+    logic [CU_TLB_INDEX_BITS-1:0] update_addr_r, update_addr_nxt;
+    logic [$bits(cu_tlb_entry_t)-1:0] update_data_r, update_data_nxt;
     logic update_pending_r, update_pending_nxt;
     
     // 临时变量用于函数调用结果
-    logic [TLB_TAG_BITS+TLB_ADDR_WIDTH-1:0] lookup_addr_full;
-    logic [TLB_TAG_BITS+TLB_ADDR_WIDTH-1:0] update_addr_full;
+    logic [CU_TLB_TAG_BITS+CU_TLB_INDEX_BITS-1:0] lookup_addr_full;
+    logic [CU_TLB_TAG_BITS+CU_TLB_INDEX_BITS-1:0] update_addr_full;
     
     //=============================================================================
     // 4. SRAM实例化
@@ -81,8 +75,8 @@ module rvgpu_mmu_tlb #(
     
     // 创建SRAM接口实例
     rvgpu_sram_if #(
-        .WIDTH(TLB_DATA_WIDTH),
-        .HEIGHT(TLB_ENTRIES)
+        .WIDTH($bits(cu_tlb_entry_t)),
+        .HEIGHT(CU_TLB_ENTRIES)
     ) sram_if_inst();
     
     // 连接时钟
@@ -90,9 +84,9 @@ module rvgpu_mmu_tlb #(
     
     // SRAM实例化
     rvgpu_sram_sp #(
-        .WIDTH(TLB_DATA_WIDTH),
-        .HEIGHT(TLB_ENTRIES),
-        .RAMNAME("TLB_SRAM")
+        .WIDTH($bits(cu_tlb_entry_t)),
+        .HEIGHT(CU_TLB_ENTRIES),
+        .RAMNAME("CU_TLB_SRAM")
     ) u_tlb_sram (
         .sram_if(sram_if_inst.sram_port)
     );
@@ -106,7 +100,7 @@ module rvgpu_mmu_tlb #(
         // SRAM控制信号
         sram_if_inst.ce = (state_r == TLB_READ) || (state_r == TLB_WRITE);
         sram_if_inst.we = (state_r == TLB_WRITE);
-        sram_if_inst.addr = (state_r == TLB_READ) ? lookup_addr_r[TLB_ADDR_WIDTH-1:0] : 
+        sram_if_inst.addr = (state_r == TLB_READ) ? lookup_addr_r[CU_TLB_INDEX_BITS-1:0] : 
                            (state_r == TLB_WRITE) ? update_addr_r : '0;
         sram_if_inst.wdata = (state_r == TLB_WRITE) ? update_data_r : '0;
     end
@@ -132,9 +126,9 @@ module rvgpu_mmu_tlb #(
                 // 如果有TLB更新请求，优先处理
                 if (tlb_if.update_valid && tlb_if.update_ready) begin
                     state_nxt = TLB_WRITE;
-                    update_addr_full = calc_tlb_addr(tlb_if.update_vaddr);
-                    update_addr_nxt = update_addr_full[TLB_ADDR_WIDTH-1:0];
-                    update_data_nxt = build_tlb_entry(tlb_if.update_vaddr, tlb_if.update_paddr);
+                    update_addr_full = calc_cu_tlb_addr(tlb_if.update_vaddr);
+                    update_addr_nxt = update_addr_full[CU_TLB_INDEX_BITS-1:0];
+                    update_data_nxt = build_cu_tlb_entry(tlb_if.update_vaddr, tlb_if.update_paddr);
                     update_pending_nxt = 1'b1;
                     lookup_ready_nxt = 1'b0;
                     `DEBUG_PRINT("TLB", $sformatf("TLB Update, vaddr: 0x%h, paddr: 0x%h", tlb_if.update_vaddr, tlb_if.update_paddr));
@@ -142,9 +136,9 @@ module rvgpu_mmu_tlb #(
                 // 如果有新的查找请求，进入读取状态
                 else if (tlb_if.lookup_valid && tlb_if.lookup_ready) begin
                     state_nxt = TLB_READ;
-                    lookup_addr_full = calc_tlb_addr(tlb_if.lookup_vaddr);
+                    lookup_addr_full = calc_cu_tlb_addr(tlb_if.lookup_vaddr);
                     lookup_addr_nxt = lookup_addr_full;
-                    lookup_tag_nxt = lookup_addr_full[TLB_TAG_BITS+TLB_ADDR_WIDTH-1:TLB_ADDR_WIDTH];
+                    lookup_tag_nxt = lookup_addr_full[CU_TLB_TAG_BITS+CU_TLB_INDEX_BITS-1:CU_TLB_INDEX_BITS];
                     lookup_ready_nxt = 1'b0;
                     `DEBUG_PRINT("TLB", $sformatf("TLB Lookup, vaddr: 0x%h", tlb_if.lookup_vaddr));
                 end
@@ -168,7 +162,11 @@ module rvgpu_mmu_tlb #(
             
             TLB_RESP: begin
                 // 检查命中 - 直接使用位域
-                lookup_hit_nxt = sram_if_inst.rdata[VALID_BIT] && (sram_if_inst.rdata[TAG_START:TAG_END] == lookup_tag_r);
+                // 将SRAM数据转换为结构体
+            cu_tlb_entry_t tlb_entry;
+            assign tlb_entry = sram_if_inst.rdata;
+            
+            lookup_hit_nxt = tlb_entry.common.valid && (tlb_entry.tag == lookup_tag_r);
                 lookup_data_nxt = sram_if_inst.rdata;
                 
                 // 自动回到空闲状态
@@ -223,29 +221,13 @@ module rvgpu_mmu_tlb #(
     // TLB查找接口
     assign tlb_if.lookup_ready = (state_r == TLB_IDLE) && !update_pending_r;
     assign tlb_if.lookup_hit = lookup_hit_r;
-    assign tlb_if.lookup_paddr = lookup_hit_r ? {lookup_data_r[PPN_START:PPN_END], tlb_if.lookup_vaddr[PAGE_OFFSET_BITS-1:0]} : '0;
+    // 将SRAM数据转换为结构体以访问字段
+    cu_tlb_entry_t lookup_entry;
+    assign lookup_entry = lookup_data_r;
+    assign tlb_if.lookup_paddr = lookup_hit_r ? {lookup_entry.common.ppn, tlb_if.lookup_vaddr[PAGE_OFFSET_BITS-1:0]} : '0;
     
     // TLB更新接口
     assign tlb_if.update_ready = (state_r == TLB_IDLE) && !update_pending_r;
-    
-    //=============================================================================
-    // 8. 辅助函数
-    //=============================================================================
-    
-    // 构建TLB条目函数
-    function automatic logic [TLB_DATA_WIDTH-1:0] build_tlb_entry(
-        input logic [VA_WIDTH-1:0] vaddr,
-        input logic [PA_WIDTH-1:0] paddr
-    );
-        tlb_entry_t entry;
-        entry.valid = 1'b1;
-        entry.dirty = 1'b0;
-        entry.accessed = 1'b1;
-        entry.permission = 2'b11;  // 读写权限
-        entry.tag = vaddr[VA_WIDTH-1:PAGE_OFFSET_BITS+TLB_INDEX_BITS];
-        entry.ppn = paddr[PA_WIDTH-1:PAGE_OFFSET_BITS];
-        return tlb_entry_to_raw(entry);
-    endfunction
     
     //=============================================================================
     // 9. 调试输出 - 使用 generate 块进行条件编译

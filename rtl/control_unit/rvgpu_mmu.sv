@@ -19,20 +19,14 @@
 `include "rvgpu_control_unit_pkg.svh"
 `include "rvgpu_control_unit_if.svh"
 `include "rvgpu_internal_noc_if.svh"
-`include "rvgpu_mmu_pkg.svh"
 `include "rvgpu_mmu_if.svh"
 `include "rvgpu_debug.svh"
+`include "rvgpu_constant_mmu.svh"
+`include "rvgpu_mmu_common.svh"
 
 `include "rvgpu_mmu_tlb.sv"
 
-`ifndef RVGPU_MMU_PKG_IMPORTED
-`define RVGPU_MMU_PKG_IMPORTED
-import rvgpu_mmu_pkg::*;
-`endif // RVGPU_MMU_PKG_IMPORTED
-
-module rvgpu_mmu #(
-    parameter control_unit_config_t CU_CONFIG = DEFAULT_CONTROL_UNIT_CONFIG
-) (
+module rvgpu_mmu (
     // Clock and Reset Interface
     input  logic clk,
     input  logic rst_n,
@@ -111,9 +105,7 @@ module rvgpu_mmu #(
     // 5. TLB实例化
     //=============================================================================
     
-    rvgpu_mmu_tlb #(
-        .CU_CONFIG(CU_CONFIG)
-    ) u_mmu_tlb (
+    rvgpu_mmu_tlb u_mmu_tlb (
         .clk(clk),
         .rst_n(rst_n),
         .tlb_if(mmu_tlb.tlb_port)
@@ -357,6 +349,8 @@ module rvgpu_mmu #(
     assign mmu_if.resp_hit = (state_r == MMU_STATE_RESPONSE);
     assign mmu_if.resp_status = (state_r == MMU_STATE_ERROR) ? MMU_RESP_FAULT : MMU_RESP_OKAY;  // 使用MMU状态码
     
+
+    
     function automatic logic [63:0] select_resp_data(input logic [255:0] data);
         logic [63:0] result;
         case (noc_req_data_r.req_mem_read.addr[4:3])
@@ -369,10 +363,10 @@ module rvgpu_mmu #(
     endfunction
 
     //=============================================================================
-    // 10. 调试输出 - 使用 generate 块进行条件编译
+    // 10. 调试输出 - 简化版本
     //=============================================================================
     generate
-    if (CU_CONFIG.debug) begin : gen_debug
+    if (1) begin : gen_debug
         always_ff @(posedge clk) begin
             if (state_r == MMU_STATE_IDLE && req_accept) begin
                 `DEBUG_PRINT("MMU", $sformatf("MMU Request, vaddr: 0x%h, req_type: %s", mmu_if.req_vaddr, req_type_r.name()));

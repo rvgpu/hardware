@@ -30,21 +30,18 @@ module rvgpu_gpc_mmu_tlb #(
     input  logic rst_n,
 
     // TLB查找接口
-    mmu_tlb_if.tlb_port tlb_if,
-    
-    // L0 TLB更新接口 (连接到TPC的L0 TLB)
-    gpc_tlb_update_if.initiator l0_tlb_if[4]
+    mmu_tlb_if.tlb_port tlb_if
 );
 
     //=============================================================================
-    // 1. 参数定义 - 使用共用常量定义
+    // 1. 参数定义
     //=============================================================================
     
-    // TLB地址计算参数 - 直接使用共用常量
-    localparam int TLB_DATA_WIDTH = $bits(gpc_tlb_entry_t);  // 使用共用结构体宽度
+    // TLB地址计算参数
+    localparam int TLB_DATA_WIDTH = $bits(gpc_tlb_entry_t); 
     
     //=============================================================================
-    // 3. 状态机定义 - 简化为3个状态
+    // 3. 状态机定义 
     //=============================================================================
     
     typedef enum logic [1:0] {
@@ -54,16 +51,19 @@ module rvgpu_gpc_mmu_tlb #(
     } tlb_state_t;
     
     //=============================================================================
-    // 4. 内部信号定义 - 大幅简化
+    // 4. 内部信号定义 
     //=============================================================================
     
     // 状态机寄存器
     tlb_state_t state_r, state_nxt;
     
-    // 当前请求信息 - 只在需要时保存
-    logic [VA_WIDTH-1:0] current_vaddr_r, current_vaddr_nxt;
-    logic [PA_WIDTH-1:0] current_paddr_r, current_paddr_nxt;
-    logic is_update_r, is_update_nxt;  // 区分查找和更新请求
+    // 当前请求信息
+    logic [VA_WIDTH-1:0] current_vaddr;
+    logic [PA_WIDTH-1:0] current_paddr;
+    
+    // 当前地址选择逻辑
+    assign current_vaddr = (state_r == TLB_READ) ? tlb_if.req_vaddr : (state_r == TLB_WRITE) ? tlb_if.update_vaddr : '0;
+    assign current_paddr = (state_r == TLB_WRITE) ? tlb_if.update_paddr : '0;
     
     // SRAM地址计算
     logic [GPC_TLB_TAG_BITS+GPC_TLB_INDEX_BITS-1:0] tlb_addr;
@@ -100,8 +100,7 @@ module rvgpu_gpc_mmu_tlb #(
     //=============================================================================
     
     // 计算TLB地址 - 使用共用函数
-    assign tlb_addr = calc_gpc_tlb_addr(tlb_if.req_valid ? tlb_if.req_vaddr :
-                                        tlb_if.update_valid ? tlb_if.update_vaddr : '0);
+    assign tlb_addr = calc_gpc_tlb_addr(current_vaddr);
     assign tlb_tag = tlb_addr[GPC_TLB_TAG_BITS+GPC_TLB_INDEX_BITS-1:GPC_TLB_INDEX_BITS];
     assign tlb_index = tlb_addr[GPC_TLB_INDEX_BITS-1:0];
     
@@ -123,25 +122,17 @@ module rvgpu_gpc_mmu_tlb #(
     always_comb begin
         // 默认值
         state_nxt = state_r;
-        current_vaddr_nxt = current_vaddr_r;
-        current_paddr_nxt = current_paddr_r;
-        is_update_nxt = is_update_r;
         
         case (state_r)
             TLB_IDLE: begin
                 // 优先处理更新请求
                 if (tlb_if.update_valid && tlb_if.update_ready) begin
                     state_nxt = TLB_WRITE;
-                    current_vaddr_nxt = tlb_if.update_vaddr;
-                    current_paddr_nxt = tlb_if.update_paddr;
-                    is_update_nxt = 1'b1;
                     `GPC_PRINT("TLB", $sformatf("Update, vaddr: 0x%h, paddr: 0x%h", tlb_if.update_vaddr, tlb_if.update_paddr));
                 end
                 // 处理查找请求
                 else if (tlb_if.req_valid && tlb_if.req_ready) begin
                     state_nxt = TLB_READ;
-                    current_vaddr_nxt = tlb_if.req_vaddr;
-                    is_update_nxt = 1'b0;
                     `GPC_PRINT("TLB", $sformatf("Lookup, vaddr: 0x%h", tlb_if.req_vaddr));
                 end
             end
@@ -169,92 +160,37 @@ module rvgpu_gpc_mmu_tlb #(
     always_ff @(posedge clk) begin
         if (!rst_n) begin
             state_r <= TLB_IDLE;
-            current_vaddr_r <= '0;
-            current_paddr_r <= '0;
-            is_update_r <= 1'b0;
         end else begin
             state_r <= state_nxt;
-            current_vaddr_r <= current_vaddr_nxt;
-            current_paddr_r <= current_paddr_nxt;
-            is_update_r <= is_update_nxt;
         end
     end
     
     //=============================================================================
-    // 10. 输出信号 - 直接计算，无寄存器延迟
+    // 10. 输出信号
     //=============================================================================
-    
-    // TLB请求接口 - 直接使用SRAM读取结果
-    assign tlb_if.req_ready = (state_r == TLB_IDLE);
-    
-    // 查找命中判断 - 直接使用SRAM读取的数据
-    logic lookup_hit;
-    logic [PA_WIDTH-1:0] lookup_paddr;
     
     // 将SRAM数据转换为结构体
     gpc_tlb_entry_t tlb_entry;
     assign tlb_entry = sram_if_inst.rdata;
     
-    // 直接计算查找结果 - 使用结构体字段
+    // 查找命中判断 - 直接使用SRAM读取的数据
+    logic lookup_hit;
     assign lookup_hit = tlb_entry.common.valid && 
                        (tlb_entry.tag == tlb_tag) &&
                        (state_r == TLB_READ);
     
-    // 计算物理地址 - 使用结构体字段
-    assign lookup_paddr = lookup_hit ? 
-                         {tlb_entry.common.ppn, current_vaddr_r[PAGE_OFFSET_BITS-1:0]} : '0;
-    
-    // 输出查找结果
+    // 输出信号 - 合并逻辑
+    assign tlb_if.req_ready = (state_r == TLB_IDLE);
+    assign tlb_if.update_ready = (state_r == TLB_IDLE);
     assign tlb_if.resp_valid = (state_r == TLB_READ);
     assign tlb_if.resp_hit = lookup_hit;
-    assign tlb_if.resp_paddr = lookup_paddr;
-    
-    // TLB更新接口
-    assign tlb_if.update_ready = (state_r == TLB_IDLE);
-    
-    //=============================================================================
-    // 11. 辅助函数 - 构建TLB条目
-    //=============================================================================
+    assign tlb_if.resp_paddr = lookup_hit ? {tlb_entry.common.ppn, current_vaddr[PAGE_OFFSET_BITS-1:0]} : '0;
     
     // 直接计算TLB条目数据 - 使用共用函数
-    assign tlb_entry_data = build_gpc_tlb_entry(current_vaddr_r, current_paddr_r);
-    
-
+    assign tlb_entry_data = build_gpc_tlb_entry(current_vaddr, current_paddr);
     
     //=============================================================================
-    // 12. L0 TLB更新接口 - 简化版本
-    //=============================================================================
-    
-    // L0 TLB更新接口 - 使用case语句避免动态索引
-    always_comb begin
-        // 默认值
-        l0_tlb_if[0].update_valid = 1'b0;
-        l0_tlb_if[1].update_valid = 1'b0;
-        l0_tlb_if[2].update_valid = 1'b0;
-        l0_tlb_if[3].update_valid = 1'b0;
-        
-        l0_tlb_if[0].update_vaddr = '0;
-        l0_tlb_if[1].update_vaddr = '0;
-        l0_tlb_if[2].update_vaddr = '0;
-        l0_tlb_if[3].update_vaddr = '0;
-        
-        l0_tlb_if[0].update_paddr = '0;
-        l0_tlb_if[1].update_paddr = '0;
-        l0_tlb_if[2].update_paddr = '0;
-        l0_tlb_if[3].update_paddr = '0;
-        
-        l0_tlb_if[0].update_perm = '0;
-        l0_tlb_if[1].update_perm = '0;
-        l0_tlb_if[2].update_perm = '0;
-        l0_tlb_if[3].update_perm = '0;
-        
-        // 如果有更新请求且来自TPC，设置L0更新信号
-        // 这里可以根据需要添加L0更新逻辑
-        // 目前简化处理
-    end
-    
-    //=============================================================================
-    // 13. 调试输出 - 使用 generate 块进行条件编译
+    // 13. 调试输出
     //=============================================================================
     
     generate
@@ -270,7 +206,7 @@ module rvgpu_gpc_mmu_tlb #(
             
             // TLB操作调试
             if (tlb_if.req_valid && tlb_if.req_ready && lookup_hit) begin
-                `GPC_PRINT("TLB", $sformatf("Hit: vaddr=0x%h, paddr=0x%h", tlb_if.req_vaddr, lookup_paddr));
+                `GPC_PRINT("TLB", $sformatf("Hit: vaddr=0x%h, paddr=0x%h", tlb_if.req_vaddr, tlb_if.resp_paddr));
             end else if (tlb_if.req_valid && tlb_if.req_ready && !lookup_hit) begin
                 `GPC_PRINT("TLB", $sformatf("Miss: vaddr=0x%h", tlb_if.req_vaddr));
             end

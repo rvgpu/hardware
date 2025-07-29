@@ -231,8 +231,7 @@ module rvgpu_gpc_mmu #(
     ) u_gpc_mmu_tlb (
         .clk(clk),
         .rst_n(rst_n),
-        .tlb_if(mmu_tlb.tlb_port),
-        .l0_tlb_if(l0_tlb_if)
+        .tlb_if(mmu_tlb.tlb_port)
     );
     
     //=============================================================================

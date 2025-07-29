@@ -275,7 +275,7 @@ module rvgpu_sm_cuda_core_unit #(
     end
     
     // 主状态机
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             state <= IDLE;
             current_inst <= '0;

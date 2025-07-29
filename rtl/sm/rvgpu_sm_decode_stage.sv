@@ -304,7 +304,7 @@ module rvgpu_sm_decode_stage #(
     end
     
     // 流水线寄存器更新
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             de_valid_reg <= 1'b0;
             de_inst_reg <= '0;

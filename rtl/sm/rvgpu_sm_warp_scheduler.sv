@@ -146,7 +146,7 @@ module rvgpu_sm_warp_scheduler #(
     endfunction
     
     // 主调度逻辑
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             warp_schedule_valid <= 1'b0;
             scheduled_warp_id <= '0;

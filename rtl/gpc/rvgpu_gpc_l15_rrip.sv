@@ -66,7 +66,7 @@ module rvgpu_gpc_l15_rrip #(
     logic found_victim;
     
     // 命中处理：降低RRPV值
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             // 初始化所有RRPV为最大值
             for (int i = 0; i < NUM_SETS; i++) begin

@@ -101,7 +101,7 @@ module rvgpu_sm_fetch_stage #(
     logic [THREAD_COUNT-1:0]            fd_active_mask_reg;
     
     // PC初始化和更新
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             for (int i = 0; i < WARP_COUNT; i++) begin
                 pc_storage[i] <= '0;
@@ -135,7 +135,7 @@ module rvgpu_sm_fetch_stage #(
     end
     
     // 主状态机
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             state <= IDLE;
             current_warp_id <= '0;
@@ -196,7 +196,7 @@ module rvgpu_sm_fetch_stage #(
     assign branch_pred_pc = current_pc;
     
     // 流水线寄存器更新
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             fd_valid_reg <= 1'b0;
             fd_inst_reg <= '0;

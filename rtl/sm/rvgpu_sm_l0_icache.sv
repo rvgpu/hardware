@@ -142,7 +142,7 @@ module rvgpu_sm_l0_icache #(
     end
     
     // 主状态机
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             state <= IDLE;
             fetch_req_ready <= 1'b0;

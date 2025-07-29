@@ -128,7 +128,7 @@ module rvgpu_gpc_l15_mshr #(
     end
     
     // MSHR分配逻辑
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             for (int i = 0; i < MSHR_ENTRIES; i++) begin : mshr_init
                 mshr[i].valid <= 1'b0;

@@ -84,7 +84,7 @@ module rvgpu_sm_register_file #(
     end
     
     // 写操作 - 时序逻辑
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             warp_valid <= '0;
             

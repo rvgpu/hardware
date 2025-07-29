@@ -260,7 +260,7 @@ module rvgpu_sm_cuda_core #(
     end
     
     // 流水线阶段1 (执行)
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             exec1_valid <= 1'b0;
             exec1_pc <= '0;
@@ -281,7 +281,7 @@ module rvgpu_sm_cuda_core #(
     end
     
     // 流水线阶段2 (写回)
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             exec2_valid <= 1'b0;
             exec2_pc <= '0;

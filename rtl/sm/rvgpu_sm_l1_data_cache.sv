@@ -206,7 +206,7 @@ module rvgpu_sm_l1_data_cache #(
     end
     
     // 请求入队和队列管理
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             last_grant <= '0;
             req_ready[0] <= 1'b1;
@@ -241,7 +241,7 @@ module rvgpu_sm_l1_data_cache #(
     // =========================================================================
     
     // 共享内存读写逻辑
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             // 初始化共享内存 - 简化处理
             // 只初始化前几个条目
@@ -321,7 +321,7 @@ module rvgpu_sm_l1_data_cache #(
     logic [3:0] response_valid_reg;
     
     // 主处理状态机
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             cache_state <= CACHE_IDLE;
             current_processing_req <= '0;

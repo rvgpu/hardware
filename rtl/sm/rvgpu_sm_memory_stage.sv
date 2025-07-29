@@ -139,7 +139,7 @@ module rvgpu_sm_memory_stage #(
     end
     
     // 主状态机
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             state <= IDLE;
             current_warp_id <= '0;
@@ -229,7 +229,7 @@ module rvgpu_sm_memory_stage #(
     assign ldst_resp_ready = (state == WAIT_RESP);
     
     // 流水线寄存器更新
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             mw_valid_reg <= 1'b0;
             mw_inst_reg <= '0;

@@ -161,7 +161,7 @@ module rvgpu_gpc_l15_cache #(
     endgenerate
     
     // 仲裁逻辑 - 轮询策略
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             arbiter_ptr <= '0;
             req_grant_array <= '0;
@@ -195,7 +195,7 @@ module rvgpu_gpc_l15_cache #(
     end
     
     // 准备就绪信号
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             requester_if[0].req_ready <= 1'b0;
             requester_if[1].req_ready <= 1'b0;
@@ -215,7 +215,7 @@ module rvgpu_gpc_l15_cache #(
     end
     
     // 主状态机
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             state <= IDLE;
             current_requester <= '0;
@@ -695,7 +695,7 @@ module rvgpu_gpc_l15_cache #(
     
     // 未完成请求计数
     logic [7:0] pending_count;
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             pending_count <= '0;
         end else begin

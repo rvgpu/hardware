@@ -708,7 +708,7 @@ module rvgpu_sm #(
     // =========================================================================
     
     // Warp状态更新
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             // 初始化前几个warp - 简化处理
             warp_pc[0] <= '0;

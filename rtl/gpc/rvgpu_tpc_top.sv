@@ -105,7 +105,7 @@ module rvgpu_tpc_top #(
     // 任务分发逻辑
     // =========================================================================
     
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             round_robin_counter <= '0;
             tpc_if.block_ready <= 1'b0;
@@ -163,7 +163,7 @@ module rvgpu_tpc_top #(
     // SM状态监控和管理
     // =========================================================================
     
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             for (sm_init_i = 0; sm_init_i < NUM_SM; sm_init_i++) begin : sm_init_loop
                 sm_states[sm_init_i] <= SM_IDLE;
@@ -231,7 +231,7 @@ module rvgpu_tpc_top #(
     // 简单轮询仲裁器
     logic [$clog2(NUM_SM)-1:0] cache_arb_counter;
     
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             cache_arb_counter <= '0;
             l15_if.req_valid <= 1'b0;
@@ -335,7 +335,7 @@ module rvgpu_tpc_top #(
     // 类似的仲裁逻辑用于TLB请求
     logic [$clog2(NUM_SM)-1:0] tlb_arb_counter;
     
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             tlb_arb_counter <= '0;
         end else begin

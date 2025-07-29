@@ -130,7 +130,7 @@ module rvgpu_gpc_l15_write_buffer #(
     end
     
     // 写缓冲分配逻辑
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             for (int i = 0; i < BUFFER_ENTRIES; i++) begin : wb_init
                 wb[i].valid <= 1'b0;

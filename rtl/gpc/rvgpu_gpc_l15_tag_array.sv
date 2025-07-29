@@ -78,7 +78,7 @@ module rvgpu_gpc_l15_tag_array #(
     assign update_index = update_addr[ADDR_WIDTH-TAG_WIDTH-1:$clog2(LINE_SIZE)];
     
     // 查找逻辑
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             lookup_hit <= 1'b0;
             lookup_way <= '0;
@@ -102,7 +102,7 @@ module rvgpu_gpc_l15_tag_array #(
     end
     
     // 更新逻辑
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             update_ready <= 1'b0;
             
@@ -126,7 +126,7 @@ module rvgpu_gpc_l15_tag_array #(
     end
     
     // 替换逻辑
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             replace_addr <= '0;
             replace_dirty <= 1'b0;

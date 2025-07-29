@@ -288,7 +288,7 @@ module rvgpu_sm_execute_stage #(
     end
     
     // 流水线寄存器更新
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             em_valid_reg <= 1'b0;
             em_inst_reg <= '0;

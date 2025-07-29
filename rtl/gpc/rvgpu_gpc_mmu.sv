@@ -93,13 +93,10 @@ module rvgpu_gpc_mmu #(
     logic [4:0] req_grant_array;
     
     // 将请求有效信号组合成数组，便于仲裁
-    assign req_valid_array = {bs_if.req_valid,                              tpc_if[3].req_valid, 
-                             tpc_if[2].req_valid, 
-                             tpc_if[1].req_valid, 
-                             tpc_if[0].req_valid};
+    assign req_valid_array = {bs_if.req_valid, tpc_if[3].req_valid, tpc_if[2].req_valid, tpc_if[1].req_valid, tpc_if[0].req_valid};
     
     // 仲裁逻辑 - 轮询策略
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             arbiter_ptr <= 3'b0;
             req_grant_array <= 5'b0;
@@ -108,7 +105,7 @@ module rvgpu_gpc_mmu #(
             req_grant_array <= 5'b0;
             
             if (!req_queue_full) begin
-                // 从当前指针开始轮询 - 简化处理
+                // 从当前指针开始轮询 
                 logic [2:0] idx0 = (arbiter_ptr + 0) % 5;
                 logic [2:0] idx1 = (arbiter_ptr + 1) % 5;
                 logic [2:0] idx2 = (arbiter_ptr + 2) % 5;
@@ -136,14 +133,14 @@ module rvgpu_gpc_mmu #(
     end
     
     // 请求队列管理
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             req_head <= '0;
             req_tail <= '0;
             req_queue_full <= 1'b0;
             req_queue_empty <= 1'b1;
             
-            // 初始化队列 - 简化处理
+            // 初始化队列 
             req_queue[0].valid <= 1'b0;
             req_queue[0].pending <= 1'b0;
             req_queue[1].valid <= 1'b0;
@@ -211,7 +208,7 @@ module rvgpu_gpc_mmu #(
     end
     
     // 准备就绪信号
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             bs_if.req_ready <= 1'b0;
             tpc_if[0].req_ready <= 1'b0;
@@ -264,7 +261,7 @@ module rvgpu_gpc_mmu #(
     // 主状态机
     //=============================================================================
     
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             state <= IDLE;
             current_req <= '0;

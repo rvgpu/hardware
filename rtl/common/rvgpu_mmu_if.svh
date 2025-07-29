@@ -132,7 +132,7 @@ interface cp_mmu_config_if;
 endinterface : cp_mmu_config_if
 
 //=============================================================================
-// GPC TLB Updata Interface - GPC MMU -> L0 TLB
+// GPC TLB Update Interface - GPC MMU -> L0 TLB
 // 用于MMU向TLB发送更新请求
 //=============================================================================
 interface gpc_tlb_update_if;
@@ -159,4 +159,4 @@ interface gpc_tlb_update_if;
     );
 endinterface : gpc_tlb_update_if
 
-`endif // RVGPU_MMU_IF_SVH
+`endif // RVGPU_MMU_IF_SVH 

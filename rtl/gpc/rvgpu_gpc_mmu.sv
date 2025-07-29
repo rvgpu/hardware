@@ -105,28 +105,22 @@ module rvgpu_gpc_mmu #(
             req_grant_array <= 5'b0;
             
             if (!req_queue_full) begin
-                // 从当前指针开始轮询 
-                logic [2:0] idx0 = (arbiter_ptr + 0) % 5;
-                logic [2:0] idx1 = (arbiter_ptr + 1) % 5;
-                logic [2:0] idx2 = (arbiter_ptr + 2) % 5;
-                logic [2:0] idx3 = (arbiter_ptr + 3) % 5;
-                logic [2:0] idx4 = (arbiter_ptr + 4) % 5;
-                
-                if (req_valid_array[idx0]) begin
-                    req_grant_array[idx0] <= 1'b1;
-                    arbiter_ptr <= (idx0 + 1) % 5;
-                end else if (req_valid_array[idx1]) begin
-                    req_grant_array[idx1] <= 1'b1;
-                    arbiter_ptr <= (idx1 + 1) % 5;
-                end else if (req_valid_array[idx2]) begin
-                    req_grant_array[idx2] <= 1'b1;
-                    arbiter_ptr <= (idx2 + 1) % 5;
-                end else if (req_valid_array[idx3]) begin
-                    req_grant_array[idx3] <= 1'b1;
-                    arbiter_ptr <= (idx3 + 1) % 5;
-                end else if (req_valid_array[idx4]) begin
-                    req_grant_array[idx4] <= 1'b1;
-                    arbiter_ptr <= (idx4 + 1) % 5;
+                // 轮询仲裁 - 从当前指针开始检查
+                if (req_valid_array[(arbiter_ptr + 0) % 5]) begin
+                    req_grant_array[(arbiter_ptr + 0) % 5] <= 1'b1;
+                    arbiter_ptr <= (arbiter_ptr + 1) % 5;
+                end else if (req_valid_array[(arbiter_ptr + 1) % 5]) begin
+                    req_grant_array[(arbiter_ptr + 1) % 5] <= 1'b1;
+                    arbiter_ptr <= (arbiter_ptr + 2) % 5;
+                end else if (req_valid_array[(arbiter_ptr + 2) % 5]) begin
+                    req_grant_array[(arbiter_ptr + 2) % 5] <= 1'b1;
+                    arbiter_ptr <= (arbiter_ptr + 3) % 5;
+                end else if (req_valid_array[(arbiter_ptr + 3) % 5]) begin
+                    req_grant_array[(arbiter_ptr + 3) % 5] <= 1'b1;
+                    arbiter_ptr <= (arbiter_ptr + 4) % 5;
+                end else if (req_valid_array[(arbiter_ptr + 4) % 5]) begin
+                    req_grant_array[(arbiter_ptr + 4) % 5] <= 1'b1;
+                    arbiter_ptr <= (arbiter_ptr + 5) % 5;
                 end
             end
         end
@@ -299,9 +293,11 @@ module rvgpu_gpc_mmu #(
                             // TLB命中，获取物理地址
                             current_paddr <= mmu_tlb.lookup_paddr;
                             state <= SEND_RESPONSE;
+                            `GPC_PRINT("MMU", $sformatf("Lookup Hit, paddr: 0x%h", mmu_tlb.lookup_paddr));
                         end else begin
                             // TLB未命中，需要请求控制单元MMU
                             state <= SEND_TO_NOC;
+                            `GPC_PRINT("MMU", $sformatf("Lookup Miss, vaddr: 0x%h", current_req.vaddr));
                         end
                     end
                 end

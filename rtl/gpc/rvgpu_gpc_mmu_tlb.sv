@@ -135,14 +135,14 @@ module rvgpu_gpc_mmu_tlb #(
                     current_vaddr_nxt = tlb_if.update_vaddr;
                     current_paddr_nxt = tlb_if.update_paddr;
                     is_update_nxt = 1'b1;
-                    `DEBUG_PRINT("GPC_TLB", $sformatf("GPC_TLB Update, vaddr: 0x%h, paddr: 0x%h", tlb_if.update_vaddr, tlb_if.update_paddr));
+                    `GPC_PRINT("TLB", $sformatf("Update, vaddr: 0x%h, paddr: 0x%h", tlb_if.update_vaddr, tlb_if.update_paddr));
                 end
                 // 处理查找请求
                 else if (tlb_if.lookup_valid && tlb_if.lookup_ready) begin
                     state_nxt = TLB_READ;
                     current_vaddr_nxt = tlb_if.lookup_vaddr;
                     is_update_nxt = 1'b0;
-                    `DEBUG_PRINT("GPC_TLB", $sformatf("GPC_TLB Lookup, vaddr: 0x%h", tlb_if.lookup_vaddr));
+                    `GPC_PRINT("TLB", $sformatf("Lookup, vaddr: 0x%h", tlb_if.lookup_vaddr));
                 end
             end
             
@@ -261,31 +261,26 @@ module rvgpu_gpc_mmu_tlb #(
         always_ff @(posedge clk) begin
             // SRAM访问调试
             if (sram_if_inst.ce && sram_if_inst.we) begin
-                $display("@%0t: [GPC_TLB] SRAM Write: addr=0x%02x, data=0x%026x", 
-                         $time, sram_if_inst.addr, sram_if_inst.wdata);
+                `GPC_PRINT("TLB", $sformatf("SRAM Write: addr=0x%02x, data=0x%026x", sram_if_inst.addr, sram_if_inst.wdata));
             end
             if (sram_if_inst.ce && !sram_if_inst.we) begin
-                $display("@%0t: [GPC_TLB] SRAM Read: addr=0x%02x, data=0x%026x", 
-                         $time, sram_if_inst.addr, sram_if_inst.rdata);
+                `GPC_PRINT("TLB", $sformatf("SRAM Read: addr=0x%02x, data=0x%026x", sram_if_inst.addr, sram_if_inst.rdata));
             end
             
             // TLB操作调试
             if (tlb_if.lookup_valid && tlb_if.lookup_ready && lookup_hit) begin
-                $display("@%0t: [GPC_TLB] Hit: vaddr=0x%h, paddr=0x%h", 
-                         $time, tlb_if.lookup_vaddr, lookup_paddr);
+                `GPC_PRINT("TLB", $sformatf("Hit: vaddr=0x%h, paddr=0x%h", tlb_if.lookup_vaddr, lookup_paddr));
             end else if (tlb_if.lookup_valid && tlb_if.lookup_ready && !lookup_hit) begin
-                $display("@%0t: [GPC_TLB] Miss: vaddr=0x%h", $time, tlb_if.lookup_vaddr);
+                `GPC_PRINT("TLB", $sformatf("Miss: vaddr=0x%h", tlb_if.lookup_vaddr));
             end
             
             if (tlb_if.update_valid && tlb_if.update_ready) begin
-                $display("@%0t: [GPC_TLB] Update: vaddr=0x%h, paddr=0x%h", 
-                         $time, tlb_if.update_vaddr, tlb_if.update_paddr);
+                `GPC_PRINT("TLB", $sformatf("Update: vaddr=0x%h, paddr=0x%h", tlb_if.update_vaddr, tlb_if.update_paddr));
             end
             
             // 状态转换调试
             if (state_r != state_nxt) begin
-                $display("@%0t: [GPC_TLB] State transition: %s -> %s", 
-                         $time, state_r.name(), state_nxt.name());
+                `GPC_PRINT("TLB", $sformatf("State transition: %s -> %s", state_r.name(), state_nxt.name()));
             end
         end
     end

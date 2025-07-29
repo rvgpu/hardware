@@ -19,7 +19,7 @@
 `include "rvgpu_typedef.svh"
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_noc_message.svh"
-`include "rvgpu_mmu_if.svh"  // 使用通用MMU接口
+`include "rvgpu_mmu_if.svh"
 
 `include "ldst_sm_if.svh"
 `include "gpc_block_tpc_if.svh"

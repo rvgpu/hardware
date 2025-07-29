@@ -240,8 +240,9 @@ module rvgpu_gpc_mmu #(
     //=============================================================================
     
     // TLB查找接口连接
-    assign mmu_tlb.lookup_valid = (state == LOOKUP);
-    assign mmu_tlb.lookup_vaddr = current_req.vaddr;
+    assign mmu_tlb.req_valid = (state == LOOKUP);
+    assign mmu_tlb.req_vaddr = current_req.vaddr;
+    assign mmu_tlb.resp_ready = (state == LOOKUP);
     
     // TLB更新接口连接
     assign mmu_tlb.update_valid = (state == UPDATE_TLB);
@@ -249,7 +250,7 @@ module rvgpu_gpc_mmu #(
     assign mmu_tlb.update_paddr = current_paddr;
     
     // 从TLB模块获取查找结果
-    assign tlb_hit = mmu_tlb.lookup_hit;
+    assign tlb_hit = mmu_tlb.resp_hit;
     
     //=============================================================================
     // 主状态机
@@ -288,12 +289,12 @@ module rvgpu_gpc_mmu #(
                 
                 LOOKUP: begin
                     // 等待TLB查找完成
-                    if (mmu_tlb.lookup_ready) begin
-                        if (mmu_tlb.lookup_hit) begin
+                    if (mmu_tlb.resp_valid) begin
+                        if (mmu_tlb.resp_hit) begin
                             // TLB命中，获取物理地址
-                            current_paddr <= mmu_tlb.lookup_paddr;
+                            current_paddr <= mmu_tlb.resp_paddr;
                             state <= SEND_RESPONSE;
-                            `GPC_PRINT("MMU", $sformatf("Lookup Hit, paddr: 0x%h", mmu_tlb.lookup_paddr));
+                            `GPC_PRINT("MMU", $sformatf("Lookup Hit, paddr: 0x%h", mmu_tlb.resp_paddr));
                         end else begin
                             // TLB未命中，需要请求控制单元MMU
                             state <= SEND_TO_NOC;
@@ -364,7 +365,7 @@ module rvgpu_gpc_mmu #(
                         // 响应Block Scheduler
                         bs_if.resp_valid <= 1'b1;
                         bs_if.resp_paddr <= current_paddr;
-                        bs_if.resp_hit <= mmu_tlb.lookup_hit;
+                        bs_if.resp_hit <= mmu_tlb.resp_hit;
                         bs_if.resp_status <= MMU_RESP_OKAY;
                         
                         if (bs_if.resp_ready) begin
@@ -377,7 +378,7 @@ module rvgpu_gpc_mmu #(
                             0: begin
                                 tpc_if[0].resp_valid <= 1'b1;
                                 tpc_if[0].resp_paddr <= current_paddr;
-                                tpc_if[0].resp_hit <= mmu_tlb.lookup_hit;
+                                tpc_if[0].resp_hit <= mmu_tlb.resp_hit;
                                 tpc_if[0].resp_status <= MMU_RESP_OKAY;
                                 
                                 if (tpc_if[0].resp_ready) begin
@@ -388,7 +389,7 @@ module rvgpu_gpc_mmu #(
                             1: begin
                                 tpc_if[1].resp_valid <= 1'b1;
                                 tpc_if[1].resp_paddr <= current_paddr;
-                                tpc_if[1].resp_hit <= mmu_tlb.lookup_hit;
+                                tpc_if[1].resp_hit <= mmu_tlb.resp_hit;
                                 tpc_if[1].resp_status <= MMU_RESP_OKAY;
                                 
                                 if (tpc_if[1].resp_ready) begin
@@ -399,7 +400,7 @@ module rvgpu_gpc_mmu #(
                             2: begin
                                 tpc_if[2].resp_valid <= 1'b1;
                                 tpc_if[2].resp_paddr <= current_paddr;
-                                tpc_if[2].resp_hit <= mmu_tlb.lookup_hit;
+                                tpc_if[2].resp_hit <= mmu_tlb.resp_hit;
                                 tpc_if[2].resp_status <= MMU_RESP_OKAY;
                                 
                                 if (tpc_if[2].resp_ready) begin
@@ -410,7 +411,7 @@ module rvgpu_gpc_mmu #(
                             3: begin
                                 tpc_if[3].resp_valid <= 1'b1;
                                 tpc_if[3].resp_paddr <= current_paddr;
-                                tpc_if[3].resp_hit <= mmu_tlb.lookup_hit;
+                                tpc_if[3].resp_hit <= mmu_tlb.resp_hit;
                                 tpc_if[3].resp_status <= MMU_RESP_OKAY;
                                 
                                 if (tpc_if[3].resp_ready) begin

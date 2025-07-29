@@ -100,8 +100,8 @@ module rvgpu_gpc_mmu_tlb #(
     //=============================================================================
     
     // 计算TLB地址 - 使用共用函数
-    assign tlb_addr = calc_gpc_tlb_addr(tlb_if.lookup_valid ? tlb_if.lookup_vaddr : 
-                                       tlb_if.update_valid ? tlb_if.update_vaddr : '0);
+    assign tlb_addr = calc_gpc_tlb_addr(tlb_if.req_valid ? tlb_if.req_vaddr :
+                                        tlb_if.update_valid ? tlb_if.update_vaddr : '0);
     assign tlb_tag = tlb_addr[GPC_TLB_TAG_BITS+GPC_TLB_INDEX_BITS-1:GPC_TLB_INDEX_BITS];
     assign tlb_index = tlb_addr[GPC_TLB_INDEX_BITS-1:0];
     
@@ -138,11 +138,11 @@ module rvgpu_gpc_mmu_tlb #(
                     `GPC_PRINT("TLB", $sformatf("Update, vaddr: 0x%h, paddr: 0x%h", tlb_if.update_vaddr, tlb_if.update_paddr));
                 end
                 // 处理查找请求
-                else if (tlb_if.lookup_valid && tlb_if.lookup_ready) begin
+                else if (tlb_if.req_valid && tlb_if.req_ready) begin
                     state_nxt = TLB_READ;
-                    current_vaddr_nxt = tlb_if.lookup_vaddr;
+                    current_vaddr_nxt = tlb_if.req_vaddr;
                     is_update_nxt = 1'b0;
-                    `GPC_PRINT("TLB", $sformatf("Lookup, vaddr: 0x%h", tlb_if.lookup_vaddr));
+                    `GPC_PRINT("TLB", $sformatf("Lookup, vaddr: 0x%h", tlb_if.req_vaddr));
                 end
             end
             
@@ -184,8 +184,8 @@ module rvgpu_gpc_mmu_tlb #(
     // 10. 输出信号 - 直接计算，无寄存器延迟
     //=============================================================================
     
-    // TLB查找接口 - 直接使用SRAM读取结果
-    assign tlb_if.lookup_ready = (state_r == TLB_IDLE);
+    // TLB请求接口 - 直接使用SRAM读取结果
+    assign tlb_if.req_ready = (state_r == TLB_IDLE);
     
     // 查找命中判断 - 直接使用SRAM读取的数据
     logic lookup_hit;
@@ -205,8 +205,9 @@ module rvgpu_gpc_mmu_tlb #(
                          {tlb_entry.common.ppn, current_vaddr_r[PAGE_OFFSET_BITS-1:0]} : '0;
     
     // 输出查找结果
-    assign tlb_if.lookup_hit = lookup_hit;
-    assign tlb_if.lookup_paddr = lookup_paddr;
+    assign tlb_if.resp_valid = (state_r == TLB_READ);
+    assign tlb_if.resp_hit = lookup_hit;
+    assign tlb_if.resp_paddr = lookup_paddr;
     
     // TLB更新接口
     assign tlb_if.update_ready = (state_r == TLB_IDLE);
@@ -268,10 +269,10 @@ module rvgpu_gpc_mmu_tlb #(
             end
             
             // TLB操作调试
-            if (tlb_if.lookup_valid && tlb_if.lookup_ready && lookup_hit) begin
-                `GPC_PRINT("TLB", $sformatf("Hit: vaddr=0x%h, paddr=0x%h", tlb_if.lookup_vaddr, lookup_paddr));
-            end else if (tlb_if.lookup_valid && tlb_if.lookup_ready && !lookup_hit) begin
-                `GPC_PRINT("TLB", $sformatf("Miss: vaddr=0x%h", tlb_if.lookup_vaddr));
+            if (tlb_if.req_valid && tlb_if.req_ready && lookup_hit) begin
+                `GPC_PRINT("TLB", $sformatf("Hit: vaddr=0x%h, paddr=0x%h", tlb_if.req_vaddr, lookup_paddr));
+            end else if (tlb_if.req_valid && tlb_if.req_ready && !lookup_hit) begin
+                `GPC_PRINT("TLB", $sformatf("Miss: vaddr=0x%h", tlb_if.req_vaddr));
             end
             
             if (tlb_if.update_valid && tlb_if.update_ready) begin

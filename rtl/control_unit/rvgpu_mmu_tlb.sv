@@ -58,7 +58,8 @@ module rvgpu_mmu_tlb (
     
     // 查找结果寄存器
     logic lookup_hit_r, lookup_hit_nxt;
-    logic lookup_ready_r, lookup_ready_nxt;
+    logic req_ready_r, req_ready_nxt;
+    logic resp_valid_r, resp_valid_nxt;
     
     // TLB更新请求寄存器
     logic [CU_TLB_INDEX_BITS-1:0] update_addr_r, update_addr_nxt;
@@ -114,14 +115,17 @@ module rvgpu_mmu_tlb (
         sram_data_nxt = sram_data_r;
         lookup_data_nxt = lookup_data_r;
         lookup_hit_nxt = lookup_hit_r;
-        lookup_ready_nxt = lookup_ready_r;
+        req_ready_nxt = req_ready_r;
+        resp_valid_nxt = resp_valid_r;
         update_addr_nxt = update_addr_r;
         update_data_nxt = update_data_r;
         update_pending_nxt = update_pending_r;
         
         case (state_r)
             TLB_IDLE: begin
-                lookup_ready_nxt = 1'b1;
+                req_ready_nxt = 1'b1;
+                // 只有在resp_ready为高时才清除resp_valid
+                resp_valid_nxt = tlb_if.resp_ready ? 1'b0 : resp_valid_r;
                 
                 // 如果有TLB更新请求，优先处理
                 if (tlb_if.update_valid && tlb_if.update_ready) begin
@@ -130,17 +134,17 @@ module rvgpu_mmu_tlb (
                     update_addr_nxt = update_addr_full[CU_TLB_INDEX_BITS-1:0];
                     update_data_nxt = build_cu_tlb_entry(tlb_if.update_vaddr, tlb_if.update_paddr);
                     update_pending_nxt = 1'b1;
-                    lookup_ready_nxt = 1'b0;
+                    req_ready_nxt = 1'b0;
                     `DEBUG_PRINT("TLB", $sformatf("TLB Update, vaddr: 0x%h, paddr: 0x%h", tlb_if.update_vaddr, tlb_if.update_paddr));
                 end
                 // 如果有新的查找请求，进入读取状态
-                else if (tlb_if.lookup_valid && tlb_if.lookup_ready) begin
+                else if (tlb_if.req_valid && tlb_if.req_ready) begin
                     state_nxt = TLB_READ;
-                    lookup_addr_full = calc_cu_tlb_addr(tlb_if.lookup_vaddr);
+                    lookup_addr_full = calc_cu_tlb_addr(tlb_if.req_vaddr);
                     lookup_addr_nxt = lookup_addr_full;
                     lookup_tag_nxt = lookup_addr_full[CU_TLB_TAG_BITS+CU_TLB_INDEX_BITS-1:CU_TLB_INDEX_BITS];
-                    lookup_ready_nxt = 1'b0;
-                    `DEBUG_PRINT("TLB", $sformatf("TLB Lookup, vaddr: 0x%h", tlb_if.lookup_vaddr));
+                    req_ready_nxt = 1'b0;
+                    `DEBUG_PRINT("TLB", $sformatf("TLB Lookup, vaddr: 0x%h", tlb_if.req_vaddr));
                 end
             end
             
@@ -163,11 +167,12 @@ module rvgpu_mmu_tlb (
             TLB_RESP: begin
                 // 检查命中 - 直接使用位域
                 // 将SRAM数据转换为结构体
-            cu_tlb_entry_t tlb_entry;
-            assign tlb_entry = sram_if_inst.rdata;
-            
-            lookup_hit_nxt = tlb_entry.common.valid && (tlb_entry.tag == lookup_tag_r);
+                cu_tlb_entry_t tlb_entry;
+                assign tlb_entry = sram_if_inst.rdata;
+                
+                lookup_hit_nxt = tlb_entry.common.valid && (tlb_entry.tag == lookup_tag_r);
                 lookup_data_nxt = sram_if_inst.rdata;
+                resp_valid_nxt = 1'b1;
                 
                 // 自动回到空闲状态
                 state_nxt = TLB_IDLE;
@@ -195,7 +200,8 @@ module rvgpu_mmu_tlb (
             sram_data_r <= '0;
             lookup_data_r <= '0;
             lookup_hit_r <= 1'b0;
-            lookup_ready_r <= 1'b1;
+            req_ready_r <= 1'b1;
+            resp_valid_r <= 1'b0;
             update_addr_r <= '0;
             update_data_r <= '0;
             update_pending_r <= 1'b0;
@@ -207,7 +213,8 @@ module rvgpu_mmu_tlb (
             sram_data_r <= sram_data_nxt;
             lookup_data_r <= lookup_data_nxt;
             lookup_hit_r <= lookup_hit_nxt;
-            lookup_ready_r <= lookup_ready_nxt;
+            req_ready_r <= req_ready_nxt;
+            resp_valid_r <= resp_valid_nxt;
             update_addr_r <= update_addr_nxt;
             update_data_r <= update_data_nxt;
             update_pending_r <= update_pending_nxt;
@@ -218,13 +225,16 @@ module rvgpu_mmu_tlb (
     // 7. 输出信号 - 使用三元运算符进行条件赋值
     //=============================================================================
     
-    // TLB查找接口
-    assign tlb_if.lookup_ready = (state_r == TLB_IDLE) && !update_pending_r;
-    assign tlb_if.lookup_hit = lookup_hit_r;
+    // TLB请求接口
+    assign tlb_if.req_ready = (state_r == TLB_IDLE) && !update_pending_r;
+    
+    // TLB响应接口
+    assign tlb_if.resp_valid = resp_valid_r;
+    assign tlb_if.resp_hit = lookup_hit_r;
     // 将SRAM数据转换为结构体以访问字段
     cu_tlb_entry_t lookup_entry;
     assign lookup_entry = lookup_data_r;
-    assign tlb_if.lookup_paddr = lookup_hit_r ? {lookup_entry.common.ppn, tlb_if.lookup_vaddr[PAGE_OFFSET_BITS-1:0]} : '0;
+    assign tlb_if.resp_paddr = lookup_hit_r ? {lookup_entry.common.ppn, tlb_if.req_vaddr[PAGE_OFFSET_BITS-1:0]} : '0;
     
     // TLB更新接口
     assign tlb_if.update_ready = (state_r == TLB_IDLE) && !update_pending_r;
@@ -247,11 +257,11 @@ module rvgpu_mmu_tlb (
             end
             
             // TLB操作调试
-            if (tlb_if.lookup_valid && tlb_if.lookup_ready && tlb_if.lookup_hit) begin
+            if (tlb_if.req_valid && tlb_if.req_ready && tlb_if.resp_hit) begin
                 $display("@%0t: [TLB] Hit: vaddr=0x%h, paddr=0x%h", 
-                         $time, tlb_if.lookup_vaddr, tlb_if.lookup_paddr);
-            end else if (tlb_if.lookup_valid && tlb_if.lookup_ready && !tlb_if.lookup_hit) begin
-                $display("@%0t: [TLB] Miss: vaddr=0x%h", $time, tlb_if.lookup_vaddr);
+                         $time, tlb_if.req_vaddr, tlb_if.resp_paddr);
+            end else if (tlb_if.req_valid && tlb_if.req_ready && !tlb_if.resp_hit) begin
+                $display("@%0t: [TLB] Miss: vaddr=0x%h", $time, tlb_if.req_vaddr);
             end
             
             if (tlb_if.update_valid && tlb_if.update_ready) begin

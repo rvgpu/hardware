@@ -153,7 +153,7 @@ module rvgpu_mmu (
                 tlb_lookup_valid_nxt = 1'b1;
                 
                 // 等待TLB查找完成（同步查找需要等待一个周期）
-                if (tlb_lookup_valid_r && mmu_tlb.lookup_ready) begin
+                if (tlb_lookup_valid_r && mmu_tlb.req_ready) begin
                     // 等待下一个周期获取结果
                     state_nxt = MMU_STATE_TLB_WAIT;
                     tlb_lookup_valid_nxt = 1'b0;
@@ -162,10 +162,10 @@ module rvgpu_mmu (
             
             MMU_STATE_TLB_WAIT: begin
                 // 等待TLB查找结果（延迟一个周期）
-                if (mmu_tlb.lookup_ready) begin
-                    if (mmu_tlb.lookup_hit) begin
+                if (mmu_tlb.resp_valid) begin
+                    if (mmu_tlb.resp_hit) begin
                         // TLB命中
-                        paddr_nxt = mmu_tlb.lookup_paddr;
+                        paddr_nxt = mmu_tlb.resp_paddr;
                         tlb_hit_count_nxt = tlb_hit_count_r + 1;
                         state_nxt = MMU_STATE_RESPONSE;
                     end else begin
@@ -328,8 +328,9 @@ module rvgpu_mmu (
     //=============================================================================
     
     // TLB接口连接
-    assign mmu_tlb.lookup_valid = tlb_lookup_valid_r;
-    assign mmu_tlb.lookup_vaddr = vaddr_r;
+    assign mmu_tlb.req_valid = tlb_lookup_valid_r;
+    assign mmu_tlb.req_vaddr = vaddr_r;
+    assign mmu_tlb.resp_ready = (state_r == MMU_STATE_TLB_WAIT);
     assign mmu_tlb.update_valid = tlb_update_valid_r;
     assign mmu_tlb.update_vaddr = vaddr_r;
     assign mmu_tlb.update_paddr = paddr_r;
@@ -380,16 +381,16 @@ module rvgpu_mmu (
                 `DEBUG_PRINT("MMU", $sformatf("Page Walk, %s", noc_request_mem_read_to_string(noc_req_header_nxt, noc_req_data_nxt)));
             end
 
-            if ((state_r == MMU_STATE_TLB_WAIT) && mmu_tlb.lookup_ready) begin
-                if (mmu_tlb.lookup_hit) begin
-                    `DEBUG_PRINT("MMU", $sformatf("TLB Hit, paddr: 0x%h", mmu_tlb.lookup_paddr));
+            if ((state_r == MMU_STATE_TLB_WAIT) && mmu_tlb.resp_valid) begin
+                if (mmu_tlb.resp_hit) begin
+                    `DEBUG_PRINT("MMU", $sformatf("TLB Hit, paddr: 0x%h", mmu_tlb.resp_paddr));
                 end else begin
                     `DEBUG_PRINT("MMU", $sformatf("TLB Miss, vaddr: 0x%h", vaddr_r));
                 end
             end
 
             // 监控TLB握手
-            if (tlb_lookup_valid_r && mmu_tlb.lookup_ready) begin
+            if (tlb_lookup_valid_r && mmu_tlb.req_ready) begin
                 `DEBUG_PRINT("MMU", $sformatf("TLB lookup handshake detected"));
             end
             if (tlb_update_valid_r && mmu_tlb.update_ready) begin

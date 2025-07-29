@@ -83,27 +83,43 @@ interface mmu_tlb_if;
     localparam int VA_WIDTH = `RVGPU_CONST_CU_VA_WIDTH;
     localparam int PA_WIDTH = `RVGPU_CONST_CU_PA_WIDTH;
 
-    logic                               lookup_valid;
-    logic [VA_WIDTH-1:0]                lookup_vaddr;
-    logic [PA_WIDTH-1:0]                lookup_paddr;
-    logic                               lookup_hit;
-    logic                               lookup_ready;
+    // 请求通道 (MMU -> TLB)
+    logic                               req_valid;
+    logic [VA_WIDTH-1:0]                req_vaddr;
+    logic                               req_ready;
 
+    // 响应通道 (TLB -> MMU)
+    logic                               resp_valid;
+    logic [PA_WIDTH-1:0]                resp_paddr;
+    logic                               resp_hit;
+    logic                               resp_ready;
+
+    // 更新通道 (MMU -> TLB)
     logic                               update_valid;
     logic [VA_WIDTH-1:0]                update_vaddr;
     logic [PA_WIDTH-1:0]                update_paddr;
     logic                               update_ready;
 
     modport mmu_port (
-        output lookup_valid, lookup_vaddr,
-        input  lookup_paddr, lookup_hit, lookup_ready,
+        // 请求端口
+        output req_valid, req_vaddr,
+        input  req_ready,
+        // 响应端口
+        input  resp_valid, resp_paddr, resp_hit,
+        output resp_ready,
+        // 更新端口
         output update_valid, update_vaddr, update_paddr,
         input  update_ready
     );
 
     modport tlb_port (
-        input  lookup_valid, lookup_vaddr,
-        output lookup_paddr, lookup_hit, lookup_ready,
+        // 请求端口
+        input  req_valid, req_vaddr,
+        output req_ready,
+        // 响应端口
+        output resp_valid, resp_paddr, resp_hit,
+        input  resp_ready,
+        // 更新端口
         input  update_valid, update_vaddr, update_paddr,
         output update_ready
     );

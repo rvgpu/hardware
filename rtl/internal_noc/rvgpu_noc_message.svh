@@ -181,10 +181,9 @@ endfunction
 
 function automatic noc_header_t build_noc_header_mmu_request(
     input noc_trans_id_t    trans_id,
-    input noc_node_id_t     src_node,
-    input noc_local_addr_t  local_addr = NOC_NODE_CONTROL_MMU
-);
-    return build_noc_header(MSG_MMU_REQ, trans_id, src_node, NODE_CONTROL, local_addr);
+    input noc_node_id_t     src_node
+);  
+    return build_noc_header(MSG_MMU_REQ, trans_id, src_node, NODE_CONTROL, NOC_NODE_LOCAL_ADDR_NONE, NOC_NODE_CONTROL_MMU);
 endfunction
 
 function automatic noc_header_t build_noc_header_mmu_response(

@@ -152,9 +152,9 @@ module rvgpu_mmu (
                 // TLB查找 - 设置输出寄存器
                 tlb_lookup_valid_nxt = 1'b1;
                 
-                // 等待TLB查找完成（同步查找需要等待一个周期）
+                // 等待TLB准备好接受请求
                 if (tlb_lookup_valid_r && mmu_tlb.req_ready) begin
-                    // 等待下一个周期获取结果
+                    // 握手完成，转到等待状态
                     state_nxt = MMU_STATE_TLB_WAIT;
                     tlb_lookup_valid_nxt = 1'b0;
                 end
@@ -395,6 +395,26 @@ module rvgpu_mmu (
             end
             if (tlb_update_valid_r && mmu_tlb.update_ready) begin
                 `DEBUG_PRINT("MMU", $sformatf("TLB update handshake detected"));
+            end
+            
+            // TLB信号调试
+            if (tlb_lookup_valid_r) begin
+                `DEBUG_PRINT("MMU", $sformatf("TLB lookup request: valid=%b, ready=%b, vaddr=0x%h", 
+                         tlb_lookup_valid_r, mmu_tlb.req_ready, vaddr_r));
+            end
+            if (mmu_tlb.resp_valid) begin
+                `DEBUG_PRINT("MMU", $sformatf("TLB response: valid=%b, ready=%b, hit=%b, paddr=0x%h", 
+                         mmu_tlb.resp_valid, mmu_tlb.resp_ready, mmu_tlb.resp_hit, mmu_tlb.resp_paddr));
+            end
+            
+            // 详细的状态调试
+            if (state_r == MMU_STATE_TLB_WAIT) begin
+                `DEBUG_PRINT("MMU", $sformatf("In MMU_STATE_TLB_WAIT: resp_valid=%b, resp_ready=%b", 
+                         mmu_tlb.resp_valid, mmu_tlb.resp_ready));
+            end
+            if (state_r == MMU_STATE_TLB_LOOKUP) begin
+                `DEBUG_PRINT("MMU", $sformatf("In MMU_STATE_TLB_LOOKUP: req_valid=%b, req_ready=%b, tlb_lookup_valid_r=%b, tlb_lookup_valid_nxt=%b", 
+                         tlb_lookup_valid_r, mmu_tlb.req_ready, tlb_lookup_valid_r, tlb_lookup_valid_nxt));
             end
             
             // 状态转换调试

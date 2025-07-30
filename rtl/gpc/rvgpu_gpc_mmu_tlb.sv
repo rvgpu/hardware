@@ -47,7 +47,8 @@ module rvgpu_gpc_mmu_tlb #(
     typedef enum logic [1:0] {
         TLB_IDLE = 2'b00,        // 空闲状态
         TLB_READ = 2'b01,        // 读取SRAM
-        TLB_WRITE = 2'b10        // 写入SRAM
+        TLB_READ_WAIT = 2'b10,   // 等待SRAM读取完成并输出结果
+        TLB_WRITE = 2'b11        // 写入SRAM
     } tlb_state_t;
     
     //=============================================================================
@@ -62,8 +63,8 @@ module rvgpu_gpc_mmu_tlb #(
     logic [PA_WIDTH-1:0] current_paddr;
     
     // 当前地址选择逻辑
-    assign current_vaddr = (state_r == TLB_READ) ? tlb_if.req_vaddr : (state_r == TLB_WRITE) ? tlb_if.update_vaddr : '0;
-    assign current_paddr = (state_r == TLB_WRITE) ? tlb_if.update_paddr : '0;
+    assign current_vaddr = (state_r == TLB_READ || state_r == TLB_READ_WAIT) ? tlb_if.req_vaddr : tlb_if.update_vaddr;
+    assign current_paddr = tlb_if.update_paddr;
     
     // SRAM地址计算
     logic [GPC_TLB_TAG_BITS+GPC_TLB_INDEX_BITS-1:0] tlb_addr;
@@ -108,14 +109,14 @@ module rvgpu_gpc_mmu_tlb #(
     // 7. SRAM接口控制 - 直接控制
     //=============================================================================
     
-    // SRAM控制信号 - 直接根据状态和请求控制
-    assign sram_if_inst.ce = (state_r == TLB_READ) || (state_r == TLB_WRITE);
+    // SRAM控制信号
+    assign sram_if_inst.ce = (state_r == TLB_READ || state_r == TLB_WRITE);
     assign sram_if_inst.we = (state_r == TLB_WRITE);
     assign sram_if_inst.addr = tlb_index;
     assign sram_if_inst.wdata = tlb_entry_data;
     
     //=============================================================================
-    // 8. 状态机组合逻辑 - 简化版本
+    // 8. 状态机组合逻辑
     //=============================================================================
     
     // 状态机组合逻辑
@@ -138,8 +139,15 @@ module rvgpu_gpc_mmu_tlb #(
             end
             
             TLB_READ: begin
-                // 读取完成，回到空闲状态
-                state_nxt = TLB_IDLE;
+                // SRAM读取请求完成，转到等待状态
+                state_nxt = TLB_READ_WAIT;
+            end
+            
+            TLB_READ_WAIT: begin
+                // 等待响应被接受后回到空闲状态
+                if (tlb_if.resp_ready) begin
+                    state_nxt = TLB_IDLE;
+                end
             end
             
             TLB_WRITE: begin
@@ -177,12 +185,12 @@ module rvgpu_gpc_mmu_tlb #(
     logic lookup_hit;
     assign lookup_hit = tlb_entry.common.valid && 
                        (tlb_entry.tag == tlb_tag) &&
-                       (state_r == TLB_READ);
+                       (state_r == TLB_READ_WAIT);
     
-    // 输出信号 - 合并逻辑
+    // 输出信号 
     assign tlb_if.req_ready = (state_r == TLB_IDLE);
     assign tlb_if.update_ready = (state_r == TLB_IDLE);
-    assign tlb_if.resp_valid = (state_r == TLB_READ);
+    assign tlb_if.resp_valid = (state_r == TLB_READ_WAIT);
     assign tlb_if.resp_hit = lookup_hit;
     assign tlb_if.resp_paddr = lookup_hit ? {tlb_entry.common.ppn, current_vaddr[PAGE_OFFSET_BITS-1:0]} : '0;
     
@@ -196,19 +204,11 @@ module rvgpu_gpc_mmu_tlb #(
     generate
     if (1) begin : gen_debug
         always_ff @(posedge clk) begin
-            // SRAM访问调试
-            if (sram_if_inst.ce && sram_if_inst.we) begin
-                `GPC_PRINT("TLB", $sformatf("SRAM Write: addr=0x%02x, data=0x%026x", sram_if_inst.addr, sram_if_inst.wdata));
-            end
-            if (sram_if_inst.ce && !sram_if_inst.we) begin
-                `GPC_PRINT("TLB", $sformatf("SRAM Read: addr=0x%02x, data=0x%026x", sram_if_inst.addr, sram_if_inst.rdata));
-            end
-            
-            // TLB操作调试
-            if (tlb_if.req_valid && tlb_if.req_ready && lookup_hit) begin
-                `GPC_PRINT("TLB", $sformatf("Hit: vaddr=0x%h, paddr=0x%h", tlb_if.req_vaddr, tlb_if.resp_paddr));
-            end else if (tlb_if.req_valid && tlb_if.req_ready && !lookup_hit) begin
-                `GPC_PRINT("TLB", $sformatf("Miss: vaddr=0x%h", tlb_if.req_vaddr));
+            // TLB操作调试 - 核心信息
+            if (tlb_if.resp_valid && tlb_if.resp_ready && lookup_hit) begin
+                `GPC_PRINT("TLB", $sformatf("Hit: vaddr=0x%h, paddr=0x%h", current_vaddr, tlb_if.resp_paddr));
+            end else if (tlb_if.resp_valid && tlb_if.resp_ready && !lookup_hit) begin
+                `GPC_PRINT("TLB", $sformatf("Miss: vaddr=0x%h", current_vaddr));
             end
             
             if (tlb_if.update_valid && tlb_if.update_ready) begin

@@ -1,10 +1,10 @@
 +incdir+$RVGPU_HARDWARE/rtl/core/iu
 +incdir+$RVGPU_HARDWARE/rtl/core/ifu
 +incdir+$RVGPU_HARDWARE/rtl/core/ifu/icache
-+incdir+$RVGPU_HARDWARE/rtl/mem/sram
 +incdir+$RVGPU_HARDWARE/rtl/clk
 +incdir+$RVGPU_HARDWARE/rtl/common
 +incdir+$RVGPU_HARDWARE/rtl/common/fifo
++incdir+$RVGPU_HARDWARE/rtl/common/sram
 +incdir+$RVGPU_HARDWARE/rtl/interface
 +incdir+$RVGPU_HARDWARE/rtl/gpu_top
 +incdir+$RVGPU_HARDWARE/rtl/internal_noc

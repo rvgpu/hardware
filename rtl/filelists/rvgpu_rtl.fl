@@ -50,9 +50,9 @@ $RVGPU_HARDWARE/rtl/cudacore/rvgpu_sm_cuda_core.sv
 $RVGPU_HARDWARE/rtl/cudacore/rvgpu_sm_tensor_core.sv
 $RVGPU_HARDWARE/rtl/cudacore/rvgpu_sm_cuda_core_unit.sv
 
-// SRAM
-$RVGPU_HARDWARE/rtl/mem/sram/rvgpu_sram_sp_sim.sv
-// FIFO
+// Common SRAM
+$RVGPU_HARDWARE/rtl/common/sram/rvgpu_sram_sp_sim.sv
+// Common FIFO
 $RVGPU_HARDWARE/rtl/common/fifo/rvgpu_fifo_basic.sv
 // $RVGPU_HARDWARE/rtl/common/fifo/rvgpu_fifo_stream.sv
 

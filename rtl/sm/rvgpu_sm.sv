@@ -254,22 +254,22 @@ module rvgpu_sm #(
         .clk(clk),
         .rst_n(rst_n),
         
-        // CUDA Core接口
-        .req_valid({l1_data_req_valid_3, l1_data_req_valid_2, l1_data_req_valid_1, l1_data_req_valid_0}),
-        .req_warp_id({l1_data_req_warp_id_3, l1_data_req_warp_id_2, l1_data_req_warp_id_1, l1_data_req_warp_id_0}),
-        .req_mask({l1_data_req_mask_3, l1_data_req_mask_2, l1_data_req_mask_1, l1_data_req_mask_0}),
-        .req_addr({l1_data_req_addr_3, l1_data_req_addr_2, l1_data_req_addr_1, l1_data_req_addr_0}),
-        .req_data({l1_data_req_data_3, l1_data_req_data_2, l1_data_req_data_1, l1_data_req_data_0}),
-        .req_size({l1_data_req_size_3, l1_data_req_size_2, l1_data_req_size_1, l1_data_req_size_0}),
-        .req_is_load({l1_data_req_is_load_3, l1_data_req_is_load_2, l1_data_req_is_load_1, l1_data_req_is_load_0}),
-        .req_is_shared({l1_data_req_is_shared_3, l1_data_req_is_shared_2, l1_data_req_is_shared_1, l1_data_req_is_shared_0}),
+        // CUDA Core接口 - 使用数组端口
+        .req_valid('{l1_data_req_valid_3, l1_data_req_valid_2, l1_data_req_valid_1, l1_data_req_valid_0}),
+        .req_warp_id('{l1_data_req_warp_id_3, l1_data_req_warp_id_2, l1_data_req_warp_id_1, l1_data_req_warp_id_0}),
+        .req_mask('{l1_data_req_mask_3, l1_data_req_mask_2, l1_data_req_mask_1, l1_data_req_mask_0}),
+        .req_addr('{l1_data_req_addr_3, l1_data_req_addr_2, l1_data_req_addr_1, l1_data_req_addr_0}),
+        .req_data('{l1_data_req_data_3, l1_data_req_data_2, l1_data_req_data_1, l1_data_req_data_0}),
+        .req_size('{l1_data_req_size_3, l1_data_req_size_2, l1_data_req_size_1, l1_data_req_size_0}),
+        .req_is_load('{l1_data_req_is_load_3, l1_data_req_is_load_2, l1_data_req_is_load_1, l1_data_req_is_load_0}),
+        .req_is_shared('{l1_data_req_is_shared_3, l1_data_req_is_shared_2, l1_data_req_is_shared_1, l1_data_req_is_shared_0}),
         .req_ready('{l1_data_req_ready_3, l1_data_req_ready_2, l1_data_req_ready_1, l1_data_req_ready_0}),
         
         .resp_valid('{l1_data_resp_valid_3, l1_data_resp_valid_2, l1_data_resp_valid_1, l1_data_resp_valid_0}),
         .resp_warp_id('{l1_data_resp_warp_id_3, l1_data_resp_warp_id_2, l1_data_resp_warp_id_1, l1_data_resp_warp_id_0}),
         .resp_mask('{l1_data_resp_mask_3, l1_data_resp_mask_2, l1_data_resp_mask_1, l1_data_resp_mask_0}),
         .resp_data('{l1_data_resp_data_3, l1_data_resp_data_2, l1_data_resp_data_1, l1_data_resp_data_0}),
-        .resp_ready({l1_data_resp_ready_3, l1_data_resp_ready_2, l1_data_resp_ready_1, l1_data_resp_ready_0}),
+        .resp_ready('{l1_data_resp_ready_3, l1_data_resp_ready_2, l1_data_resp_ready_1, l1_data_resp_ready_0}),
         
         // L1.5 Cache接口 (数据缓存未命中时使用)
         .l15_req_valid(),     // 需要添加新的L1.5接口用于数据访问

@@ -209,8 +209,8 @@ module rvgpu_gpc_block_scheduler #(
                 if (mmu_if.req_valid && mmu_if.req_ready) begin
                     mmu_if.req_valid = 1'b0;
                     state_n = WAIT_MMU;
+                    `GPC_PRINT("Scheduler", $sformatf("Requesting MMU translation for args[%d] at %h", args_counter_r, current_job_r.program_ptr + {args_counter_r, 5'b0}));
                 end
-                `GPC_PRINT("Scheduler", $sformatf("Requesting MMU translation for args[%d] at %h", args_counter_r, current_job_r.program_ptr + {args_counter_r, 5'b0}));
             end
             
             WAIT_MMU: begin

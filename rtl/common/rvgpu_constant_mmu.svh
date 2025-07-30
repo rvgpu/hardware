@@ -28,6 +28,7 @@
 `define RVGPU_CONST_MMU_PAGE_SIZE               `RVGPU_CONST_CU_PAGE_SIZE
 `define RVGPU_CONST_MMU_PAGE_OFFSET_BITS        `RVGPU_CONST_CU_PAGE_OFFSET_BITS
 `define RVGPU_CONST_MMU_PPN_BITS                `RVGPU_CONST_MMU_PA_WIDTH - `RVGPU_CONST_MMU_PAGE_OFFSET_BITS
+`define RVGPU_CONST_MMU_VPN_BITS                `RVGPU_CONST_MMU_VA_WIDTH - `RVGPU_CONST_MMU_PAGE_OFFSET_BITS
 
 //=============================================================================
 // CU TLB特定配置

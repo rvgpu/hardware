@@ -28,6 +28,7 @@ localparam int VA_WIDTH = `RVGPU_CONST_MMU_VA_WIDTH;
 localparam int PA_WIDTH = `RVGPU_CONST_MMU_PA_WIDTH;
 localparam int PAGE_OFFSET_BITS = `RVGPU_CONST_MMU_PAGE_OFFSET_BITS;
 localparam int PPN_BITS = `RVGPU_CONST_MMU_PPN_BITS;
+localparam int VPN_BITS = `RVGPU_CONST_MMU_VPN_BITS;
 localparam int PAGE_SIZE = `RVGPU_CONST_MMU_PAGE_SIZE;
 
 // 页表级别常量

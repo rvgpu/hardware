@@ -20,6 +20,7 @@
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_noc_message.svh"
 `include "rvgpu_mmu_if.svh"
+`include "rvgpu_mmu_common.svh"
 
 module rvgpu_gpc_mmu #(
     parameter int MAX_REQUESTS = 16,    // 最大并发请求数
@@ -41,13 +42,6 @@ module rvgpu_gpc_mmu #(
     rvgpu_internal_noc_if.device noc_if
 );
 
-    // 地址位宽参数
-    localparam int VA_WIDTH = `RVGPU_CONST_CU_VA_WIDTH;
-    localparam int PA_WIDTH = `RVGPU_CONST_CU_PA_WIDTH;
-    localparam int PAGE_OFFSET_BITS = `RVGPU_CONST_CU_PAGE_OFFSET_BITS;
-    localparam int VPN_BITS = VA_WIDTH - PAGE_OFFSET_BITS;
-    localparam int PPN_BITS = PA_WIDTH - PAGE_OFFSET_BITS;
-    
     // 请求队列表项定义
     typedef struct packed {
         logic        valid;          // 有效位

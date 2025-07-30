@@ -20,7 +20,6 @@
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_noc_message.svh"
 `include "rvgpu_mmu_if.svh"
-`include "rvgpu_gpc_mmu_tlb.sv"
 
 module rvgpu_gpc_mmu #(
     parameter int MAX_REQUESTS = 16,    // 最大并发请求数

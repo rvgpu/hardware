@@ -228,11 +228,13 @@ module rvgpu_sm #(
         .tlb_req_valid(tlb_if.req_valid),
         .tlb_req_vaddr(tlb_if.req_vaddr),
         .tlb_req_type(tlb_if.req_type),
+        .tlb_req_warp_id(32'h0),  // 简化实现，使用默认值
         .tlb_req_ready(tlb_if.req_ready),
         .tlb_resp_valid(tlb_if.resp_valid),
         .tlb_resp_hit(tlb_if.resp_hit),
         .tlb_resp_ppn(tlb_if.resp_paddr[38:12]),  // 从resp_paddr提取PPN
-        .tlb_resp_fault(tlb_if.resp_status != MMU_RESP_OKAY)  // 使用MMU状态码
+        .tlb_resp_fault(tlb_if.resp_status != MMU_RESP_OKAY),  // 使用MMU状态码
+        .tlb_resp_warp_id(32'h0)  // 简化实现，使用默认值
     );
     
     // =========================================================================

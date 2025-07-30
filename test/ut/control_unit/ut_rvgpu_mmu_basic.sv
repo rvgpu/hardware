@@ -6,7 +6,10 @@
 `include "rvgpu_clk_rst.svh"
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_mmu_if.svh"
+
 `include "rvgpu_sram_sp_sim.sv"
+`include "rvgpu_fifo_basic.sv"
+`include "rvgpu_mmu_tlb.sv"
 `include "rvgpu_mmu.sv"
 
 // SVUnit中模块名必须以_unit_test结尾

@@ -21,6 +21,7 @@
 `include "rvgpu_mmu_if.svh"
 `include "rvgpu_mmu_common.svh"
 `include "rvgpu_constant_mmu.svh"
+`include "rvgpu_debug.svh"
 
 module rvgpu_mmu_tlb (
     // Clock and Reset Interface

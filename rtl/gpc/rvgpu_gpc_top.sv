@@ -67,7 +67,6 @@ module rvgpu_gpc_top #(
     
     // GPC MMU实例
     rvgpu_gpc_mmu #(
-        .TLB_ENTRIES(128),  // 使用固定值
         .MAX_REQUESTS(16),  // 使用固定值
         .GPC_ID(GPC_ID)
     ) u_gpc_mmu (

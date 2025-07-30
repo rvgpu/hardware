@@ -29,6 +29,7 @@ $RVGPU_HARDWARE/rtl/gpc/rvgpu_gpc_l15_rrip.sv
 $RVGPU_HARDWARE/rtl/gpc/rvgpu_gpc_l15_mshr.sv
 $RVGPU_HARDWARE/rtl/gpc/rvgpu_gpc_l15_write_buffer.sv
 $RVGPU_HARDWARE/rtl/gpc/rvgpu_gpc_mmu.sv
+$RVGPU_HARDWARE/rtl/gpc/rvgpu_gpc_mmu_tlb.sv
 $RVGPU_HARDWARE/rtl/gpc/rvgpu_gpc_raster.sv
 $RVGPU_HARDWARE/rtl/gpc/rvgpu_tpc_top.sv
 
@@ -51,6 +52,9 @@ $RVGPU_HARDWARE/rtl/cudacore/rvgpu_sm_cuda_core_unit.sv
 
 // SRAM
 $RVGPU_HARDWARE/rtl/mem/sram/rvgpu_sram_sp_sim.sv
+// FIFO
+$RVGPU_HARDWARE/rtl/common/fifo/rvgpu_fifo_basic.sv
+// $RVGPU_HARDWARE/rtl/common/fifo/rvgpu_fifo_stream.sv
 
 // GPU Top
 $RVGPU_HARDWARE/rtl/gpu_top/rvgpu_toplevel.sv

@@ -19,7 +19,6 @@
 `include "rvgpu_control_unit_pkg.svh"
 `include "rvgpu_control_unit_if.svh"
 `include "rvgpu_internal_noc_if.svh"
-`include "rvgpu_job_dispatcher.sv"
 `include "rvgpu_debug.svh"
 
 module rvgpu_command_processor #(

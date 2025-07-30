@@ -5,6 +5,8 @@
 `include "rvgpu_clk_rst.svh"
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_mmu_if.svh"
+
+`include "rvgpu_job_dispatcher.sv"
 `include "rvgpu_command_processor.sv"
 
 // SVUnit中模块名必须以_unit_test结尾

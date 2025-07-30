@@ -79,6 +79,10 @@ module rvgpu_mmu (
     // FIFO写入缓冲区
     req_buffer_entry_t write_data_buf;
     
+    // GPC请求数据解析信号
+    noc_req_mmu_t gpc_req_data;
+    assign gpc_req_data = noc_req_mmu_t'(noc_if.s_req_data);
+    
     // 地址位宽参数
     localparam int VA_WIDTH = `RVGPU_CONST_CU_VA_WIDTH;
     localparam int PA_WIDTH = `RVGPU_CONST_CU_PA_WIDTH;
@@ -195,28 +199,14 @@ module rvgpu_mmu (
         write_data_buf = '0;
         
         // CP请求入队
-        if (cp_req_accept && !req_buffer_full) begin
+        if (cp_req_accept && can_accept_request()) begin
             req_fifo_if.write_en = 1'b1;
-            write_data_buf.valid = 1'b1;
-            write_data_buf.pending = 1'b0;
-            write_data_buf.source = REQ_SOURCE_CP;
-            write_data_buf.vaddr = mmu_if.req_vaddr;
-            write_data_buf.req_type = mmu_if.req_type;
-            write_data_buf.trans_id = 8'h0;
-            write_data_buf.tpc_id = 4'h0;
-            write_data_buf.gpc_id = 4'h0;
+            write_data_buf = build_cp_req_entry(mmu_if.req_vaddr, mmu_if.req_type);
         end
         // GPC请求入队
-        else if (gpc_req_accept && !req_buffer_full) begin
+        else if (gpc_req_accept && can_accept_request()) begin
             req_fifo_if.write_en = 1'b1;
-            write_data_buf.valid = 1'b1;
-            write_data_buf.pending = 1'b0;
-            write_data_buf.source = REQ_SOURCE_GPC;
-            write_data_buf.vaddr = noc_if.s_req_data[63:0];  // 虚拟地址
-            write_data_buf.req_type = mmu_access_type_e'(noc_if.s_req_data[65:64]);  // 访问类型
-            write_data_buf.trans_id = noc_if.s_req_header[23:16]; // 从header中提取trans_id
-            write_data_buf.tpc_id = noc_if.s_req_data[103:100];  // TPC ID
-            write_data_buf.gpc_id = noc_if.s_req_data[107:104];  // GPC ID
+            write_data_buf = build_gpc_req_entry(noc_if.s_req_header, noc_if.s_req_data);
         end
         
         // 将临时变量赋值给FIFO接口
@@ -273,7 +263,7 @@ module rvgpu_mmu (
         
         case (state_r)
             MMU_STATE_IDLE: begin
-                if (!req_buffer_empty && !current_req.pending) begin
+                if (can_process_request()) begin
                     // 从FIFO获取请求 - 这里会触发FIFO读取
                     // 数据会在下一个时钟周期更新到current_req
                     state_nxt = MMU_STATE_TLB_LOOKUP;
@@ -316,7 +306,7 @@ module rvgpu_mmu (
             end
             
             MMU_STATE_PAGE_WALK: begin
-                // 页表查找请求 - 使用查找表减少if语句
+                // 页表查找请求 
                 noc_req_valid_nxt = 1'b1;
                 noc_req_header_nxt = build_noc_header_mem_request(8'h01, NODE_CONTROL, NOC_NODE_CONTROL_MMU);
                 noc_req_data_nxt = build_noc_payload_request_mem_read(calc_page_table_addr(vaddr_r, current_pt_base_r, page_level_r), NOC_SIZE_8B);
@@ -394,7 +384,7 @@ module rvgpu_mmu (
                         NOC_NODE_CONTROL_MMU
                     );
                     // 构建响应数据
-                    noc_s_resp_data_nxt = {paddr_r, 32'h0, current_req.tpc_id, current_req.gpc_id};
+                    noc_s_resp_data_nxt = build_mmu_response_data(paddr_r, current_req.tpc_id, current_req.gpc_id);
                     
                     // 等待NOC接受响应
                     if (noc_if.s_resp_ready) begin
@@ -418,7 +408,7 @@ module rvgpu_mmu (
                         NOC_NODE_CONTROL_MMU
                     );
                     // 构建错误响应数据
-                    noc_s_resp_data_nxt = {32'h0, 32'h0, 32'h0, 32'h1}; // 错误标志
+                    noc_s_resp_data_nxt = build_mmu_error_data();
                     
                     // 等待NOC接受响应
                     if (noc_if.s_resp_ready) begin
@@ -550,6 +540,7 @@ module rvgpu_mmu (
     // 11. 辅助函数
     //=============================================================================
     
+    // 选择响应数据函数
     function automatic logic [63:0] select_resp_data(input logic [255:0] data);
         logic [63:0] result;
         case (noc_req_data_r.req_mem_read.addr[4:3])
@@ -559,6 +550,64 @@ module rvgpu_mmu (
             2'b11: result = data[255:192];
         endcase
         return result;
+    endfunction
+    
+    // 构建CP请求缓冲区条目
+    function automatic req_buffer_entry_t build_cp_req_entry(
+        input logic [VA_WIDTH-1:0] vaddr,
+        input mmu_access_type_e req_type
+    );
+        req_buffer_entry_t entry;
+        entry.valid = 1'b1;
+        entry.pending = 1'b0;
+        entry.source = REQ_SOURCE_CP;
+        entry.vaddr = vaddr;
+        entry.req_type = req_type;
+        entry.trans_id = 8'h0;
+        entry.tpc_id = 4'h0;
+        entry.gpc_id = 4'h0;
+        return entry;
+    endfunction
+    
+    // 构建GPC请求缓冲区条目
+    function automatic req_buffer_entry_t build_gpc_req_entry(
+        input noc_header_t header,
+        input noc_req_mmu_t payload
+    );
+        req_buffer_entry_t entry;
+        entry.valid = 1'b1;
+        entry.pending = 1'b0;
+        entry.source = REQ_SOURCE_GPC;
+        entry.vaddr = payload.vaddr;
+        entry.req_type = payload.req_type;
+        entry.trans_id = header.trans_id;
+        entry.tpc_id = payload.tpc_id;
+        entry.gpc_id = payload.gpc_id;
+        return entry;
+    endfunction
+    
+    // 检查是否可以接受新请求
+    function automatic logic can_accept_request();
+        return !req_buffer_full;
+    endfunction
+    
+    // 检查是否可以处理请求
+    function automatic logic can_process_request();
+        return !req_buffer_empty && !current_req.pending;
+    endfunction
+    
+    // 构建MMU响应数据
+    function automatic logic [255:0] build_mmu_response_data(
+        input logic [PA_WIDTH-1:0] paddr,
+        input logic [3:0] tpc_id,
+        input logic [3:0] gpc_id
+    );
+        return {paddr, 32'h0, tpc_id, gpc_id};
+    endfunction
+    
+    // 构建MMU错误响应数据
+    function automatic logic [255:0] build_mmu_error_data();
+        return {32'h0, 32'h0, 32'h0, 32'h1}; // 错误标志
     endfunction
 
     //=============================================================================
@@ -574,18 +623,7 @@ module rvgpu_mmu (
             
             // GPC请求调试
             if (gpc_req_accept) begin
-                logic [VA_WIDTH-1:0] gpc_vaddr;
-                mmu_access_type_e gpc_req_type;
-                logic [3:0] gpc_tpc_id, gpc_gpc_id;
-                
-                // 数据格式: {vaddr[63:0], req_type[1:0], 32'h0, tpc_id[3:0], gpc_id[3:0]}
-                gpc_vaddr = noc_if.s_req_data[63:0];  // 虚拟地址
-                gpc_req_type = mmu_access_type_e'(noc_if.s_req_data[65:64]);  // 访问类型
-                gpc_tpc_id = noc_if.s_req_data[103:100];  // TPC ID
-                gpc_gpc_id = noc_if.s_req_data[107:104];  // GPC ID
-                
-                `DEBUG_PRINT("MMU", $sformatf("GPC MMU Request, vaddr: 0x%h, req_type: %s, tpc_id: %d, gpc_id: %d", 
-                         gpc_vaddr, gpc_req_type.name(), gpc_tpc_id, gpc_gpc_id));
+                `DEBUG_PRINT("MMU", $sformatf("GPC MMU Request, %s", noc_request_mmu_to_string(noc_if.s_req_header, noc_if.s_req_data)));
             end
 
             if ((state_r == MMU_STATE_PAGE_WAIT) && noc_resp_accept) begin

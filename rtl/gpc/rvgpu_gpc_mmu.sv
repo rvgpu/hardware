@@ -299,7 +299,7 @@ module rvgpu_gpc_mmu #(
                     // 发送请求到NOC Adapter
                     noc_if.m_req_valid <= 1'b1;
                     noc_if.m_req_header <= build_noc_header_mmu_request(8'h01, NODE_SHADER_0 + GPC_ID);
-                    noc_if.m_req_data <= {current_req.vaddr, current_req.req_type, 32'h0, current_req.tpc_id, GPC_ID};  // 使用默认值替代warp_id和source_id
+                    noc_if.m_req_data <= build_noc_payload_request_mmu(current_req.vaddr, current_req.req_type, current_req.tpc_id, GPC_ID);
                     noc_if.m_req_strb <= '1;
                     noc_if.m_req_last <= 1'b1;
                     

@@ -106,10 +106,23 @@ typedef struct packed {
     logic [63:0]    data;
 } noc_resp_mem_read_t;
 
+// MMU请求数据结构
+typedef struct packed {
+    logic [63:0]    reserved2;      // 保留字段2 (64位)
+    logic [63:0]    reserved1;      // 保留字段1 (64位)
+    logic [38:0]    vaddr;          // 虚拟地址 (39位)
+    logic [2:0]     req_type;       // 访问类型 (3位)
+    logic [31:0]    reserved0;      // 保留字段0 (32位)
+    logic [3:0]     tpc_id;         // TPC ID (4位)
+    logic [3:0]     gpc_id;         // GPC ID (4位)
+    logic [45:0]    reserved3;      // 保留字段3 (46位) - 最低位
+} noc_req_mmu_t;
+
 typedef union packed {
     logic [`RVGPU_CONST_CU_MAX_PAYLOAD_SIZE-1:0] payload_256b; // 256bit   
     noc_req_mem_read_t req_mem_read;
     noc_resp_mem_read_t resp_mem_read;
+    noc_req_mmu_t req_mmu;
 } noc_payload_t;
 
 
@@ -147,6 +160,24 @@ function automatic noc_header_t build_noc_header(
     header.dst_local        = dst_local;
     header.reserved         = 4'h0;
     return header;
+endfunction
+
+// 解析NOC header
+function automatic void parse_noc_header(
+    input noc_header_t header,
+    output noc_msg_type_t msg_type,
+    output noc_trans_id_t trans_id,
+    output noc_node_id_t src_node,
+    output noc_node_id_t dest_node,
+    output noc_local_addr_t src_local,
+    output noc_local_addr_t dst_local
+);
+    msg_type = noc_msg_type_t'(header.msg_type);
+    trans_id = header.trans_id;
+    src_node = noc_node_id_t'(header.src_node);
+    dest_node = noc_node_id_t'(header.dest_node);
+    src_local = header.src_local;
+    dst_local = header.dst_local;
 endfunction
 
 function automatic noc_header_t build_noc_header_mem_request(
@@ -201,24 +232,6 @@ function automatic noc_header_t build_noc_header_cache_invalidate(
 );
     return build_noc_header(MSG_CACHE_INVALIDATE, trans_id, src_node, dst_node, 8'h00);
 endfunction
-    
-// 解析NOC header
-function automatic void parse_noc_header(
-    input noc_header_t header,
-    output noc_msg_type_t msg_type,
-    output noc_trans_id_t trans_id,
-    output noc_node_id_t src_node,
-    output noc_node_id_t dest_node,
-    output noc_local_addr_t src_local,
-    output noc_local_addr_t dst_local
-);
-    msg_type = noc_msg_type_t'(header.msg_type);
-    trans_id = header.trans_id;
-    src_node = noc_node_id_t'(header.src_node);
-    dest_node = noc_node_id_t'(header.dest_node);
-    src_local = header.src_local;
-    dst_local = header.dst_local;
-endfunction
 
 function automatic noc_payload_t build_noc_payload_request_mem_read(
     input logic [63:0] addr,
@@ -241,6 +254,24 @@ function automatic noc_payload_t build_noc_payload_response_mem_read(
     payload.resp_mem_read.reserver2 = '0;
     payload.resp_mem_read.reserver1 = '0;
     payload.resp_mem_read.reserved0 = '0;
+    return payload;
+endfunction
+
+function automatic noc_payload_t build_noc_payload_request_mmu(
+    input logic [38:0] vaddr,
+    input logic [2:0]  req_type,
+    input logic [3:0]  tpc_id,
+    input logic [3:0]  gpc_id
+);
+    noc_payload_t payload;
+    payload.req_mmu.reserved2 = 64'h0;
+    payload.req_mmu.reserved1 = 64'h0;
+    payload.req_mmu.vaddr = vaddr;
+    payload.req_mmu.req_type = req_type;
+    payload.req_mmu.reserved0 = 32'h0;
+    payload.req_mmu.tpc_id = tpc_id;
+    payload.req_mmu.gpc_id = gpc_id;
+    payload.req_mmu.reserved3 = 46'h0;
     return payload;
 endfunction
 

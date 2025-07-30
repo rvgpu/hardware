@@ -78,22 +78,33 @@ function automatic string noc_payload_response_mem_read_to_string(
     return $sformatf("payload: {data: %h}", payload.resp_mem_read.data);
 endfunction
 
+function automatic string noc_payload_request_mmu_to_string(
+    input noc_payload_t payload
+);
+    return $sformatf("payload: {vaddr: %h, req_type: %d, tpc_id: %d, gpc_id: %d}", 
+                     payload.req_mmu.vaddr, payload.req_mmu.req_type, 
+                     payload.req_mmu.tpc_id, payload.req_mmu.gpc_id);
+endfunction
+
 function automatic string noc_request_mem_read_to_string(
     input noc_header_t header,
     input noc_payload_t payload
 );
-    return $sformatf("%s, %s", 
-                     noc_header_to_string(header), 
-                     noc_payload_request_mem_read_to_string(payload));
+    return $sformatf("%s, %s", noc_header_to_string(header), noc_payload_request_mem_read_to_string(payload));
 endfunction
 
 function automatic string noc_response_mem_read_to_string(
     input noc_header_t header,
     input noc_payload_t payload
 );
-    return $sformatf("%s, %s", 
-                     noc_header_to_string(header), 
-                     noc_payload_response_mem_read_to_string(payload));
+    return $sformatf("%s, %s", noc_header_to_string(header), noc_payload_response_mem_read_to_string(payload));
+endfunction
+
+function automatic string noc_request_mmu_to_string(
+    input noc_header_t header,
+    input noc_payload_t payload
+);
+    return $sformatf("%s, %s", noc_header_to_string(header), noc_payload_request_mmu_to_string(payload));
 endfunction
 
 `endif // RVGPU_NOC_DEBUG_SVH

@@ -61,58 +61,30 @@ endinterface : l2cache_tag_if
 
 //=============================================================================
 // Data Array Interface - Controller <-> Data Array
-// 用于控制器与数据数组之间的读写操作
 //=============================================================================
 interface l2cache_data_if;
-    // 读请求通道
-    logic                               read_valid;
-    logic [L2CACHE_INDEX_BITS-1:0]     read_index;
-    logic [L2CACHE_WAYS-1:0]           read_way;
-    logic [L2CACHE_OFFSET_BITS-1:0]    read_offset;
-    logic [7:0]                        read_size;
-    logic                               read_ready;
-    
-    // 读响应通道
-    logic [255:0]                      read_data;
-    logic [31:0]                       read_strb;
-    logic                               read_done;
-    
-    // 写请求通道
-    logic                               write_valid;
-    logic [L2CACHE_INDEX_BITS-1:0]     write_index;
-    logic [L2CACHE_WAYS-1:0]           write_way;
-    logic [L2CACHE_OFFSET_BITS-1:0]    write_offset;
-    logic [255:0]                      write_data;
-    logic [31:0]                       write_strb;
-    logic [7:0]                        write_size;
-    logic                               write_ready;
-    
-    // 写响应通道
-    logic                               write_done;
-    
-    // 缓存行访问通道（用于完整行操作）
-    logic                               line_read_valid;
+    // 缓存行读请求通道
+    logic                              line_read_valid;
     logic [L2CACHE_INDEX_BITS-1:0]     line_read_index;
     logic [L2CACHE_WAYS-1:0]           line_read_way;
-    logic                               line_read_ready;
+    logic                              line_read_ready;
     
-    logic                               line_read_done;
-    l2cache_line_t                      line_read_data;
+    // 缓存行读响应通道
+    logic                              line_read_done;
+    l2cache_line_t                     line_read_data;
     
-    logic                               line_write_valid;
+    // 缓存行写请求通道
+    logic                              line_write_valid;
     logic [L2CACHE_INDEX_BITS-1:0]     line_write_index;
     logic [L2CACHE_WAYS-1:0]           line_write_way;
-    l2cache_line_t                      line_write_data;
-    logic                               line_write_ready;
+    l2cache_line_t                     line_write_data;
+    logic                              line_write_ready;
     
-    logic                               line_write_done;
+    // 缓存行写响应通道
+    logic                              line_write_done;
     
     // Controller modport (发起数据操作)
     modport controller (
-        output read_valid, read_index, read_way, read_offset, read_size,
-        input  read_ready, read_data, read_strb, read_done,
-        output write_valid, write_index, write_way, write_offset, write_data, write_strb, write_size,
-        input  write_ready, write_done,
         output line_read_valid, line_read_index, line_read_way,
         input  line_read_ready, line_read_done, line_read_data,
         output line_write_valid, line_write_index, line_write_way, line_write_data,
@@ -121,10 +93,6 @@ interface l2cache_data_if;
     
     // Data Array modport (执行数据操作)
     modport data_array (
-        input  read_valid, read_index, read_way, read_offset, read_size,
-        output read_ready, read_data, read_strb, read_done,
-        input  write_valid, write_index, write_way, write_offset, write_data, write_strb, write_size,
-        output write_ready, write_done,
         input  line_read_valid, line_read_index, line_read_way,
         output line_read_ready, line_read_done, line_read_data,
         input  line_write_valid, line_write_index, line_write_way, line_write_data,

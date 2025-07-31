@@ -103,8 +103,7 @@ module rvgpu_l2cache_controller (
     logic [L2CACHE_WAYS-1:0] selected_way_r, selected_way_nxt;
     
     // Control flags
-    logic read_valid_r, read_valid_nxt;
-    logic write_valid_r, write_valid_nxt;
+    logic line_read_valid_r, line_read_valid_nxt;
     logic line_write_valid_r, line_write_valid_nxt;
     
     // Request FIFO interface
@@ -134,8 +133,8 @@ module rvgpu_l2cache_controller (
     wire noc_resp_accept = noc_if.resp_valid && noc_if.resp_ready;
     wire tag_lookup_accept = tag_if.lookup_valid && tag_if.lookup_ready;
     wire tag_update_accept = tag_if.update_valid && tag_if.update_ready;
-    wire data_read_accept = data_if.read_valid && data_if.read_ready;
-    wire data_write_accept = data_if.write_valid && data_if.write_ready;
+    wire data_line_read_accept = data_if.line_read_valid && data_if.line_read_ready;
+    wire data_line_write_accept = data_if.line_write_valid && data_if.line_write_ready;
     wire axi_read_accept = axi_if.read_req_valid && axi_if.read_req_ready;
     wire axi_write_accept = axi_if.write_req_valid && axi_if.write_req_ready;
 
@@ -152,8 +151,7 @@ module rvgpu_l2cache_controller (
         cache_hit_nxt = cache_hit_r;
         hit_way_nxt = hit_way_r;
         selected_way_nxt = selected_way_r;
-        read_valid_nxt = read_valid_r;
-        write_valid_nxt = write_valid_r;
+        line_read_valid_nxt = line_read_valid_r;
         line_write_valid_nxt = line_write_valid_r;
         
         // Default interface outputs
@@ -172,18 +170,9 @@ module rvgpu_l2cache_controller (
         tag_if.update_way = '0;
         tag_if.update_entry = '0;
         
-        data_if.read_valid = 1'b0;
-        data_if.read_index = '0;
-        data_if.read_way = '0;
-        data_if.read_offset = '0;
-        data_if.read_size = '0;
-        data_if.write_valid = 1'b0;
-        data_if.write_index = '0;
-        data_if.write_way = '0;
-        data_if.write_offset = '0;
-        data_if.write_data = '0;
-        data_if.write_strb = '0;
-        data_if.write_size = '0;
+        data_if.line_read_valid = 1'b0;
+        data_if.line_read_index = '0;
+        data_if.line_read_way = '0;
         data_if.line_write_valid = 1'b0;
         data_if.line_write_index = '0;
         data_if.line_write_way = '0;
@@ -215,8 +204,7 @@ module rvgpu_l2cache_controller (
         case (state_r)
             L2_STATE_IDLE: begin
                 // Idle state: wait for new requests
-                read_valid_nxt = 1'b0;
-                write_valid_nxt = 1'b0;
+                line_read_valid_nxt = 1'b0;
                 line_write_valid_nxt = 1'b0;
                 
                 // Process requests from FIFO
@@ -264,22 +252,20 @@ module rvgpu_l2cache_controller (
                 // Data access state: read/write cache data
                 if (current_req_r.read) begin
                     // Read operation
-                    if (!read_valid_r) begin
-                        read_valid_nxt = 1'b1;
+                    if (!line_read_valid_r) begin
+                        line_read_valid_nxt = 1'b1;
                     end
                     
-                    data_if.read_valid = read_valid_r;
-                    data_if.read_index = current_addr_r.index;
-                    data_if.read_way = hit_way_r;
-                    data_if.read_offset = current_addr_r.offset;
-                    data_if.read_size = current_req_r.size;
+                    data_if.line_read_valid = line_read_valid_r;
+                    data_if.line_read_index = current_addr_r.index;
+                    data_if.line_read_way = hit_way_r;
                     
-                    if (data_if.read_ready) begin
-                        read_valid_nxt = 1'b0;
+                    if (data_if.line_read_ready) begin
+                        line_read_valid_nxt = 1'b0;
                         state_nxt = L2_STATE_RESPONSE;
                         
                         // Prepare response
-                        current_resp_nxt.data = data_if.read_data;
+                        current_resp_nxt.data = data_if.line_read_data.data;
                         current_resp_nxt.status = L2CACHE_RESP_OKAY;
                         current_resp_nxt.trans_id = current_req_r.trans_id;
                         current_resp_nxt.dest_node = current_req_r.src_node;
@@ -288,20 +274,18 @@ module rvgpu_l2cache_controller (
                     end
                 end else begin
                     // Write operation
-                    if (!write_valid_r) begin
-                        write_valid_nxt = 1'b1;
+                    if (!line_write_valid_r) begin
+                        line_write_valid_nxt = 1'b1;
                     end
                     
-                    data_if.write_valid = write_valid_r;
-                    data_if.write_index = current_addr_r.index;
-                    data_if.write_way = hit_way_r;
-                    data_if.write_offset = current_addr_r.offset;
-                    data_if.write_data = current_req_r.data;
-                    data_if.write_strb = current_req_r.strb;
-                    data_if.write_size = current_req_r.size;
+                    data_if.line_write_valid = line_write_valid_r;
+                    data_if.line_write_index = current_addr_r.index;
+                    data_if.line_write_way = hit_way_r;
+                    data_if.line_write_data.data = current_req_r.data;
+                    data_if.line_write_data.strb = current_req_r.strb;
                     
-                    if (data_if.write_ready) begin
-                        write_valid_nxt = 1'b0;
+                    if (data_if.line_write_ready) begin
+                        line_write_valid_nxt = 1'b0;
                         state_nxt = L2_STATE_RESPONSE;
                         
                         // Prepare response
@@ -332,7 +316,7 @@ module rvgpu_l2cache_controller (
                     end
                 end else begin
                     // Write miss: write to memory
-                    if (!write_valid_r) begin
+                    if (!line_write_valid_r) begin
                         axi_if.write_req_valid = 1'b1;
                         axi_if.write_req_addr = current_req_r.addr;
                         axi_if.write_req_len = 0;
@@ -340,7 +324,7 @@ module rvgpu_l2cache_controller (
                         axi_if.write_req_id = current_req_r.trans_id;
                         
                         if (axi_if.write_req_ready) begin
-                            write_valid_nxt = 1'b1;
+                            line_write_valid_nxt = 1'b1;
                         end
                     end else begin
                         axi_if.write_data_valid = 1'b1;
@@ -350,7 +334,7 @@ module rvgpu_l2cache_controller (
                         
                         if (axi_if.write_data_ready) begin
                             state_nxt = L2_STATE_RESPONSE;
-                            write_valid_nxt = 1'b0;
+                            line_write_valid_nxt = 1'b0;
                             
                             // Prepare response
                             current_resp_nxt.data = '0;
@@ -542,8 +526,7 @@ module rvgpu_l2cache_controller (
              cache_hit_r <= 1'b0;
              hit_way_r <= '0;
              selected_way_r <= '0;
-             read_valid_r <= 1'b0;
-             write_valid_r <= 1'b0;
+             line_read_valid_r <= 1'b0;
              line_write_valid_r <= 1'b0;
          end else begin
              // Update registers with next values
@@ -554,8 +537,7 @@ module rvgpu_l2cache_controller (
              cache_hit_r <= cache_hit_nxt;
              hit_way_r <= hit_way_nxt;
              selected_way_r <= selected_way_nxt;
-             read_valid_r <= read_valid_nxt;
-             write_valid_r <= write_valid_nxt;
+             line_read_valid_r <= line_read_valid_nxt;
              line_write_valid_r <= line_write_valid_nxt;
          end
      end

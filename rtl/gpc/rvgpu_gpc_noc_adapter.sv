@@ -283,19 +283,22 @@ module rvgpu_gpc_noc_adapter #(
             end
             
             RESP_ROUTE_L15: begin
-                if (l15_cache_if.m_resp_ready) begin
+                // 当L15 Cache准备好接收响应且NOC有有效响应时，返回空闲状态
+                if (l15_cache_if.m_resp_ready && noc_external_if.m_resp_valid) begin
                     resp_route_state_next = RESP_ROUTE_IDLE;
                 end
             end
             
             RESP_ROUTE_MMU: begin
-                if (mmu_if.m_resp_ready) begin
+                // 当MMU准备好接收响应且NOC有有效响应时，返回空闲状态
+                if (mmu_if.m_resp_ready && noc_external_if.m_resp_valid) begin
                     resp_route_state_next = RESP_ROUTE_IDLE;
                 end
             end
             
             RESP_ROUTE_SCHED: begin
-                if (scheduler_if.m_resp_ready) begin
+                // 当Scheduler准备好接收响应且NOC有有效响应时，返回空闲状态
+                if (scheduler_if.m_resp_ready && noc_external_if.m_resp_valid) begin
                     resp_route_state_next = RESP_ROUTE_IDLE;
                 end
             end
@@ -451,39 +454,67 @@ module rvgpu_gpc_noc_adapter #(
         
         case (resp_route_state_r)
             RESP_ROUTE_IDLE: begin
-                noc_external_if.m_resp_ready = 1'b1;
+                // 在空闲状态下，根据NOC响应的消息类型预先设置ready信号
+                // 这样可以确保状态转换和ready信号设置在同一周期内完成
+                if (noc_external_if.m_resp_valid) begin
+                    case (get_noc_header_msg_type(noc_external_if.m_resp_header))
+                        MSG_MEM_READ_RESP, MSG_MEM_WRITE_RESP: begin
+                            noc_external_if.m_resp_ready = l15_cache_if.m_resp_ready;
+                        end
+                        MSG_MMU_RESP: begin
+                            noc_external_if.m_resp_ready = mmu_if.m_resp_ready;
+                        end
+                        MSG_COMPUTE_RESP: begin
+                            noc_external_if.m_resp_ready = scheduler_if.m_resp_ready;
+                        end
+                        default: begin
+                            noc_external_if.m_resp_ready = 1'b0;
+                        end
+                    endcase
+                end else begin
+                    noc_external_if.m_resp_ready = 1'b0;
+                end
             end
             
             RESP_ROUTE_L15: begin
+                // 设置L15 Cache的ready信号，等待NOC的响应
+                noc_external_if.m_resp_ready = l15_cache_if.m_resp_ready;
+                
+                // 当NOC有有效响应时，转发给L15 Cache
                 if (noc_external_if.m_resp_valid) begin
                     l15_cache_if.m_resp_valid = 1'b1;
                     l15_cache_if.m_resp_header = noc_external_if.m_resp_header;
                     l15_cache_if.m_resp_data = noc_external_if.m_resp_data;
                     l15_cache_if.m_resp_status = noc_external_if.m_resp_status;
                     l15_cache_if.m_resp_last = noc_external_if.m_resp_last;
-                    noc_external_if.m_resp_ready = l15_cache_if.m_resp_ready;
                 end
             end
             
             RESP_ROUTE_MMU: begin
+                // 设置MMU的ready信号，等待NOC的响应
+                noc_external_if.m_resp_ready = mmu_if.m_resp_ready;
+                
+                // 当NOC有有效响应时，转发给MMU
                 if (noc_external_if.m_resp_valid) begin
                     mmu_if.m_resp_valid = 1'b1;
                     mmu_if.m_resp_header = noc_external_if.m_resp_header;
                     mmu_if.m_resp_data = noc_external_if.m_resp_data;
                     mmu_if.m_resp_status = noc_external_if.m_resp_status;
                     mmu_if.m_resp_last = noc_external_if.m_resp_last;
-                    noc_external_if.m_resp_ready = mmu_if.m_resp_ready;
                 end
             end
             
             RESP_ROUTE_SCHED: begin
+                // 设置Scheduler的ready信号，等待NOC的响应
+                noc_external_if.m_resp_ready = scheduler_if.m_resp_ready;
+                
+                // 当NOC有有效响应时，转发给Scheduler
                 if (noc_external_if.m_resp_valid) begin
                     scheduler_if.m_resp_valid = 1'b1;
                     scheduler_if.m_resp_header = noc_external_if.m_resp_header;
                     scheduler_if.m_resp_data = noc_external_if.m_resp_data;
                     scheduler_if.m_resp_status = noc_external_if.m_resp_status;
                     scheduler_if.m_resp_last = noc_external_if.m_resp_last;
-                    noc_external_if.m_resp_ready = scheduler_if.m_resp_ready;
                 end
             end
             

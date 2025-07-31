@@ -17,31 +17,30 @@
 `define RVGPU_L2CACHE_IF_SVH
 
 `include "rvgpu_l2cache_pkg.svh"
+`include "rvgpu_l2cache_common.svh"
 
 `ifndef RVGPU_L2CACHE_PKG_IMPORTED
 `define RVGPU_L2CACHE_PKG_IMPORTED
 import rvgpu_l2cache_pkg::*;
 `endif // RVGPU_L2CACHE_PKG_IMPORTED
 
-interface l2cache_tag_if #(
-    parameter l2cache_config_t L2CACHE_CONFIG = DEFAULT_L2CACHE_CONFIG
-);
+interface l2cache_tag_if;
     // 查找请求通道
     logic                                   lookup_valid;
-    logic [L2CACHE_CONFIG.index_bits-1:0]   lookup_index;
-    logic [L2CACHE_CONFIG.tag_bits-1:0]     lookup_tag;
+    logic [L2CACHE_INDEX_BITS-1:0]          lookup_index;
+    logic [L2CACHE_TAG_BITS-1:0]            lookup_tag;
     logic                                   lookup_ready;
     
     // 查找响应通道
     logic                                   lookup_hit;
-    logic [L2CACHE_CONFIG.ways-1:0]         hit_way;
+    logic [L2CACHE_WAYS-1:0]                hit_way;
     l2cache_tag_entry_t                     tag_entry;
     logic                                   lookup_done;
     
     // 更新请求通道
     logic                                   update_valid;
-    logic [L2CACHE_CONFIG.index_bits-1:0]   update_index;
-    logic [L2CACHE_CONFIG.ways-1:0]         update_way;
+    logic [L2CACHE_INDEX_BITS-1:0]          update_index;
+    logic [L2CACHE_WAYS-1:0]                update_way;
     l2cache_tag_entry_t                     update_entry;
     logic                                   update_ready;
     
@@ -69,14 +68,12 @@ endinterface : l2cache_tag_if
 // Data Array Interface - Controller <-> Data Array
 // 用于控制器与数据数组之间的读写操作
 //=============================================================================
-interface l2cache_data_if #(
-    parameter l2cache_config_t L2CACHE_CONFIG = DEFAULT_L2CACHE_CONFIG
-);
+interface l2cache_data_if;
     // 读请求通道
     logic                               read_valid;
-    logic [L2CACHE_CONFIG.index_bits-1:0] read_index;
-    logic [L2CACHE_CONFIG.ways-1:0]    read_way;
-    logic [L2CACHE_CONFIG.offset_bits-1:0] read_offset;
+    logic [L2CACHE_INDEX_BITS-1:0]     read_index;
+    logic [L2CACHE_WAYS-1:0]           read_way;
+    logic [L2CACHE_OFFSET_BITS-1:0]    read_offset;
     logic [7:0]                        read_size;
     logic                               read_ready;
     
@@ -87,9 +84,9 @@ interface l2cache_data_if #(
     
     // 写请求通道
     logic                               write_valid;
-    logic [L2CACHE_CONFIG.index_bits-1:0] write_index;
-    logic [L2CACHE_CONFIG.ways-1:0]    write_way;
-    logic [L2CACHE_CONFIG.offset_bits-1:0] write_offset;
+    logic [L2CACHE_INDEX_BITS-1:0]     write_index;
+    logic [L2CACHE_WAYS-1:0]           write_way;
+    logic [L2CACHE_OFFSET_BITS-1:0]    write_offset;
     logic [255:0]                      write_data;
     logic [31:0]                       write_strb;
     logic [7:0]                        write_size;
@@ -100,16 +97,16 @@ interface l2cache_data_if #(
     
     // 缓存行访问通道（用于完整行操作）
     logic                               line_read_valid;
-    logic [L2CACHE_CONFIG.index_bits-1:0] line_read_index;
-    logic [L2CACHE_CONFIG.ways-1:0]    line_read_way;
+    logic [L2CACHE_INDEX_BITS-1:0]     line_read_index;
+    logic [L2CACHE_WAYS-1:0]           line_read_way;
     logic                               line_read_ready;
     
     logic                               line_read_done;
     l2cache_line_t                      line_read_data;
     
     logic                               line_write_valid;
-    logic [L2CACHE_CONFIG.index_bits-1:0] line_write_index;
-    logic [L2CACHE_CONFIG.ways-1:0]    line_write_way;
+    logic [L2CACHE_INDEX_BITS-1:0]     line_write_index;
+    logic [L2CACHE_WAYS-1:0]           line_write_way;
     l2cache_line_t                      line_write_data;
     logic                               line_write_ready;
     
@@ -144,12 +141,10 @@ endinterface : l2cache_data_if
 // AXI Adapter Interface - Controller <-> AXI Adapter
 // 用于控制器与AXI适配器之间的内存访问
 //=============================================================================
-interface l2cache_axi_if #(
-    parameter l2cache_config_t L2CACHE_CONFIG = DEFAULT_L2CACHE_CONFIG
-);
+interface l2cache_axi_if;
     // 读请求通道
     logic                               read_req_valid;
-    logic [L2CACHE_CONFIG.axi_addr_width-1:0] read_req_addr;
+    logic [L2CACHE_AXI_ADDR_WIDTH-1:0] read_req_addr;
     logic [7:0]                        read_req_len;
     logic [2:0]                        read_req_size;
     logic [7:0]                        read_req_id;
@@ -157,7 +152,7 @@ interface l2cache_axi_if #(
     
     // 读响应通道
     logic                               read_resp_valid;
-    logic [L2CACHE_CONFIG.axi_data_width-1:0] read_resp_data;
+    logic [L2CACHE_AXI_DATA_WIDTH-1:0] read_resp_data;
     logic [1:0]                        read_resp_status;
     logic                               read_resp_last;
     logic [7:0]                        read_resp_id;
@@ -165,7 +160,7 @@ interface l2cache_axi_if #(
     
     // 写请求通道
     logic                               write_req_valid;
-    logic [L2CACHE_CONFIG.axi_addr_width-1:0] write_req_addr;
+    logic [L2CACHE_AXI_ADDR_WIDTH-1:0] write_req_addr;
     logic [7:0]                        write_req_len;
     logic [2:0]                        write_req_size;
     logic [7:0]                        write_req_id;
@@ -173,8 +168,8 @@ interface l2cache_axi_if #(
     
     // 写数据通道
     logic                               write_data_valid;
-    logic [L2CACHE_CONFIG.axi_data_width-1:0] write_data;
-    logic [L2CACHE_CONFIG.axi_data_width/8-1:0] write_strb;
+    logic [L2CACHE_AXI_DATA_WIDTH-1:0] write_data;
+    logic [L2CACHE_AXI_DATA_WIDTH/8-1:0] write_strb;
     logic                               write_last;
     logic                               write_data_ready;
     
@@ -217,37 +212,35 @@ endinterface : l2cache_axi_if
 // NOC Adapter Interface - Controller <-> NOC Adapter
 // 用于控制器与NOC适配器之间的请求处理
 //=============================================================================
-interface l2cache_noc_if #(
-    parameter l2cache_config_t L2CACHE_CONFIG = DEFAULT_L2CACHE_CONFIG
-);
+interface l2cache_noc_if;
     // 请求接收通道
     logic                               req_valid;
-    logic [L2CACHE_CONFIG.noc_header_width-1:0] req_header;
-    logic [L2CACHE_CONFIG.noc_data_width-1:0] req_data;
-    logic [L2CACHE_CONFIG.noc_data_width/8-1:0] req_strb;
+    logic [L2CACHE_NOC_HEADER_WIDTH-1:0] req_header;
+    logic [L2CACHE_NOC_DATA_WIDTH-1:0] req_data;
+    logic [L2CACHE_NOC_DATA_WIDTH/8-1:0] req_strb;
     logic                               req_last;
     logic                               req_ready;
     
     // 响应发送通道
     logic                               resp_valid;
-    logic [L2CACHE_CONFIG.noc_header_width-1:0] resp_header;
-    logic [L2CACHE_CONFIG.noc_data_width-1:0] resp_data;
+    logic [L2CACHE_NOC_HEADER_WIDTH-1:0] resp_header;
+    logic [L2CACHE_NOC_DATA_WIDTH-1:0] resp_data;
     logic [1:0]                        resp_status;
     logic                               resp_last;
     logic                               resp_ready;
     
     // 请求发送通道（用于向其他节点发送请求）
     logic                               out_req_valid;
-    logic [L2CACHE_CONFIG.noc_header_width-1:0] out_req_header;
-    logic [L2CACHE_CONFIG.noc_data_width-1:0] out_req_data;
-    logic [L2CACHE_CONFIG.noc_data_width/8-1:0] out_req_strb;
+    logic [L2CACHE_NOC_HEADER_WIDTH-1:0] out_req_header;
+    logic [L2CACHE_NOC_DATA_WIDTH-1:0] out_req_data;
+    logic [L2CACHE_NOC_DATA_WIDTH/8-1:0] out_req_strb;
     logic                               out_req_last;
     logic                               out_req_ready;
     
     // 响应接收通道
     logic                               out_resp_valid;
-    logic [L2CACHE_CONFIG.noc_header_width-1:0] out_resp_header;
-    logic [L2CACHE_CONFIG.noc_data_width-1:0] out_resp_data;
+    logic [L2CACHE_NOC_HEADER_WIDTH-1:0] out_resp_header;
+    logic [L2CACHE_NOC_DATA_WIDTH-1:0] out_resp_data;
     logic [1:0]                        out_resp_status;
     logic                               out_resp_last;
     logic                               out_resp_ready;

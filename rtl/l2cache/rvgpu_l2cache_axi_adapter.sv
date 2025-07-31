@@ -19,26 +19,14 @@
 `include "rvgpu_l2cache_pkg.svh"
 `include "rvgpu_l2cache_if.svh"
 `include "rvgpu_interface_axi.svh"
+`include "rvgpu_l2cache_common.svh"
 
 `ifndef RVGPU_L2CACHE_PKG_IMPORTED
 `define RVGPU_L2CACHE_PKG_IMPORTED
 import rvgpu_l2cache_pkg::*;
 `endif // RVGPU_L2CACHE_PKG_IMPORTED
 
-//=============================================================================
-// RVGPU L2 Cache AXI Adapter
-// 
-// 主要功能：
-// 1. AXI4协议转换
-// 2. 读写请求管理
-// 3. 突发传输支持
-// 4. 事务ID管理
-// 5. 错误处理和状态报告
-//=============================================================================
-
-module rvgpu_l2cache_axi_adapter #(
-    parameter l2cache_config_t L2CACHE_CONFIG = DEFAULT_L2CACHE_CONFIG
-) (
+module rvgpu_l2cache_axi_adapter (
     // Clock and Reset Interface
     input  logic clk,
     input  logic rst_n,
@@ -54,36 +42,33 @@ module rvgpu_l2cache_axi_adapter #(
     // Local Parameters and Types
     //=============================================================================
     
-    // 从配置中提取的本地参数
-    localparam int AXI_ADDR_WIDTH = L2CACHE_CONFIG.axi_addr_width;
-    localparam int AXI_DATA_WIDTH = L2CACHE_CONFIG.axi_data_width;
-    
-    // 状态机参数
-    localparam int STATE_BITS = 4;
-    localparam int STATE_IDLE = 4'b0000;
-    localparam int STATE_READ_ADDR = 4'b0001;
-    localparam int STATE_READ_DATA = 4'b0010;
-    localparam int STATE_WRITE_ADDR = 4'b0100;
-    localparam int STATE_WRITE_DATA = 4'b1000;
+    // 状态机枚举类型
+    typedef enum logic [3:0] {
+        STATE_IDLE = 4'b0000,
+        STATE_READ_ADDR = 4'b0001,
+        STATE_READ_DATA = 4'b0010,
+        STATE_WRITE_ADDR = 4'b0100,
+        STATE_WRITE_DATA = 4'b1000
+    } axi_adapter_state_e;
     
     // 事务队列深度
-    localparam int TRANS_QUEUE_DEPTH = 8;
-    localparam int TRANS_QUEUE_BITS = $clog2(TRANS_QUEUE_DEPTH);
+    localparam int TRANS_QUEUE_DEPTH = L2CACHE_TRANS_QUEUE_DEPTH;
+    localparam int TRANS_QUEUE_BITS = L2CACHE_TRANS_QUEUE_BITS;
     
     //=============================================================================
     // Internal Registers and Signals
     //=============================================================================
     
     // 状态机寄存器
-    logic [STATE_BITS-1:0] state_r, state_nxt;
+    axi_adapter_state_e state_r, state_nxt;
     
     // 当前事务寄存器
-    logic [AXI_ADDR_WIDTH-1:0] current_addr_r, current_addr_nxt;
+    logic [L2CACHE_AXI_ADDR_WIDTH-1:0] current_addr_r, current_addr_nxt;
     logic [7:0] current_len_r, current_len_nxt;
     logic [2:0] current_size_r, current_size_nxt;
     logic [7:0] current_id_r, current_id_nxt;
-    logic [AXI_DATA_WIDTH-1:0] current_data_r, current_data_nxt;
-    logic [AXI_DATA_WIDTH/8-1:0] current_strb_r, current_strb_nxt;
+    logic [L2CACHE_AXI_DATA_WIDTH-1:0] current_data_r, current_data_nxt;
+    logic [L2CACHE_AXI_DATA_WIDTH/8-1:0] current_strb_r, current_strb_nxt;
     
     // 事务计数器
     logic [7:0] trans_count_r, trans_count_nxt;
@@ -91,7 +76,7 @@ module rvgpu_l2cache_axi_adapter #(
     
     // 事务队列
     typedef struct packed {
-        logic [AXI_ADDR_WIDTH-1:0] addr;
+        logic [L2CACHE_AXI_ADDR_WIDTH-1:0] addr;
         logic [7:0] len;
         logic [2:0] size;
         logic [7:0] id;
@@ -105,7 +90,7 @@ module rvgpu_l2cache_axi_adapter #(
     logic trans_queue_empty_r, trans_queue_empty_nxt;
     
     // 响应寄存器
-    logic [AXI_DATA_WIDTH-1:0] resp_data_r, resp_data_nxt;
+    logic [L2CACHE_AXI_DATA_WIDTH-1:0] resp_data_r, resp_data_nxt;
     logic [1:0] resp_status_r, resp_status_nxt;
     logic resp_last_r, resp_last_nxt;
     logic [7:0] resp_id_r, resp_id_nxt;

@@ -20,6 +20,7 @@
 `include "rvgpu_l2cache_if.svh"
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_interface_axi.svh"
+`include "rvgpu_l2cache_common.svh"
 
 `ifndef RVGPU_L2CACHE_PKG_IMPORTED
 `define RVGPU_L2CACHE_PKG_IMPORTED
@@ -31,9 +32,7 @@ import rvgpu_l2cache_pkg::*;
 import rvgpu_internal_noc_pkg::*;
 `endif // RVGPU_INTERNAL_NOC_PKG_IMPORTED
 
-module rvgpu_l2cache #(
-    parameter l2cache_config_t L2CACHE_CONFIG = DEFAULT_L2CACHE_CONFIG
-) (
+module rvgpu_l2cache (
     // Clock and Reset Interface
     input  logic clk,
     input  logic rst_n,
@@ -50,18 +49,16 @@ module rvgpu_l2cache #(
     //=============================================================================
     
     // 控制器与子模块的接口
-    l2cache_tag_if #(.L2CACHE_CONFIG(L2CACHE_CONFIG)) controller_tag();
-    l2cache_data_if #(.L2CACHE_CONFIG(L2CACHE_CONFIG)) controller_data();
-    l2cache_axi_if #(.L2CACHE_CONFIG(L2CACHE_CONFIG)) controller_axi();
-    l2cache_noc_if #(.L2CACHE_CONFIG(L2CACHE_CONFIG)) controller_noc();
+    l2cache_tag_if controller_tag();
+    l2cache_data_if controller_data();
+    l2cache_axi_if controller_axi();
+    l2cache_noc_if controller_noc();
 
     //=============================================================================
     // L2 Cache Controller Instance
     //=============================================================================
     
-    rvgpu_l2cache_controller #(
-        .L2CACHE_CONFIG(L2CACHE_CONFIG)
-    ) u_l2cache_controller (
+    rvgpu_l2cache_controller u_l2cache_controller (
         .clk(clk),
         .rst_n(rst_n),
         
@@ -82,9 +79,7 @@ module rvgpu_l2cache #(
     // L2 Cache Tag Array Instance
     //=============================================================================
     
-    rvgpu_l2cache_tag_array #(
-        .L2CACHE_CONFIG(L2CACHE_CONFIG)
-    ) u_l2cache_tag_array (
+    rvgpu_l2cache_tag_array u_l2cache_tag_array (
         .clk(clk),
         .rst_n(rst_n),
         
@@ -96,9 +91,7 @@ module rvgpu_l2cache #(
     // L2 Cache Data Array Instance
     //=============================================================================
     
-    rvgpu_l2cache_data_array #(
-        .L2CACHE_CONFIG(L2CACHE_CONFIG)
-    ) u_l2cache_data_array (
+    rvgpu_l2cache_data_array u_l2cache_data_array (
         .clk(clk),
         .rst_n(rst_n),
         
@@ -110,9 +103,7 @@ module rvgpu_l2cache #(
     // L2 Cache AXI Adapter Instance
     //=============================================================================
     
-    rvgpu_l2cache_axi_adapter #(
-        .L2CACHE_CONFIG(L2CACHE_CONFIG)
-    ) u_l2cache_axi_adapter (
+    rvgpu_l2cache_axi_adapter u_l2cache_axi_adapter (
         .clk(clk),
         .rst_n(rst_n),
         
@@ -127,9 +118,7 @@ module rvgpu_l2cache #(
     // L2 Cache NOC Adapter Instance
     //=============================================================================
     
-    rvgpu_l2cache_noc_adapter #(
-        .L2CACHE_CONFIG(L2CACHE_CONFIG)
-    ) u_l2cache_noc_adapter (
+    rvgpu_l2cache_noc_adapter u_l2cache_noc_adapter (
         .clk(clk),
         .rst_n(rst_n),
         

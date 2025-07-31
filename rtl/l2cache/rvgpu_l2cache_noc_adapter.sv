@@ -19,6 +19,7 @@
 `include "rvgpu_l2cache_pkg.svh"
 `include "rvgpu_l2cache_if.svh"
 `include "rvgpu_internal_noc_if.svh"
+`include "rvgpu_l2cache_common.svh"
 
 `ifndef RVGPU_L2CACHE_PKG_IMPORTED
 `define RVGPU_L2CACHE_PKG_IMPORTED
@@ -30,9 +31,7 @@ import rvgpu_l2cache_pkg::*;
 import rvgpu_internal_noc_pkg::*;
 `endif // RVGPU_INTERNAL_NOC_PKG_IMPORTED
 
-module rvgpu_l2cache_noc_adapter #(
-    parameter l2cache_config_t L2CACHE_CONFIG = DEFAULT_L2CACHE_CONFIG
-) (
+module rvgpu_l2cache_noc_adapter (
     // Clock and Reset Interface
     input  logic clk,
     input  logic rst_n,
@@ -61,15 +60,15 @@ module rvgpu_l2cache_noc_adapter #(
     //=============================================================================
     
     // 请求缓存
-    logic [L2CACHE_CONFIG.noc_header_width-1:0] req_header_r;
-    logic [L2CACHE_CONFIG.noc_data_width-1:0] req_data_r;
-    logic [L2CACHE_CONFIG.noc_data_width/8-1:0] req_strb_r;
+    logic [L2CACHE_NOC_HEADER_WIDTH-1:0] req_header_r;
+    logic [L2CACHE_NOC_DATA_WIDTH-1:0] req_data_r;
+    logic [L2CACHE_NOC_DATA_WIDTH/8-1:0] req_strb_r;
     logic req_last_r;
     logic req_valid_r;
     
     // 响应缓存
-    logic [L2CACHE_CONFIG.noc_header_width-1:0] resp_header_r;
-    logic [L2CACHE_CONFIG.noc_data_width-1:0] resp_data_r;
+    logic [L2CACHE_NOC_HEADER_WIDTH-1:0] resp_header_r;
+    logic [L2CACHE_NOC_DATA_WIDTH-1:0] resp_data_r;
     logic [1:0] resp_status_r;
     logic resp_last_r;
     logic resp_valid_r;
@@ -189,7 +188,7 @@ module rvgpu_l2cache_noc_adapter #(
     //=============================================================================
     
     generate 
-        if (L2CACHE_CONFIG.debug_enable == 1) begin : debug_output
+        if (1) begin : debug_output
             always_ff @(posedge clk) begin
                 if (noc_external_if.s_req_valid && noc_external_if.s_req_ready) begin
                     $display("@%0t: [L2CACHE_NOC] External Request Accepted: %s", $time, noc_request_mem_read_to_string(noc_external_if.s_req_header, noc_external_if.s_req_data));

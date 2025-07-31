@@ -21,6 +21,7 @@
 `include "rvgpu_l2cache_if.svh"
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_fifo_if.svh"
+`include "rvgpu_l2cache_common.svh"
 
 `ifndef RVGPU_L2CACHE_PKG_IMPORTED
 `define RVGPU_L2CACHE_PKG_IMPORTED
@@ -43,9 +44,7 @@ import rvgpu_internal_noc_pkg::*;
 // - MESI cache coherence protocol support
 //=============================================================================
 
-module rvgpu_l2cache_controller #(
-    parameter l2cache_config_t L2CACHE_CONFIG = DEFAULT_L2CACHE_CONFIG
-) (
+module rvgpu_l2cache_controller (
     // Clock and Reset
     input  logic clk,
     input  logic rst_n,
@@ -70,22 +69,20 @@ module rvgpu_l2cache_controller #(
     // Using l2cache_state_t from rvgpu_l2cache_pkg
     
     // Request queue configuration
-    localparam int REQ_QUEUE_DEPTH = 16;
-    localparam int REQ_QUEUE_BITS  = $clog2(REQ_QUEUE_DEPTH);
+    localparam int REQ_QUEUE_DEPTH = L2CACHE_REQ_QUEUE_DEPTH;
+    localparam int REQ_QUEUE_BITS  = L2CACHE_REQ_QUEUE_BITS;
     
     // Response status codes
-    localparam int RESP_OKAY   = 2'b00;
-    localparam int RESP_SLVERR = 2'b10;
+    localparam int RESP_OKAY   = L2CACHE_RESP_OKAY;
+    localparam int RESP_SLVERR = L2CACHE_RESP_SLVERR;
     
     // MESI cache coherence states
-    localparam int MESI_INVALID   = 2'b00;
-    localparam int MESI_EXCLUSIVE = 2'b01;
-    localparam int MESI_SHARED    = 2'b10;
-    localparam int MESI_MODIFIED  = 2'b11;
+    localparam int MESI_INVALID   = L2CACHE_MESI_INVALID;
+    localparam int MESI_EXCLUSIVE = L2CACHE_MESI_EXCLUSIVE;
+    localparam int MESI_SHARED    = L2CACHE_MESI_SHARED;
+    localparam int MESI_MODIFIED  = L2CACHE_MESI_MODIFIED;
     
-    // Cache configuration from parameters
-    localparam int WAYS      = L2CACHE_CONFIG.ways;
-    localparam int LRU_BITS  = L2CACHE_CONFIG.lru_bits;
+
     
     // Request and response data structures
     // Using types from rvgpu_l2cache_pkg
@@ -106,8 +103,8 @@ module rvgpu_l2cache_controller #(
     
     // Cache access result registers
     logic cache_hit_r, cache_hit_nxt;
-    logic [WAYS-1:0] hit_way_r, hit_way_nxt;
-    logic [WAYS-1:0] selected_way_r, selected_way_nxt;
+    logic [L2CACHE_WAYS-1:0] hit_way_r, hit_way_nxt;
+    logic [L2CACHE_WAYS-1:0] selected_way_r, selected_way_nxt;
     
     // Control flags
     logic cache_busy_r, cache_busy_nxt;
@@ -521,12 +518,12 @@ module rvgpu_l2cache_controller #(
     
     // Convert way vector to way index
     function automatic logic [2:0] way_to_index(
-        input logic [WAYS-1:0] way_vector
+        input logic [L2CACHE_WAYS-1:0] way_vector
     );
         logic [2:0] result;
         
         result = 3'b000;
-        for (int i = 0; i < WAYS; i++) begin
+        for (int i = 0; i < L2CACHE_WAYS; i++) begin
             if (way_vector[i]) result = i[2:0];
         end
         

@@ -20,6 +20,7 @@
 `include "rvgpu_l2cache_if.svh"
 `include "rvgpu_sram_if.svh"
 `include "rvgpu_debug.svh"
+`include "rvgpu_l2cache_common.svh"
 
 `ifndef RVGPU_L2CACHE_PKG_IMPORTED
 `define RVGPU_L2CACHE_PKG_IMPORTED
@@ -37,32 +38,14 @@ import rvgpu_l2cache_pkg::*;
 // 5. MESI一致性状态管理
 //=============================================================================
 
-module rvgpu_l2cache_tag_array #(
-    parameter l2cache_config_t L2CACHE_CONFIG = DEFAULT_L2CACHE_CONFIG
-) (
+module rvgpu_l2cache_tag_array (
     // Clock and Reset Interface
     input  logic clk,
     input  logic rst_n,
 
     // Controller Interface
     l2cache_tag_if.tag_array tag_if
-);
-
-    //=============================================================================
-    // 1. 本地参数定义
-    //=============================================================================
-    
-    // 从配置中提取的本地参数
-    localparam int TAG_BITS = L2CACHE_CONFIG.tag_bits;
-    localparam int INDEX_BITS = L2CACHE_CONFIG.index_bits;
-    localparam int WAYS = L2CACHE_CONFIG.ways;
-    localparam int LRU_BITS = L2CACHE_CONFIG.lru_bits;
-    
-    // SRAM参数
-    localparam int TAG_DATA_WIDTH = $bits(l2cache_tag_entry_t);
-    localparam int TAG_ADDR_WIDTH = INDEX_BITS;
-    localparam int TAG_DEPTH = L2CACHE_CONFIG.sets;
-    
+);  
     //=============================================================================
     // 2. 状态机定义 - 明确定义所有状态
     //=============================================================================
@@ -83,17 +66,17 @@ module rvgpu_l2cache_tag_array #(
     tag_state_t state_r, state_nxt;
     
     // 查找请求寄存器
-    logic [TAG_ADDR_WIDTH-1:0] lookup_index_r, lookup_index_nxt;
-    logic [TAG_BITS-1:0] lookup_tag_r, lookup_tag_nxt;
+    logic [L2CACHE_TAG_ADDR_WIDTH-1:0] lookup_index_r, lookup_index_nxt;
+    logic [L2CACHE_TAG_BITS-1:0] lookup_tag_r, lookup_tag_nxt;
     
     // 更新请求寄存器
-    logic [TAG_ADDR_WIDTH-1:0] update_index_r, update_index_nxt;
-    logic [WAYS-1:0] update_way_r, update_way_nxt;
+    logic [L2CACHE_TAG_ADDR_WIDTH-1:0] update_index_r, update_index_nxt;
+    logic [L2CACHE_WAYS-1:0] update_way_r, update_way_nxt;
     l2cache_tag_entry_t update_entry_r, update_entry_nxt;
     
     // 查找结果寄存器
     logic lookup_hit_r, lookup_hit_nxt;
-    logic [WAYS-1:0] hit_way_r, hit_way_nxt;
+    logic [L2CACHE_WAYS-1:0] hit_way_r, hit_way_nxt;
     l2cache_tag_entry_t tag_entry_r, tag_entry_nxt;
     logic lookup_done_r, lookup_done_nxt;
     logic update_done_r, update_done_nxt;
@@ -103,7 +86,7 @@ module rvgpu_l2cache_tag_array #(
     logic update_ready_r, update_ready_nxt;
     
     // Tag比较信号
-    logic [WAYS-1:0] way_hit;
+    logic [L2CACHE_WAYS-1:0] way_hit;
     logic any_hit;
     
     // 错误检测信号
@@ -116,8 +99,8 @@ module rvgpu_l2cache_tag_array #(
     
     // 创建SRAM接口实例
     rvgpu_sram_if #(
-        .WIDTH(TAG_DATA_WIDTH),
-        .HEIGHT(TAG_DEPTH)
+        .WIDTH(L2CACHE_TAG_DATA_WIDTH),
+        .HEIGHT(L2CACHE_TAG_DEPTH)
     ) sram_if_inst();
     
     // 连接时钟
@@ -125,8 +108,8 @@ module rvgpu_l2cache_tag_array #(
     
     // SRAM实例化
     rvgpu_sram_sp #(
-        .WIDTH(TAG_DATA_WIDTH),
-        .HEIGHT(TAG_DEPTH),
+        .WIDTH(L2CACHE_TAG_DATA_WIDTH),
+        .HEIGHT(L2CACHE_TAG_DEPTH),
         .RAMNAME("L2CACHE_TAG_SRAM")
     ) u_tag_sram (
         .sram_if(sram_if_inst.sram_port)
@@ -204,7 +187,7 @@ module rvgpu_l2cache_tag_array #(
                 tag_entry_nxt = raw_to_tag_entry(sram_if_inst.rdata);
                 
                 // 并行比较所有way
-                for (int i = 0; i < WAYS; i++) begin
+                for (int i = 0; i < L2CACHE_WAYS; i++) begin
                     way_hit[i] = tag_entry_nxt.valid[i] && 
                                  (tag_entry_nxt.tag[i] == lookup_tag_r);
                 end
@@ -214,7 +197,7 @@ module rvgpu_l2cache_tag_array #(
                 // 错误检测
                 multiple_hit_error = $countones(way_hit) > 1;
                 invalid_way_error = (tag_if.update_valid && tag_if.update_ready) ? 
-                                  (tag_if.update_way >= WAYS) : 1'b0;
+                                  (tag_if.update_way >= L2CACHE_WAYS) : 1'b0;
                 
                 // 更新查找结果
                 lookup_hit_nxt = any_hit;
@@ -308,29 +291,29 @@ module rvgpu_l2cache_tag_array #(
     //=============================================================================
     
     // Tag条目转换为原始数据
-    function automatic logic [TAG_DATA_WIDTH-1:0] tag_entry_to_raw(
+    function automatic logic [L2CACHE_TAG_DATA_WIDTH-1:0] tag_entry_to_raw(
         input l2cache_tag_entry_t entry
     );
-        logic [TAG_DATA_WIDTH-1:0] raw;
+        logic [L2CACHE_TAG_DATA_WIDTH-1:0] raw;
         logic [31:0] offset = 0;
         
         // 序列化Tag条目
-        for (int i = 0; i < WAYS; i++) begin
+        for (int i = 0; i < L2CACHE_WAYS; i++) begin
             raw[offset +: 32] = entry.tag[i];
             offset += 32;
         end
         
-        for (int i = 0; i < WAYS; i++) begin
+        for (int i = 0; i < L2CACHE_WAYS; i++) begin
             raw[offset +: 1] = entry.valid[i];
             offset += 1;
         end
         
-        for (int i = 0; i < WAYS; i++) begin
+        for (int i = 0; i < L2CACHE_WAYS; i++) begin
             raw[offset +: 1] = entry.dirty[i];
             offset += 1;
         end
         
-        for (int i = 0; i < WAYS; i++) begin
+        for (int i = 0; i < L2CACHE_WAYS; i++) begin
             raw[offset +: 2] = entry.mesi_state[i];
             offset += 2;
         end
@@ -342,28 +325,28 @@ module rvgpu_l2cache_tag_array #(
     
     // 原始数据转换为Tag条目
     function automatic l2cache_tag_entry_t raw_to_tag_entry(
-        input logic [TAG_DATA_WIDTH-1:0] raw
+        input logic [L2CACHE_TAG_DATA_WIDTH-1:0] raw
     );
         l2cache_tag_entry_t entry;
         logic [31:0] offset = 0;
         
         // 反序列化Tag条目
-        for (int i = 0; i < WAYS; i++) begin
+        for (int i = 0; i < L2CACHE_WAYS; i++) begin
             entry.tag[i] = raw[offset +: 32];
             offset += 32;
         end
         
-        for (int i = 0; i < WAYS; i++) begin
+        for (int i = 0; i < L2CACHE_WAYS; i++) begin
             entry.valid[i] = raw[offset +: 1];
             offset += 1;
         end
         
-        for (int i = 0; i < WAYS; i++) begin
+        for (int i = 0; i < L2CACHE_WAYS; i++) begin
             entry.dirty[i] = raw[offset +: 1];
             offset += 1;
         end
         
-        for (int i = 0; i < WAYS; i++) begin
+        for (int i = 0; i < L2CACHE_WAYS; i++) begin
             entry.mesi_state[i] = raw[offset +: 2];
             offset += 2;
         end

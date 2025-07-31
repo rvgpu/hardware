@@ -19,6 +19,7 @@
 `include "rvgpu_l2cache_pkg.svh"
 `include "rvgpu_l2cache_if.svh"
 `include "rvgpu_sram_if.svh"
+`include "rvgpu_l2cache_common.svh"
 
 `ifndef RVGPU_L2CACHE_PKG_IMPORTED
 `define RVGPU_L2CACHE_PKG_IMPORTED
@@ -36,9 +37,7 @@ import rvgpu_l2cache_pkg::*;
 // 5. 多way并行访问
 //=============================================================================
 
-module rvgpu_l2cache_data_array #(
-    parameter l2cache_config_t L2CACHE_CONFIG = DEFAULT_L2CACHE_CONFIG
-) (
+module rvgpu_l2cache_data_array (
     // Clock and Reset Interface
     input  logic clk,
     input  logic rst_n,
@@ -51,35 +50,17 @@ module rvgpu_l2cache_data_array #(
     // Local Parameters and Types
     //=============================================================================
     
-    // 从配置中提取的本地参数
-    localparam int INDEX_BITS = L2CACHE_CONFIG.index_bits;
-    localparam int OFFSET_BITS = L2CACHE_CONFIG.offset_bits;
-    localparam int WAYS = L2CACHE_CONFIG.ways;
-    
-    // SRAM参数
-    localparam int DATA_WIDTH = 256; // 缓存行宽度
-    localparam int DATA_ADDR_WIDTH = INDEX_BITS;
-    localparam int DATA_DEPTH = L2CACHE_CONFIG.sets;
-    
-    // 状态机参数
-    localparam int STATE_BITS = 3;
-    localparam int STATE_IDLE = 3'b000;
-    localparam int STATE_READ = 3'b001;
-    localparam int STATE_WRITE = 3'b010;
-    localparam int STATE_LINE_READ = 3'b011;
-    localparam int STATE_LINE_WRITE = 3'b100;
-    
     //=============================================================================
     // Internal Registers and Signals
     //=============================================================================
     
     // 状态机寄存器
-    logic [STATE_BITS-1:0] state_r, state_nxt;
+    logic [L2CACHE_DATA_STATE_BITS-1:0] state_r, state_nxt;
     
     // 访问请求寄存器
-    logic [DATA_ADDR_WIDTH-1:0] access_index_r, access_index_nxt;
-    logic [WAYS-1:0] access_way_r, access_way_nxt;
-    logic [OFFSET_BITS-1:0] access_offset_r, access_offset_nxt;
+    logic [L2CACHE_DATA_ADDR_WIDTH-1:0] access_index_r, access_index_nxt;
+    logic [L2CACHE_WAYS-1:0] access_way_r, access_way_nxt;
+    logic [L2CACHE_OFFSET_BITS-1:0] access_offset_r, access_offset_nxt;
     logic [7:0] access_size_r, access_size_nxt;
     logic [255:0] access_data_r, access_data_nxt;
     logic [31:0] access_strb_r, access_strb_nxt;
@@ -94,11 +75,11 @@ module rvgpu_l2cache_data_array #(
     l2cache_line_t line_read_data_r, line_read_data_nxt;
     
     // SRAM接口信号
-    logic [WAYS-1:0] sram_ce_r, sram_ce_nxt;
-    logic [WAYS-1:0] sram_we_r, sram_we_nxt;
-    logic [DATA_ADDR_WIDTH-1:0] sram_addr_r, sram_addr_nxt;
-    logic [DATA_WIDTH-1:0] sram_wdata_r, sram_wdata_nxt;
-    logic [DATA_WIDTH-1:0] sram_rdata [WAYS];
+    logic [L2CACHE_WAYS-1:0] sram_ce_r, sram_ce_nxt;
+    logic [L2CACHE_WAYS-1:0] sram_we_r, sram_we_nxt;
+    logic [L2CACHE_DATA_ADDR_WIDTH-1:0] sram_addr_r, sram_addr_nxt;
+    logic [L2CACHE_DATA_WIDTH-1:0] sram_wdata_r, sram_wdata_nxt;
+    logic [L2CACHE_DATA_WIDTH-1:0] sram_rdata [L2CACHE_WAYS];
     
     // 数据掩码和选择信号
     logic [255:0] read_mask;
@@ -107,20 +88,20 @@ module rvgpu_l2cache_data_array #(
     logic [255:0] way_data;
     
     // Way索引转换函数
-    function automatic logic [2:0] way_to_index(input logic [WAYS-1:0] way_vector);
+    function automatic logic [2:0] way_to_index(input logic [L2CACHE_WAYS-1:0] way_vector);
         logic [2:0] result;
         result = 3'b000;
-        for (int i = 0; i < WAYS; i++) begin
+        for (int i = 0; i < L2CACHE_WAYS; i++) begin
             if (way_vector[i]) result = i[2:0];
         end
         return result;
     endfunction
     
     // Way索引转换函数（用于数组索引）
-    function automatic logic [2:0] way_to_index_for_array(input logic [WAYS-1:0] way_vector);
+    function automatic logic [2:0] way_to_index_for_array(input logic [L2CACHE_WAYS-1:0] way_vector);
         logic [2:0] result;
         result = 3'b000;
-        for (int i = 0; i < WAYS; i++) begin
+        for (int i = 0; i < L2CACHE_WAYS; i++) begin
             if (way_vector[i]) result = i[2:0];
         end
         return result;
@@ -132,20 +113,20 @@ module rvgpu_l2cache_data_array #(
     
     // SRAM接口实例数组
     rvgpu_sram_if #(
-        .WIDTH(DATA_WIDTH),
-        .HEIGHT(DATA_DEPTH)
-    ) sram_if_inst [WAYS]();
+        .WIDTH(L2CACHE_DATA_WIDTH),
+        .HEIGHT(L2CACHE_DATA_DEPTH)
+    ) sram_if_inst [L2CACHE_WAYS]();
     
     // 连接时钟
-    for (genvar i = 0; i < WAYS; i++) begin : gen_sram_clk
+    for (genvar i = 0; i < L2CACHE_WAYS; i++) begin : gen_sram_clk
         assign sram_if_inst[i].clk = clk;
     end
     
     // SRAM实例数组
-    for (genvar i = 0; i < WAYS; i++) begin : gen_sram
+    for (genvar i = 0; i < L2CACHE_WAYS; i++) begin : gen_sram
         rvgpu_sram_sp #(
-            .WIDTH(DATA_WIDTH),
-            .HEIGHT(DATA_DEPTH),
+            .WIDTH(L2CACHE_DATA_WIDTH),
+            .HEIGHT(L2CACHE_DATA_DEPTH),
             .RAMNAME("L2CACHE_DATA_SRAM")
         ) u_data_sram_way (
             .sram_if(sram_if_inst[i].sram_port)
@@ -187,10 +168,10 @@ module rvgpu_l2cache_data_array #(
         // SRAM接口控制 - 在generate块中处理
         
         // 接口输出默认值
-        data_if.read_ready = (state_r == STATE_IDLE);
-        data_if.write_ready = (state_r == STATE_IDLE);
-        data_if.line_read_ready = (state_r == STATE_IDLE);
-        data_if.line_write_ready = (state_r == STATE_IDLE);
+        data_if.read_ready = (state_r == L2CACHE_DATA_STATE_IDLE);
+        data_if.write_ready = (state_r == L2CACHE_DATA_STATE_IDLE);
+        data_if.line_read_ready = (state_r == L2CACHE_DATA_STATE_IDLE);
+        data_if.line_write_ready = (state_r == L2CACHE_DATA_STATE_IDLE);
         data_if.read_data = read_data_r;
         data_if.read_strb = read_strb_r;
         data_if.read_done = read_done_r;
@@ -200,7 +181,7 @@ module rvgpu_l2cache_data_array #(
         data_if.line_write_done = line_write_done_r;
         
         case (state_r)
-            STATE_IDLE: begin
+            L2CACHE_DATA_STATE_IDLE: begin
                 // 空闲状态：等待新请求
                 read_done_nxt = 1'b0;
                 write_done_nxt = 1'b0;
@@ -209,7 +190,7 @@ module rvgpu_l2cache_data_array #(
                 
                 if (data_if.read_valid) begin
                     // 开始读操作
-                    state_nxt = STATE_READ;
+                    state_nxt = L2CACHE_DATA_STATE_READ;
                     access_index_nxt = data_if.read_index;
                     access_way_nxt = data_if.read_way;
                     access_offset_nxt = data_if.read_offset;
@@ -221,7 +202,7 @@ module rvgpu_l2cache_data_array #(
                     sram_addr_nxt = data_if.read_index;
                 end else if (data_if.write_valid) begin
                     // 开始写操作
-                    state_nxt = STATE_WRITE;
+                    state_nxt = L2CACHE_DATA_STATE_WRITE;
                     access_index_nxt = data_if.write_index;
                     access_way_nxt = data_if.write_way;
                     access_offset_nxt = data_if.write_offset;
@@ -236,7 +217,7 @@ module rvgpu_l2cache_data_array #(
                     sram_wdata_nxt = merge_write_data(data_if.write_data, data_if.write_strb, sram_rdata[way_to_index_for_array(data_if.write_way)]);
                 end else if (data_if.line_read_valid) begin
                     // 开始缓存行读操作
-                    state_nxt = STATE_LINE_READ;
+                    state_nxt = L2CACHE_DATA_STATE_LINE_READ;
                     access_index_nxt = data_if.line_read_index;
                     access_way_nxt = data_if.line_read_way;
                     
@@ -246,7 +227,7 @@ module rvgpu_l2cache_data_array #(
                     sram_addr_nxt = data_if.line_read_index;
                 end else if (data_if.line_write_valid) begin
                     // 开始缓存行写操作
-                    state_nxt = STATE_LINE_WRITE;
+                    state_nxt = L2CACHE_DATA_STATE_LINE_WRITE;
                     access_index_nxt = data_if.line_write_index;
                     access_way_nxt = data_if.line_write_way;
                     line_read_data_nxt = data_if.line_write_data;
@@ -259,7 +240,7 @@ module rvgpu_l2cache_data_array #(
                 end
             end
             
-            STATE_READ: begin
+            L2CACHE_DATA_STATE_READ: begin
                 // 读操作状态
                 sram_ce_nxt = '0; // 停止SRAM访问
                 
@@ -272,10 +253,10 @@ module rvgpu_l2cache_data_array #(
                 read_done_nxt = 1'b1;
                 
                 // 返回空闲状态
-                state_nxt = STATE_IDLE;
+                state_nxt = L2CACHE_DATA_STATE_IDLE;
             end
             
-            STATE_WRITE: begin
+            L2CACHE_DATA_STATE_WRITE: begin
                 // 写操作状态
                 sram_ce_nxt = '0; // 停止SRAM访问
                 
@@ -283,10 +264,10 @@ module rvgpu_l2cache_data_array #(
                 write_done_nxt = 1'b1;
                 
                 // 返回空闲状态
-                state_nxt = STATE_IDLE;
+                state_nxt = L2CACHE_DATA_STATE_IDLE;
             end
             
-            STATE_LINE_READ: begin
+            L2CACHE_DATA_STATE_LINE_READ: begin
                 // 缓存行读操作状态
                 sram_ce_nxt = '0; // 停止SRAM访问
                 
@@ -296,10 +277,10 @@ module rvgpu_l2cache_data_array #(
                 line_read_done_nxt = 1'b1;
                 
                 // 返回空闲状态
-                state_nxt = STATE_IDLE;
+                state_nxt = L2CACHE_DATA_STATE_IDLE;
             end
             
-            STATE_LINE_WRITE: begin
+            L2CACHE_DATA_STATE_LINE_WRITE: begin
                 // 缓存行写操作状态
                 sram_ce_nxt = '0; // 停止SRAM访问
                 
@@ -307,12 +288,12 @@ module rvgpu_l2cache_data_array #(
                 line_write_done_nxt = 1'b1;
                 
                 // 返回空闲状态
-                state_nxt = STATE_IDLE;
+                state_nxt = L2CACHE_DATA_STATE_IDLE;
             end
             
             default: begin
                 // 错误状态
-                state_nxt = STATE_IDLE;
+                state_nxt = L2CACHE_DATA_STATE_IDLE;
                 read_data_nxt = 'x;
                 read_strb_nxt = 'x;
                 line_read_data_nxt = 'x;
@@ -346,7 +327,7 @@ module rvgpu_l2cache_data_array #(
     // 提取读数据
     function automatic logic [255:0] extract_read_data(
         input logic [255:0] line_data,
-        input logic [OFFSET_BITS-1:0] offset,
+        input logic [L2CACHE_OFFSET_BITS-1:0] offset,
         input logic [7:0] size
     );
         logic [255:0] extracted;
@@ -365,7 +346,7 @@ module rvgpu_l2cache_data_array #(
     
     // 生成读掩码
     function automatic logic [31:0] generate_read_strb(
-        input logic [OFFSET_BITS-1:0] offset,
+        input logic [L2CACHE_OFFSET_BITS-1:0] offset,
         input logic [7:0] size
     );
         logic [31:0] strb;
@@ -389,7 +370,7 @@ module rvgpu_l2cache_data_array #(
     always_ff @(posedge clk) begin
         if (!rst_n) begin
             // 复位逻辑
-            state_r <= STATE_IDLE;
+            state_r <= L2CACHE_DATA_STATE_IDLE;
             access_index_r <= '0;
             access_way_r <= '0;
             access_offset_r <= '0;

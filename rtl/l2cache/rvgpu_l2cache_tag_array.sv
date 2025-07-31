@@ -35,12 +35,13 @@ module rvgpu_l2cache_tag_array (
     // 1. 状态机定义 - 明确定义所有状态
     //=============================================================================
     
-    typedef enum logic [2:0] {
-        TAG_IDLE = 3'b000,           // 空闲状态
-        TAG_LOOKUP = 3'b001,         // 发起Tag查找
-        TAG_LOOKUP_WAIT = 3'b010,    // 等待Tag查找完成
-        TAG_UPDATE = 3'b011,         // 发起Tag更新
-        TAG_UPDATE_WAIT = 3'b100     // 等待Tag更新完成
+    typedef enum logic [3:0] {
+        TAG_CLEAR = 4'b0000,          // SRAM初始化状态
+        TAG_IDLE = 4'b0001,           // 空闲状态
+        TAG_LOOKUP = 4'b0010,         // 发起Tag查找
+        TAG_LOOKUP_WAIT = 4'b0011,    // 等待Tag查找完成
+        TAG_UPDATE = 4'b0100,         // 发起Tag更新
+        TAG_UPDATE_WAIT = 4'b0101     // 等待Tag更新完成
     } tag_state_t;
 
     // 标签数组相关参数
@@ -54,6 +55,10 @@ module rvgpu_l2cache_tag_array (
     
     // 状态机寄存器
     tag_state_t state_r, state_nxt;
+    
+    // SRAM初始化相关寄存器
+    logic [L2CACHE_TAG_ENTRY_ADDR_WIDTH-1:0] clear_addr_r, clear_addr_nxt;
+    logic clear_done_r, clear_done_nxt;
     
     // 查找请求寄存器
     logic [L2CACHE_TAG_ENTRY_ADDR_WIDTH-1:0] lookup_index_r, lookup_index_nxt;
@@ -110,12 +115,37 @@ module rvgpu_l2cache_tag_array (
     //=============================================================================
     
     always_comb begin
-        // SRAM控制信号
-        sram_if_inst.ce = (state_r == TAG_LOOKUP) || (state_r == TAG_UPDATE);
-        sram_if_inst.we = (state_r == TAG_UPDATE);
-        sram_if_inst.addr = (state_r == TAG_LOOKUP) ? lookup_index_r : 
-                            (state_r == TAG_UPDATE) ? update_index_r : '0;
-        sram_if_inst.wdata = (state_r == TAG_UPDATE) ? l2cache_tag_entry_to_raw(update_entry_r) : '0;
+        // SRAM控制信号 - 默认值
+        sram_if_inst.ce = 1'b0;
+        sram_if_inst.we = 1'b0;
+        sram_if_inst.addr = '0;
+        sram_if_inst.wdata = '0;
+        
+        case (state_r)
+            TAG_CLEAR: begin
+                // SRAM初始化 - 写入所有地址
+                sram_if_inst.ce = 1'b1;
+                sram_if_inst.we = 1'b1;
+                sram_if_inst.addr = clear_addr_r;
+                sram_if_inst.wdata = '0; // 写入全0，表示无效数据
+            end
+            TAG_LOOKUP: begin
+                // Tag查找 - 读取SRAM
+                sram_if_inst.ce = 1'b1;
+                sram_if_inst.we = 1'b0;
+                sram_if_inst.addr = lookup_index_r;
+            end
+            TAG_UPDATE: begin
+                // Tag更新 - 写入SRAM
+                sram_if_inst.ce = 1'b1;
+                sram_if_inst.we = 1'b1;
+                sram_if_inst.addr = update_index_r;
+                sram_if_inst.wdata = l2cache_tag_entry_to_raw(update_entry_r);
+            end
+            default: begin
+                // 其他状态不访问SRAM
+            end
+        endcase
     end
     
     //=============================================================================
@@ -125,6 +155,8 @@ module rvgpu_l2cache_tag_array (
     always_comb begin
         // 默认值 - 避免锁存器
         state_nxt = state_r;
+        clear_addr_nxt = clear_addr_r;
+        clear_done_nxt = clear_done_r;
         lookup_index_nxt = lookup_index_r;
         lookup_tag_nxt = lookup_tag_r;
         update_index_nxt = update_index_r;
@@ -139,6 +171,24 @@ module rvgpu_l2cache_tag_array (
         update_ready_nxt = update_ready_r;
         
         case (state_r)
+            TAG_CLEAR: begin
+                // SRAM初始化状态 - 多周期初始化
+                clear_done_nxt = 1'b0;
+                lookup_ready_nxt = 1'b0;  // 初始化期间不接受请求
+                update_ready_nxt = 1'b0;
+                
+                // 检查是否完成初始化
+                if (clear_addr_r == L2CACHE_TAG_ENTRY_DEPTH - 1) begin
+                    // 初始化完成，进入IDLE状态
+                    state_nxt = TAG_IDLE;
+                    clear_done_nxt = 1'b1;
+                    `DEBUG_PRINT("L2CACHE_TAG", $sformatf("SRAM initialization completed, %0d entries cleared", L2CACHE_TAG_ENTRY_DEPTH));
+                end else begin
+                    // 继续初始化下一个地址
+                    clear_addr_nxt = clear_addr_r + 1;
+                end
+            end
+            
             TAG_IDLE: begin
                 // 空闲状态：等待新请求
                 lookup_done_nxt = 1'b0;
@@ -147,7 +197,7 @@ module rvgpu_l2cache_tag_array (
                 update_ready_nxt = 1'b1;
                 
                 // 优先级：更新请求优先于查找请求
-                if (tag_if.update_valid) begin
+                if (tag_if.update_valid && tag_if.update_ready) begin
                     // 开始Tag更新
                     state_nxt = TAG_UPDATE;
                     update_index_nxt = tag_if.update_index;
@@ -156,7 +206,7 @@ module rvgpu_l2cache_tag_array (
                     update_ready_nxt = 1'b0;
                     lookup_ready_nxt = 1'b0; // 阻止查找请求
                     `DEBUG_PRINT("L2CACHE_TAG", $sformatf("Update: index=0x%h, way=%0d, entry=0x%h", tag_if.update_index, tag_if.update_way, tag_if.update_entry));
-                end else if (tag_if.lookup_valid) begin
+                end else if (tag_if.lookup_valid && tag_if.lookup_ready) begin
                     // 开始Tag查找
                     state_nxt = TAG_LOOKUP;
                     lookup_index_nxt = tag_if.lookup_index;
@@ -194,7 +244,6 @@ module rvgpu_l2cache_tag_array (
                 
                 // 返回空闲状态
                 state_nxt = TAG_IDLE;
-                `DEBUG_PRINT("L2CACHE_TAG", $sformatf("Lookup done: hit=%0d, way=%0d, sram_if_inst.rdata=0x%h", lookup_hit_nxt, hit_way_nxt, sram_if_inst.rdata));
             end
             
             TAG_UPDATE: begin
@@ -242,8 +291,10 @@ module rvgpu_l2cache_tag_array (
     
     always_ff @(posedge clk) begin
         if (!rst_n) begin
-            // 复位逻辑
-            state_r <= TAG_IDLE;
+            // 复位逻辑 - 进入SRAM初始化状态
+            state_r <= TAG_CLEAR;
+            clear_addr_r <= '0;
+            clear_done_r <= 1'b0;
             lookup_index_r <= '0;
             lookup_tag_r <= '0;
             update_index_r <= '0;
@@ -254,11 +305,13 @@ module rvgpu_l2cache_tag_array (
             tag_entry_r <= '0;
             lookup_done_r <= 1'b0;
             update_done_r <= 1'b0;
-            lookup_ready_r <= 1'b1;
-            update_ready_r <= 1'b1;
+            lookup_ready_r <= 1'b0;
+            update_ready_r <= 1'b0;
         end else begin
             // 状态更新
             state_r <= state_nxt;
+            clear_addr_r <= clear_addr_nxt;
+            clear_done_r <= clear_done_nxt;
             lookup_index_r <= lookup_index_nxt;
             lookup_tag_r <= lookup_tag_nxt;
             update_index_r <= update_index_nxt;

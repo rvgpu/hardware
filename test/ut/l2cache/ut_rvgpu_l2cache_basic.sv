@@ -315,6 +315,7 @@ module ut_rvgpu_l2cache_basic_unit_test;
         clk_mgr.apply_reset();
         clk_mgr.wait_clock_stable(2);
         
+        clk_mgr.wait_clks(1024); // 等待tag_array初始化完成
         $display("@%0t: Setup completed", $time);
     endtask
 
@@ -340,7 +341,6 @@ module ut_rvgpu_l2cache_basic_unit_test;
     
     `SVTEST(test_reset_state)
         $display("@%0t: Testing L2 Cache reset state", $time);
-        
         // Check that all interface signals are in reset state
         test_base.check_interface_reset_state();
         
@@ -349,36 +349,43 @@ module ut_rvgpu_l2cache_basic_unit_test;
 
     `SVTEST(test_basic_read)
         $display("@%0t: Testing basic L2 Cache read", $time);
+
         t_basic_read();
     `SVTEST_END
 
     `SVTEST(test_basic_write)
         $display("@%0t: Testing basic L2 Cache write", $time);
+
         t_basic_write();
     `SVTEST_END
 
     `SVTEST(test_cache_hit)
         $display("@%0t: Testing L2 Cache hit", $time);
+
         t_cache_hit();
     `SVTEST_END
 
     `SVTEST(test_different_sizes)
         $display("@%0t: Testing different access sizes", $time);
+
         t_different_sizes();
     `SVTEST_END
 
     `SVTEST(test_concurrent_access)
         $display("@%0t: Testing concurrent access", $time);
+
         t_concurrent_access();
     `SVTEST_END
 
     `SVTEST(test_write_then_read)
         $display("@%0t: Testing write then read", $time);
+    
         t_write_then_read();
     `SVTEST_END
 
     `SVTEST(test_error_handling)
         $display("@%0t: Testing error handling", $time);
+
         t_error_handling();
     `SVTEST_END
 

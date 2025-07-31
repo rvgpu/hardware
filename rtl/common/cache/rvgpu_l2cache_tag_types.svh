@@ -35,7 +35,7 @@ typedef struct packed {
 
 typedef struct packed {
     l2cache_way_tag_t [L2CACHE_WAYS-1:0] ways;         // 8路Tag条目数组
-    logic [L2CACHE_WAYS-1:0] lru;                       // LRU位（每个way对应一位）
+    logic [L2CACHE_WAYS-1:0] lru;                      // LRU位（每个way对应一位）
 } l2cache_tag_entry_t;
 
 localparam int L2CACHE_TAG_DATA_WIDTH = $bits(l2cache_tag_entry_t);

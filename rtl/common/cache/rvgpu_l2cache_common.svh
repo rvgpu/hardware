@@ -100,40 +100,6 @@ typedef enum logic [3:0] {
 } cache_op_type_t;
 
 //=============================================================================
-// 缓存状态机状态定义
-//=============================================================================
-
-typedef enum logic [3:0] {
-    L2_STATE_IDLE          = 4'h0,    // 空闲状态
-    L2_STATE_TAG_LOOKUP    = 4'h1,    // Tag查找
-    L2_STATE_TAG_WAIT      = 4'h2,    // Tag等待
-    L2_STATE_DATA_ACCESS   = 4'h3,    // 数据访问
-    L2_STATE_MISS_HANDLE   = 4'h4,    // 未命中处理
-    L2_STATE_MEMORY_ACCESS = 4'h5,    // 内存访问
-    L2_STATE_TAG_UPDATE    = 4'h6,    // Tag更新
-    L2_STATE_RESPONSE      = 4'h7,    // 响应
-    L2_STATE_WRITE_BACK    = 4'h8,    // 写回
-    L2_STATE_EVICT         = 4'h9,    // 驱逐
-    L2_STATE_SYNC          = 4'ha,    // 同步
-    L2_STATE_ERROR         = 4'hb     // 错误状态
-} l2cache_state_t;
-
-//=============================================================================
-// 性能计数器结构
-//=============================================================================
-
-typedef struct packed {
-    logic [31:0] hit_count;           // 命中计数
-    logic [31:0] miss_count;          // 未命中计数
-    logic [31:0] read_count;          // 读操作计数
-    logic [31:0] write_count;         // 写操作计数
-    logic [31:0] eviction_count;      // 驱逐计数
-    logic [31:0] writeback_count;     // 写回计数
-    logic [31:0] prefetch_count;      // 预取计数
-    logic [31:0] error_count;         // 错误计数
-} l2cache_perf_counters_t;
-
-//=============================================================================
 // 地址转换函数
 //=============================================================================
 
@@ -268,27 +234,6 @@ endfunction
 // 调试和监控函数
 //=============================================================================
 
-// 获取状态名称
-function automatic string get_state_name(
-    input l2cache_state_t state
-);
-    case (state)
-        L2_STATE_IDLE: return "IDLE";
-        L2_STATE_TAG_LOOKUP: return "TAG_LOOKUP";
-        L2_STATE_TAG_WAIT: return "TAG_WAIT";
-        L2_STATE_DATA_ACCESS: return "DATA_ACCESS";
-        L2_STATE_MISS_HANDLE: return "MISS_HANDLE";
-        L2_STATE_MEMORY_ACCESS: return "MEMORY_ACCESS";
-        L2_STATE_TAG_UPDATE: return "TAG_UPDATE";
-        L2_STATE_RESPONSE: return "RESPONSE";
-        L2_STATE_WRITE_BACK: return "WRITE_BACK";
-        L2_STATE_EVICT: return "EVICT";
-        L2_STATE_SYNC: return "SYNC";
-        L2_STATE_ERROR: return "ERROR";
-        default: return "UNKNOWN";
-    endcase
-endfunction
-
 // 获取MESI状态名称
 function automatic string get_mesi_name(
     input mesi_state_t state
@@ -319,26 +264,23 @@ function automatic string get_op_name(
     endcase
 endfunction
 
+
 //=============================================================================
 // L2 Cache Configuration Parameters
 //=============================================================================
 
-// AXI地址和数据位宽（基于CONST定义）
+// AXI地址和数据位宽
 localparam int L2CACHE_AXI_ADDR_WIDTH = `RVGPU_CONST_L2CACHE_AXI_ADDR_WIDTH;
 localparam int L2CACHE_AXI_DATA_WIDTH = `RVGPU_CONST_L2CACHE_AXI_DATA_WIDTH;
 
-// 缓存行宽度
-// 缓存配置参数（基于CONST定义）
+// 缓存配置参数
 localparam int L2CACHE_SLICE_NUMBER = `RVGPU_CONST_L2CACHE_SLICE_NUMBER;
 
 // 缓存大小的计算
 localparam int L2CACHE_SIZE_KB = `RVGPU_CONST_L2CACHE_SIZE;
 localparam int L2CACHE_SIZE_BYTES = L2CACHE_SIZE_KB * 1024;
-
-localparam int L2CACHE_LINE_WIDTH = `RVGPU_CONST_L2CACHE_LINE_WIDTH;  // 256位缓存行
+localparam int L2CACHE_LINE_WIDTH = `RVGPU_CONST_L2CACHE_LINE_WIDTH;
 localparam int L2CACHE_LINE_BYTES = L2CACHE_LINE_WIDTH / 8;
-
-// 根据缓存大小计算其他参数
 localparam int L2CACHE_SETS = `RVGPU_CONST_L2CACHE_SETS;
 localparam int L2CACHE_INDEX_BITS = `RVGPU_CONST_L2CACHE_INDEX_BITS;
 localparam int L2CACHE_OFFSET_BITS = `RVGPU_CONST_L2CACHE_OFFSET_BITS;
@@ -346,11 +288,7 @@ localparam int L2CACHE_TAG_BITS = `RVGPU_CONST_L2CACHE_TAG_BITS;
 localparam int L2CACHE_WAYS = `RVGPU_CONST_L2CACHE_WAYS;
 localparam int L2CACHE_LRU_BITS = `RVGPU_CONST_L2CACHE_LRU_BITS;
 
-//=============================================================================
 // 队列深度参数
-//=============================================================================
-
-// 请求队列深度
 localparam int L2CACHE_REQ_QUEUE_DEPTH = 16;
 localparam int L2CACHE_REQ_QUEUE_BITS = $clog2(L2CACHE_REQ_QUEUE_DEPTH);
 
@@ -358,63 +296,28 @@ localparam int L2CACHE_REQ_QUEUE_BITS = $clog2(L2CACHE_REQ_QUEUE_DEPTH);
 localparam int L2CACHE_TRANS_QUEUE_DEPTH = 8;
 localparam int L2CACHE_TRANS_QUEUE_BITS = $clog2(L2CACHE_TRANS_QUEUE_DEPTH);
 
-//=============================================================================
 // 响应状态码
-//=============================================================================
-
-// AXI响应状态
 localparam int L2CACHE_RESP_OKAY   = 2'b00;
 localparam int L2CACHE_RESP_SLVERR = 2'b10;
 localparam int L2CACHE_RESP_DECERR = 2'b11;
 
-//=============================================================================
 // MESI缓存一致性状态
-//=============================================================================
-
-// MESI状态定义
 localparam int L2CACHE_MESI_INVALID   = 2'b00;
 localparam int L2CACHE_MESI_EXCLUSIVE = 2'b01;
 localparam int L2CACHE_MESI_SHARED    = 2'b10;
 localparam int L2CACHE_MESI_MODIFIED  = 2'b11;
 
-//=============================================================================
 // 数据数组相关参数
-//=============================================================================
-
-// 数据数组状态机状态
-localparam int L2CACHE_DATA_STATE_BITS = 3;
-localparam int L2CACHE_DATA_STATE_IDLE = 3'b000;
-localparam int L2CACHE_DATA_STATE_READ = 3'b001;
-localparam int L2CACHE_DATA_STATE_WRITE = 3'b010;
-localparam int L2CACHE_DATA_STATE_LINE_READ = 3'b011;
-localparam int L2CACHE_DATA_STATE_LINE_WRITE = 3'b100;
-
-// 数据数组参数
 localparam int L2CACHE_DATA_WIDTH = L2CACHE_LINE_WIDTH;
 localparam int L2CACHE_DATA_ADDR_WIDTH = L2CACHE_INDEX_BITS;
 localparam int L2CACHE_DATA_DEPTH = L2CACHE_SETS;
 
-//=============================================================================
 // 标签数组相关参数
-//=============================================================================
-
-// 标签数组状态机状态
-localparam int L2CACHE_TAG_STATE_BITS = 2;
-localparam int L2CACHE_TAG_STATE_IDLE = 2'b00;
-localparam int L2CACHE_TAG_STATE_LOOKUP = 2'b01;
-localparam int L2CACHE_TAG_STATE_UPDATE = 2'b10;
-localparam int L2CACHE_TAG_STATE_WAIT = 2'b11;
-
-// 标签数组参数
-localparam int L2CACHE_TAG_DATA_WIDTH = $bits(l2cache_tag_entry_t);
 localparam int L2CACHE_TAG_ADDR_WIDTH = L2CACHE_INDEX_BITS;
 localparam int L2CACHE_TAG_DEPTH = L2CACHE_SETS;
+localparam int L2CACHE_TAG_DATA_WIDTH = $bits(l2cache_tag_entry_t);
 
-//=============================================================================
 // NOC接口相关参数（基于CONST定义）
-//=============================================================================
-
-// NOC数据位宽
 localparam int L2CACHE_NOC_DATA_WIDTH = `RVGPU_CONST_NOC_DATA_WIDTH;
 localparam int L2CACHE_NOC_HEADER_WIDTH = `RVGPU_CONST_NOC_HEADER_WIDTH;
 

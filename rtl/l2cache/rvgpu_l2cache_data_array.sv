@@ -34,6 +34,18 @@ module rvgpu_l2cache_data_array (
     // Local Parameters and Types
     //=============================================================================
     
+    // Data Array State Machine States
+    typedef enum logic [2:0] {
+        L2CACHE_DATA_STATE_IDLE = 3'b000,        // 空闲状态
+        L2CACHE_DATA_STATE_READ = 3'b001,        // 读操作
+        L2CACHE_DATA_STATE_WRITE = 3'b010,       // 写操作
+        L2CACHE_DATA_STATE_LINE_READ = 3'b011,   // 整行读操作
+        L2CACHE_DATA_STATE_LINE_WRITE = 3'b100   // 整行写操作
+    } l2cache_data_state_t;
+    
+    // State machine state bits
+    localparam int L2CACHE_DATA_STATE_BITS = 3;
+    
     //=============================================================================
     // Internal Registers and Signals
     //=============================================================================

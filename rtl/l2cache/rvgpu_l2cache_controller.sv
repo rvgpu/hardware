@@ -61,6 +61,22 @@ module rvgpu_l2cache_controller (
     // Local Parameters and Types
     //=============================================================================
     
+    // L2 Cache Controller State Machine States
+    typedef enum logic [3:0] {
+        L2_STATE_IDLE          = 4'h0,    // 空闲状态
+        L2_STATE_TAG_LOOKUP    = 4'h1,    // Tag查找
+        L2_STATE_TAG_WAIT      = 4'h2,    // Tag等待
+        L2_STATE_DATA_ACCESS   = 4'h3,    // 数据访问
+        L2_STATE_MISS_HANDLE   = 4'h4,    // 未命中处理
+        L2_STATE_MEMORY_ACCESS = 4'h5,    // 内存访问
+        L2_STATE_TAG_UPDATE    = 4'h6,    // Tag更新
+        L2_STATE_RESPONSE      = 4'h7,    // 响应
+        L2_STATE_WRITE_BACK    = 4'h8,    // 写回
+        L2_STATE_EVICT         = 4'h9,    // 驱逐
+        L2_STATE_SYNC          = 4'ha,    // 同步
+        L2_STATE_ERROR         = 4'hb     // 错误状态
+    } l2cache_state_t;
+    
     // Request queue configuration
     localparam int REQ_QUEUE_DEPTH = L2CACHE_REQ_QUEUE_DEPTH;
     localparam int REQ_QUEUE_BITS  = L2CACHE_REQ_QUEUE_BITS;

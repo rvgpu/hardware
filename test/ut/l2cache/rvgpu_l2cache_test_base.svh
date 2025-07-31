@@ -16,15 +16,10 @@
 `ifndef RVGPU_L2CACHE_TEST_BASE_SVH
 `define RVGPU_L2CACHE_TEST_BASE_SVH
 
-`include "rvgpu_l2cache_pkg.svh"
+`include "rvgpu_l2cache_common.svh"
 `include "rvgpu_internal_noc_pkg.svh"
 `include "rvgpu_interface_axi.svh"
 `include "rvgpu_clk_rst.svh"
-
-`ifndef RVGPU_L2CACHE_PKG_IMPORTED
-`define RVGPU_L2CACHE_PKG_IMPORTED
-import rvgpu_l2cache_pkg::*;
-`endif // RVGPU_L2CACHE_PKG_IMPORTED
 
 `ifndef RVGPU_INTERNAL_NOC_PKG_IMPORTED
 `define RVGPU_INTERNAL_NOC_PKG_IMPORTED

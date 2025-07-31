@@ -39,7 +39,7 @@
 `include "rvgpu_sram_sp_sim.sv"
 
 // L2 Cache 相关文件
-`include "rvgpu_l2cache_pkg.svh"
+`include "rvgpu_l2cache_common.svh"
 `include "rvgpu_l2cache_if.svh"
 `include "rvgpu_l2cache_controller.sv"
 `include "rvgpu_l2cache_tag_array.sv"

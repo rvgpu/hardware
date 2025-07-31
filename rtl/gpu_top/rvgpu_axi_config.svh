@@ -44,5 +44,4 @@ localparam memory_axi_config_t DEFAULT_MEMORY_AXI_CONFIG = '{
     id_width: 8
 };
 
-
 `endif

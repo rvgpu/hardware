@@ -73,9 +73,7 @@ module ut_rvgpu_l2cache_basic_unit_test;
     virtual memory_if mem_vif = mem_if;
     
     // L2 Cache实例
-    rvgpu_l2cache #(
-        .L2CACHE_CONFIG(DEFAULT_L2CACHE_CONFIG)
-    ) dut (
+    rvgpu_l2cache dut (
         .clk(clk),
         .rst_n(rst_n),
         .noc_if(noc_if.device),

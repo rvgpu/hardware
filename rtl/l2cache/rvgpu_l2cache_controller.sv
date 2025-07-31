@@ -16,17 +16,12 @@
 `ifndef RVGPU_L2CACHE_CONTROLLER_SV
 `define RVGPU_L2CACHE_CONTROLLER_SV
 
-`include "rvgpu_l2cache_pkg.svh"
+`include "rvgpu_l2cache_common.svh"
 `include "rvgpu_debug.svh"
 `include "rvgpu_l2cache_if.svh"
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_fifo_if.svh"
 `include "rvgpu_l2cache_common.svh"
-
-`ifndef RVGPU_L2CACHE_PKG_IMPORTED
-`define RVGPU_L2CACHE_PKG_IMPORTED
-import rvgpu_l2cache_pkg::*;
-`endif
 
 `ifndef RVGPU_INTERNAL_NOC_PKG_IMPORTED
 `define RVGPU_INTERNAL_NOC_PKG_IMPORTED
@@ -66,8 +61,6 @@ module rvgpu_l2cache_controller (
     // Local Parameters and Types
     //=============================================================================
     
-    // Using l2cache_state_t from rvgpu_l2cache_pkg
-    
     // Request queue configuration
     localparam int REQ_QUEUE_DEPTH = L2CACHE_REQ_QUEUE_DEPTH;
     localparam int REQ_QUEUE_BITS  = L2CACHE_REQ_QUEUE_BITS;
@@ -81,11 +74,6 @@ module rvgpu_l2cache_controller (
     localparam int MESI_EXCLUSIVE = L2CACHE_MESI_EXCLUSIVE;
     localparam int MESI_SHARED    = L2CACHE_MESI_SHARED;
     localparam int MESI_MODIFIED  = L2CACHE_MESI_MODIFIED;
-    
-
-    
-    // Request and response data structures
-    // Using types from rvgpu_l2cache_pkg
 
     //=============================================================================
     // Internal Signals and Registers
@@ -511,11 +499,7 @@ module rvgpu_l2cache_controller (
     function automatic l2cache_request_t unpack_l2cache_request(logic [$bits(l2cache_request_t)-1:0] bits);
         return l2cache_request_t'(bits);
     endfunction
-    
-    // Using select_lru_way from rvgpu_l2cache_pkg
-    
-    // Using update_lru from rvgpu_l2cache_pkg
-    
+
     // Convert way vector to way index
     function automatic logic [2:0] way_to_index(
         input logic [L2CACHE_WAYS-1:0] way_vector

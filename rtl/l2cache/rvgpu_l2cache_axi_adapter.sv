@@ -16,15 +16,10 @@
 `ifndef RVGPU_L2CACHE_AXI_ADAPTER_SV
 `define RVGPU_L2CACHE_AXI_ADAPTER_SV
 
-`include "rvgpu_l2cache_pkg.svh"
+`include "rvgpu_l2cache_common.svh"
 `include "rvgpu_l2cache_if.svh"
 `include "rvgpu_interface_axi.svh"
 `include "rvgpu_l2cache_common.svh"
-
-`ifndef RVGPU_L2CACHE_PKG_IMPORTED
-`define RVGPU_L2CACHE_PKG_IMPORTED
-import rvgpu_l2cache_pkg::*;
-`endif // RVGPU_L2CACHE_PKG_IMPORTED
 
 module rvgpu_l2cache_axi_adapter (
     // Clock and Reset Interface

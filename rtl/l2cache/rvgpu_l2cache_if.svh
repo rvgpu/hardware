@@ -16,13 +16,8 @@
 `ifndef RVGPU_L2CACHE_IF_SVH
 `define RVGPU_L2CACHE_IF_SVH
 
-`include "rvgpu_l2cache_pkg.svh"
 `include "rvgpu_l2cache_common.svh"
-
-`ifndef RVGPU_L2CACHE_PKG_IMPORTED
-`define RVGPU_L2CACHE_PKG_IMPORTED
-import rvgpu_l2cache_pkg::*;
-`endif // RVGPU_L2CACHE_PKG_IMPORTED
+`include "rvgpu_l2cache_common.svh"
 
 interface l2cache_tag_if;
     // 查找请求通道

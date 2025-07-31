@@ -21,7 +21,7 @@
 `include "rvgpu_internal_noc_pkg.svh"
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_control_unit_pkg.svh"
-`include "rvgpu_l2cache_pkg.svh"
+`include "rvgpu_l2cache_common.svh"
 
 `ifndef RVGPU_INTERNAL_NOC_PKG_IMPORTED
 `define RVGPU_INTERNAL_NOC_PKG_IMPORTED
@@ -32,11 +32,6 @@ import rvgpu_internal_noc_pkg::*;
 `define RVGPU_CONTROL_UNIT_PKG_IMPORTED
 import rvgpu_control_unit_pkg::*;
 `endif // RVGPU_CONTROL_UNIT_PKG_IMPORTED
-
-`ifndef RVGPU_L2CACHE_PKG_IMPORTED
-`define RVGPU_L2CACHE_PKG_IMPORTED
-import rvgpu_l2cache_pkg::*;
-`endif // RVGPU_L2CACHE_PKG_IMPORTED
 
 module rvgpu_toplevel (
     // Clock and Reset Interface

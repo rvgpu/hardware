@@ -61,33 +61,7 @@ module ut_rvgpu_l2cache_advanced_unit_test;
   // Convenient signals for DUT connection
   wire clk = clk_rst_if.clk;
   wire rst_n = clk_rst_if.rst_n;
-
-    //=============================================================================
-    // DUT Instance
-    //=============================================================================
-    
-    //=============================================================================
-    // Test Configuration
-    //=============================================================================
-    
-    // 测试配置
-    localparam l2cache_config_t TEST_CONFIG = '{
-        cache_size: 512*1024,           // 512KB
-        slice_number: 1,                 // 1个slice
-        line_size: 64,                   // 64字节缓存行
-        ways: 8,                         // 8路组相联
-        sets: 1024,                      // 1024个组
-        tag_bits: 32,                    // 32位Tag
-        index_bits: 10,                  // 10位索引
-        offset_bits: 6,                  // 6位偏移
-        lru_bits: 8,                     // 8位LRU（对应8路组相联）
-        axi_data_width: 64,              // 64位数据
-        axi_addr_width: 64,              // 64位地址
-        noc_data_width: 256,             // 256位NOC数据
-        noc_header_width: 32,            // 32位NOC头部
-        debug_enable: 1                  // 调试使能
-    };
-    
+  
     //=============================================================================
     // Interface Instances
     //=============================================================================
@@ -99,9 +73,7 @@ module ut_rvgpu_l2cache_advanced_unit_test;
     memory_if mem_if();
     
     // L2 Cache实例
-    rvgpu_l2cache #(
-        .L2CACHE_CONFIG(TEST_CONFIG)
-    ) dut (
+    rvgpu_l2cache dut (
         .clk(clk),
         .rst_n(rst_n),
         .noc_if(noc_if.device),

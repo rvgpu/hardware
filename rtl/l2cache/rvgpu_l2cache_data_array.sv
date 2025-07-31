@@ -16,26 +16,10 @@
 `ifndef RVGPU_L2CACHE_DATA_ARRAY_SV
 `define RVGPU_L2CACHE_DATA_ARRAY_SV
 
-`include "rvgpu_l2cache_pkg.svh"
+`include "rvgpu_l2cache_common.svh"
 `include "rvgpu_l2cache_if.svh"
 `include "rvgpu_sram_if.svh"
 `include "rvgpu_l2cache_common.svh"
-
-`ifndef RVGPU_L2CACHE_PKG_IMPORTED
-`define RVGPU_L2CACHE_PKG_IMPORTED
-import rvgpu_l2cache_pkg::*;
-`endif // RVGPU_L2CACHE_PKG_IMPORTED
-
-//=============================================================================
-// RVGPU L2 Cache Data Array
-// 
-// 主要功能：
-// 1. 缓存数据存储和管理
-// 2. 字节级读写访问
-// 3. 缓存行级操作
-// 4. 数据对齐和掩码处理
-// 5. 多way并行访问
-//=============================================================================
 
 module rvgpu_l2cache_data_array (
     // Clock and Reset Interface

@@ -16,27 +16,11 @@
 `ifndef RVGPU_L2CACHE_TAG_ARRAY_SV
 `define RVGPU_L2CACHE_TAG_ARRAY_SV
 
-`include "rvgpu_l2cache_pkg.svh"
+`include "rvgpu_l2cache_common.svh"
 `include "rvgpu_l2cache_if.svh"
 `include "rvgpu_sram_if.svh"
 `include "rvgpu_debug.svh"
 `include "rvgpu_l2cache_common.svh"
-
-`ifndef RVGPU_L2CACHE_PKG_IMPORTED
-`define RVGPU_L2CACHE_PKG_IMPORTED
-import rvgpu_l2cache_pkg::*;
-`endif // RVGPU_L2CACHE_PKG_IMPORTED
-
-//=============================================================================
-// RVGPU L2 Cache Tag Array
-// 
-// 主要功能：
-// 1. Tag条目存储和管理
-// 2. 并行Tag查找
-// 3. Tag更新和替换
-// 4. LRU替换策略支持
-// 5. MESI一致性状态管理
-//=============================================================================
 
 module rvgpu_l2cache_tag_array (
     // Clock and Reset Interface

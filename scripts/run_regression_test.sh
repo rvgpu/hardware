@@ -162,7 +162,8 @@ run_pytest_tests() {
 
     CPU_COUNT=$(get_cpu_count)
     # 计算70%的CPU核心数，最少使用1个核心
-    PYTEST_CPU_COUNT=$(( (CPU_COUNT * 70) / 100 ))
+    # PYTEST_CPU_COUNT=$(( (CPU_COUNT * 70) / 100 ))
+    PYTEST_CPU_COUNT=10
     if [ $PYTEST_CPU_COUNT -lt 1 ]; then
         PYTEST_CPU_COUNT=1
     fi

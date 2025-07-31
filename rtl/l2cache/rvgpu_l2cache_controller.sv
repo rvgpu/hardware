@@ -80,17 +80,8 @@ module rvgpu_l2cache_controller (
     // Request queue configuration
     localparam int REQ_QUEUE_DEPTH = 16;
     localparam int REQ_QUEUE_BITS  = $clog2(REQ_QUEUE_DEPTH);
+    localparam int REQ_DATA_WIDTH  = $bits(l2cache_request_t);
     
-    // Response status codes
-    localparam int RESP_OKAY   = L2CACHE_RESP_OKAY;
-    localparam int RESP_SLVERR = L2CACHE_RESP_SLVERR;
-    
-    // MESI cache coherence states
-    localparam int MESI_INVALID   = L2CACHE_MESI_INVALID;
-    localparam int MESI_EXCLUSIVE = L2CACHE_MESI_EXCLUSIVE;
-    localparam int MESI_SHARED    = L2CACHE_MESI_SHARED;
-    localparam int MESI_MODIFIED  = L2CACHE_MESI_MODIFIED;
-
     //=============================================================================
     // Internal Signals and Registers
     //=============================================================================
@@ -121,7 +112,7 @@ module rvgpu_l2cache_controller (
     
     // Request FIFO interface
     rvgpu_fifo_basic_if #(
-        .DATA_WIDTH($bits(l2cache_request_t)),
+        .DATA_WIDTH(REQ_DATA_WIDTH),
         .INDEX_BITS(REQ_QUEUE_BITS)
     ) req_fifo_if();
     
@@ -130,7 +121,7 @@ module rvgpu_l2cache_controller (
     //=============================================================================
     
     rvgpu_fifo_basic #(
-        .DATA_WIDTH($bits(l2cache_request_t)),
+        .DATA_WIDTH(REQ_DATA_WIDTH),
         .INDEX_BITS(REQ_QUEUE_BITS)
     ) u_req_fifo (
         .clk(clk),
@@ -174,7 +165,7 @@ module rvgpu_l2cache_controller (
         noc_if.resp_valid = 1'b0;
         noc_if.resp_header = '0;
         noc_if.resp_data = '0;
-        noc_if.resp_status = RESP_OKAY;
+        noc_if.resp_status = L2CACHE_RESP_OKAY;
         noc_if.resp_last = 1'b0;
         
         tag_if.lookup_valid = 1'b0;
@@ -296,7 +287,7 @@ module rvgpu_l2cache_controller (
                         
                         // Prepare response
                         current_resp_nxt.data = data_if.read_data;
-                        current_resp_nxt.status = RESP_OKAY;
+                        current_resp_nxt.status = L2CACHE_RESP_OKAY;
                         current_resp_nxt.trans_id = current_req_r.trans_id;
                         current_resp_nxt.dest_node = current_req_r.src_node;
                         current_resp_nxt.hit = 1'b1;
@@ -322,7 +313,7 @@ module rvgpu_l2cache_controller (
                         
                         // Prepare response
                         current_resp_nxt.data = '0;
-                        current_resp_nxt.status = RESP_OKAY;
+                        current_resp_nxt.status = L2CACHE_RESP_OKAY;
                         current_resp_nxt.trans_id = current_req_r.trans_id;
                         current_resp_nxt.dest_node = current_req_r.src_node;
                         current_resp_nxt.hit = 1'b1;
@@ -370,7 +361,7 @@ module rvgpu_l2cache_controller (
                             
                             // Prepare response
                             current_resp_nxt.data = '0;
-                            current_resp_nxt.status = RESP_OKAY;
+                            current_resp_nxt.status = L2CACHE_RESP_OKAY;
                             current_resp_nxt.trans_id = current_req_r.trans_id;
                             current_resp_nxt.dest_node = current_req_r.src_node;
                             current_resp_nxt.hit = 1'b0;
@@ -385,7 +376,7 @@ module rvgpu_l2cache_controller (
                 axi_if.read_resp_ready = 1'b1;
                 
                 if (axi_if.read_resp_valid) begin
-                    if (axi_if.read_resp_status == RESP_OKAY) begin
+                    if (axi_if.read_resp_status == L2CACHE_RESP_OKAY) begin
                         // Memory read successful, update tag array
                         tag_if.update_valid = 1'b1;
                         tag_if.update_index = current_addr_r.index;
@@ -396,7 +387,7 @@ module rvgpu_l2cache_controller (
                         tag_if.update_entry.tag[way_to_index(selected_way_r)] = current_addr_r.tag;
                         tag_if.update_entry.valid[way_to_index(selected_way_r)] = 1'b1;
                         tag_if.update_entry.dirty[way_to_index(selected_way_r)] = 1'b0;
-                        tag_if.update_entry.mesi_state[way_to_index(selected_way_r)] = MESI_EXCLUSIVE;
+                        tag_if.update_entry.mesi_state[way_to_index(selected_way_r)] = CACHE_MESI_EXCLUSIVE;
                         tag_if.update_entry.lru = update_lru(tag_if.tag_entry.lru, way_to_index(selected_way_r));
                         
                         if (tag_if.update_ready) begin
@@ -409,7 +400,7 @@ module rvgpu_l2cache_controller (
                         // Memory access error
                         state_nxt = L2_STATE_RESPONSE;
                         current_resp_nxt.data = '0;
-                        current_resp_nxt.status = RESP_SLVERR;
+                        current_resp_nxt.status = L2CACHE_RESP_SLVERR;
                         current_resp_nxt.trans_id = current_req_r.trans_id;
                         current_resp_nxt.dest_node = current_req_r.src_node;
                         current_resp_nxt.hit = 1'b0;
@@ -438,7 +429,7 @@ module rvgpu_l2cache_controller (
                         
                         // Prepare response
                         current_resp_nxt.data = axi_if.read_resp_data;
-                        current_resp_nxt.status = RESP_OKAY;
+                        current_resp_nxt.status = L2CACHE_RESP_OKAY;
                         current_resp_nxt.trans_id = current_req_r.trans_id;
                         current_resp_nxt.dest_node = current_req_r.src_node;
                         current_resp_nxt.hit = 1'b0;

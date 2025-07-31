@@ -29,33 +29,29 @@ import rvgpu_internal_noc_pkg::*;
 //=============================================================================
 
 // AXI地址和数据位宽
-localparam int L2CACHE_AXI_ADDR_WIDTH = `RVGPU_CONST_L2CACHE_AXI_ADDR_WIDTH;
-localparam int L2CACHE_AXI_DATA_WIDTH = `RVGPU_CONST_L2CACHE_AXI_DATA_WIDTH;
+localparam int L2CACHE_AXI_ADDR_WIDTH       = `RVGPU_CONST_L2CACHE_AXI_ADDR_WIDTH;
+localparam int L2CACHE_AXI_DATA_WIDTH       = `RVGPU_CONST_L2CACHE_AXI_DATA_WIDTH;
 
 // 缓存配置参数
-localparam int L2CACHE_SLICE_NUMBER = `RVGPU_CONST_L2CACHE_SLICE_NUMBER;
+localparam int L2CACHE_SLICE_NUMBER         = `RVGPU_CONST_L2CACHE_SLICE_NUMBER;
 
 // 缓存大小的计算
-localparam int L2CACHE_SIZE_KB = `RVGPU_CONST_L2CACHE_SIZE;
-localparam int L2CACHE_SIZE_BYTES = L2CACHE_SIZE_KB * 1024;
-localparam int L2CACHE_LINE_WIDTH = `RVGPU_CONST_L2CACHE_LINE_WIDTH;
-localparam int L2CACHE_LINE_BYTES = L2CACHE_LINE_WIDTH / 8;
-localparam int L2CACHE_SETS = `RVGPU_CONST_L2CACHE_SETS;
-localparam int L2CACHE_INDEX_BITS = `RVGPU_CONST_L2CACHE_INDEX_BITS;
-localparam int L2CACHE_OFFSET_BITS = `RVGPU_CONST_L2CACHE_OFFSET_BITS;
-localparam int L2CACHE_TAG_BITS = `RVGPU_CONST_L2CACHE_TAG_BITS;
-localparam int L2CACHE_WAYS = `RVGPU_CONST_L2CACHE_WAYS;
-localparam int L2CACHE_LRU_BITS = `RVGPU_CONST_L2CACHE_LRU_BITS;
+localparam int L2CACHE_LINE_WIDTH           = `RVGPU_CONST_L2CACHE_LINE_WIDTH;
+localparam int L2CACHE_LINE_WIDTH_BYTES     = L2CACHE_LINE_WIDTH / 8;
+localparam int L2CACHE_SETS                 = `RVGPU_CONST_L2CACHE_SETS;
+localparam int L2CACHE_WAYS                 = `RVGPU_CONST_L2CACHE_WAYS;
+localparam int L2CACHE_INDEX_BITS           = `RVGPU_CONST_L2CACHE_INDEX_BITS;
+localparam int L2CACHE_OFFSET_BITS          = `RVGPU_CONST_L2CACHE_OFFSET_BITS;
+localparam int L2CACHE_TAG_BITS             = `RVGPU_CONST_L2CACHE_TAG_BITS;
 
-// MESI缓存一致性状态
-localparam int L2CACHE_MESI_INVALID   = 2'b00;
-localparam int L2CACHE_MESI_EXCLUSIVE = 2'b01;
-localparam int L2CACHE_MESI_SHARED    = 2'b10;
-localparam int L2CACHE_MESI_MODIFIED  = 2'b11;
+localparam int L2CACHE_LRU_BITS             = `RVGPU_CONST_L2CACHE_LRU_BITS;
 
-// NOC接口相关参数（基于CONST定义）
-localparam int L2CACHE_NOC_DATA_WIDTH = `RVGPU_CONST_NOC_DATA_WIDTH;
-localparam int L2CACHE_NOC_HEADER_WIDTH = `RVGPU_CONST_NOC_HEADER_WIDTH;
+localparam int L2CACHE_SIZE_BYTES           = `RVGPU_CONST_L2CACHE_SIZE;
+localparam int L2CACHE_SIZE_KB              = `RVGPU_CONST_L2CACHE_SIZE / 1024;
+
+// NOC接口相关参数
+localparam int L2CACHE_NOC_DATA_WIDTH       = `RVGPU_CONST_NOC_DATA_WIDTH;
+localparam int L2CACHE_NOC_HEADER_WIDTH     = `RVGPU_CONST_NOC_HEADER_WIDTH;
 
 //=============================================================================
 // L2 Cache Data Structures
@@ -117,11 +113,11 @@ typedef struct packed {
 //=============================================================================
 
 typedef enum logic [1:0] {
-    MESI_INVALID   = 2'b00,           // 无效状态
-    MESI_SHARED    = 2'b01,           // 共享状态
-    MESI_EXCLUSIVE = 2'b10,           // 独占状态
-    MESI_MODIFIED  = 2'b11            // 已修改状态
-} mesi_state_t;
+    CACHE_MESI_INVALID   = 2'b00,  //无效状态
+    CACHE_MESI_EXCLUSIVE = 2'b01,  //独占状态
+    CACHE_MESI_SHARED    = 2'b10,  //共享状态
+    CACHE_MESI_MODIFIED  = 2'b11   //修改状态
+} cache_mesi_state_t;
 
 //=============================================================================
 // 缓存操作类型定义
@@ -210,62 +206,62 @@ endfunction
 
 // 检查是否为有效状态
 function automatic logic is_valid_state(
-    input mesi_state_t state
+    input cache_mesi_state_t state
 );
-    return (state != MESI_INVALID);
+    return (state != CACHE_MESI_INVALID);
 endfunction
 
 // 检查是否为独占状态
 function automatic logic is_exclusive_state(
-    input mesi_state_t state
+    input cache_mesi_state_t state
 );
-    return (state == MESI_EXCLUSIVE || state == MESI_MODIFIED);
+    return (state == CACHE_MESI_EXCLUSIVE || state == CACHE_MESI_MODIFIED);
 endfunction
 
 // 检查是否为修改状态
 function automatic logic is_modified_state(
-    input mesi_state_t state
+    input cache_mesi_state_t state
 );
-    return (state == MESI_MODIFIED);
+    return (state == CACHE_MESI_MODIFIED);
 endfunction
 
 // 状态转换函数
-function automatic mesi_state_t next_mesi_state(
-    input mesi_state_t current_state,
+function automatic cache_mesi_state_t next_mesi_state(
+    input cache_mesi_state_t current_state,
     input logic is_read,
     input logic is_write,
     input logic is_remote_access
 );
     case (current_state)
-        MESI_INVALID: begin
+        CACHE_MESI_INVALID: begin
             if (is_read && !is_remote_access)
-                return MESI_EXCLUSIVE;
+                return CACHE_MESI_EXCLUSIVE;
             else if (is_read && is_remote_access)
-                return MESI_SHARED;
+                return CACHE_MESI_SHARED;
             else
-                return MESI_INVALID;
+                return CACHE_MESI_INVALID;
         end
-        MESI_SHARED: begin
+        CACHE_MESI_SHARED: begin
             if (is_write)
-                return MESI_MODIFIED;
+                return CACHE_MESI_MODIFIED;
             else
-                return MESI_SHARED;
+                return CACHE_MESI_SHARED;
         end
-        MESI_EXCLUSIVE: begin
+        CACHE_MESI_EXCLUSIVE: begin
             if (is_write)
-                return MESI_MODIFIED;
+                return CACHE_MESI_MODIFIED;
             else if (is_remote_access)
-                return MESI_SHARED;
+                return CACHE_MESI_SHARED;
             else
-                return MESI_EXCLUSIVE;
+                return CACHE_MESI_EXCLUSIVE;
         end
-        MESI_MODIFIED: begin
+        CACHE_MESI_MODIFIED: begin
             if (is_remote_access)
-                return MESI_SHARED;
+                return CACHE_MESI_SHARED;
             else
-                return MESI_MODIFIED;
+                return CACHE_MESI_MODIFIED;
         end
-        default: return MESI_INVALID;
+        default: return CACHE_MESI_INVALID;
     endcase
 endfunction
 
@@ -275,13 +271,13 @@ endfunction
 
 // 获取MESI状态名称
 function automatic string get_mesi_name(
-    input mesi_state_t state
+    input cache_mesi_state_t state
 );
     case (state)
-        MESI_INVALID: return "INVALID";
-        MESI_SHARED: return "SHARED";
-        MESI_EXCLUSIVE: return "EXCLUSIVE";
-        MESI_MODIFIED: return "MODIFIED";
+        CACHE_MESI_INVALID: return "INVALID";
+        CACHE_MESI_SHARED: return "SHARED";
+        CACHE_MESI_EXCLUSIVE: return "EXCLUSIVE";
+        CACHE_MESI_MODIFIED: return "MODIFIED";
         default: return "UNKNOWN";
     endcase
 endfunction

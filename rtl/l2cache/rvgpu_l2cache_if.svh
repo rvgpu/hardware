@@ -17,6 +17,7 @@
 `define RVGPU_L2CACHE_IF_SVH
 
 `include "rvgpu_l2cache_common.svh"
+`include "rvgpu_l2cache_types.svh"
 
 interface l2cache_tag_if;
     // 查找请求通道

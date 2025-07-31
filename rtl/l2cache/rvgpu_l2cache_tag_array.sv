@@ -21,6 +21,7 @@
 `include "rvgpu_sram_if.svh"
 `include "rvgpu_debug.svh"
 `include "rvgpu_l2cache_common.svh"
+`include "rvgpu_l2cache_types.svh"
 
 module rvgpu_l2cache_tag_array (
     // Clock and Reset Interface

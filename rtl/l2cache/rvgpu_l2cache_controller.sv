@@ -22,6 +22,7 @@
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_fifo_if.svh"
 `include "rvgpu_l2cache_common.svh"
+`include "rvgpu_l2cache_types.svh"
 
 `ifndef RVGPU_INTERNAL_NOC_PKG_IMPORTED
 `define RVGPU_INTERNAL_NOC_PKG_IMPORTED
@@ -94,7 +95,7 @@ module rvgpu_l2cache_controller (
     l2cache_response_t current_resp_r, current_resp_nxt;
     
     // Address parsing registers
-    cache_addr_t current_addr_r, current_addr_nxt;
+    l2cache_addr_t current_addr_r, current_addr_nxt;
     
     // Cache access result registers
     logic cache_hit_r, cache_hit_nxt;
@@ -102,13 +103,9 @@ module rvgpu_l2cache_controller (
     logic [L2CACHE_WAYS-1:0] selected_way_r, selected_way_nxt;
     
     // Control flags
-    logic cache_busy_r, cache_busy_nxt;
     logic read_valid_r, read_valid_nxt;
     logic write_valid_r, write_valid_nxt;
     logic line_write_valid_r, line_write_valid_nxt;
-    
-    // 临时变量声明
-    l2cache_request_t tmp_req;
     
     // Request FIFO interface
     rvgpu_fifo_basic_if #(
@@ -155,7 +152,6 @@ module rvgpu_l2cache_controller (
         cache_hit_nxt = cache_hit_r;
         hit_way_nxt = hit_way_r;
         selected_way_nxt = selected_way_r;
-        cache_busy_nxt = cache_busy_r;
         read_valid_nxt = read_valid_r;
         write_valid_nxt = write_valid_r;
         line_write_valid_nxt = line_write_valid_r;
@@ -219,7 +215,6 @@ module rvgpu_l2cache_controller (
         case (state_r)
             L2_STATE_IDLE: begin
                 // Idle state: wait for new requests
-                cache_busy_nxt = 1'b0;
                 read_valid_nxt = 1'b0;
                 write_valid_nxt = 1'b0;
                 line_write_valid_nxt = 1'b0;
@@ -228,12 +223,10 @@ module rvgpu_l2cache_controller (
                 if (!req_fifo_if.empty) begin
                     req_fifo_if.read_en = 1'b1;
                     state_nxt = L2_STATE_TAG_LOOKUP;
-                    cache_busy_nxt = 1'b1;
                     
                     // Update current request and address
-                    tmp_req = unpack_l2cache_request(req_fifo_if.read_data);
-                    current_req_nxt = tmp_req;
-                    current_addr_nxt = addr64_to_cache_addr(tmp_req.addr);
+                    current_req_nxt = l2cache_request_t'(req_fifo_if.read_data);
+                    current_addr_nxt = addr64_to_l2cache_addr(current_req_nxt.addr);
                 end
             end
             
@@ -535,7 +528,6 @@ module rvgpu_l2cache_controller (
              cache_hit_r <= 1'b0;
              hit_way_r <= '0;
              selected_way_r <= '0;
-             cache_busy_r <= 1'b0;
              read_valid_r <= 1'b0;
              write_valid_r <= 1'b0;
              line_write_valid_r <= 1'b0;
@@ -548,7 +540,6 @@ module rvgpu_l2cache_controller (
              cache_hit_r <= cache_hit_nxt;
              hit_way_r <= hit_way_nxt;
              selected_way_r <= selected_way_nxt;
-             cache_busy_r <= cache_busy_nxt;
              read_valid_r <= read_valid_nxt;
              write_valid_r <= write_valid_nxt;
              line_write_valid_r <= line_write_valid_nxt;

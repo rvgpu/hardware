@@ -43,7 +43,10 @@ module rvgpu_l2cache_data_array (
         L2CACHE_DATA_STATE_LINE_WRITE = 3'b100   // 整行写操作
     } l2cache_data_state_t;
     
-    // State machine state bits
+    // 数据数组相关参数
+    localparam int L2CACHE_DATA_WIDTH = L2CACHE_LINE_WIDTH;
+    localparam int L2CACHE_DATA_ADDR_WIDTH = L2CACHE_INDEX_BITS;
+    localparam int L2CACHE_DATA_DEPTH = L2CACHE_SETS;
     localparam int L2CACHE_DATA_STATE_BITS = 3;
     
     //=============================================================================

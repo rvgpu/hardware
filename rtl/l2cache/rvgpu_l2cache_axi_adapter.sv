@@ -45,10 +45,10 @@ module rvgpu_l2cache_axi_adapter (
         STATE_WRITE_ADDR = 4'b0100,
         STATE_WRITE_DATA = 4'b1000
     } axi_adapter_state_e;
-    
+
     // 事务队列深度
-    localparam int TRANS_QUEUE_DEPTH = L2CACHE_TRANS_QUEUE_DEPTH;
-    localparam int TRANS_QUEUE_BITS = L2CACHE_TRANS_QUEUE_BITS;
+    localparam int TRANS_QUEUE_DEPTH = 8;
+    localparam int TRANS_QUEUE_BITS = $clog2(TRANS_QUEUE_DEPTH);
     
     //=============================================================================
     // Internal Registers and Signals

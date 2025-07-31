@@ -78,8 +78,8 @@ module rvgpu_l2cache_controller (
     } l2cache_state_t;
     
     // Request queue configuration
-    localparam int REQ_QUEUE_DEPTH = L2CACHE_REQ_QUEUE_DEPTH;
-    localparam int REQ_QUEUE_BITS  = L2CACHE_REQ_QUEUE_BITS;
+    localparam int REQ_QUEUE_DEPTH = 16;
+    localparam int REQ_QUEUE_BITS  = $clog2(REQ_QUEUE_DEPTH);
     
     // Response status codes
     localparam int RESP_OKAY   = L2CACHE_RESP_OKAY;

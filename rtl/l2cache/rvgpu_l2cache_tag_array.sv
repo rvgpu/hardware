@@ -41,6 +41,11 @@ module rvgpu_l2cache_tag_array (
         TAG_UPDATE = 3'b011,         // 发起Tag更新
         TAG_UPDATE_WAIT = 3'b100     // 等待Tag更新完成
     } tag_state_t;
+
+    // 标签数组相关参数
+    localparam int L2CACHE_TAG_ADDR_WIDTH = L2CACHE_INDEX_BITS;
+    localparam int L2CACHE_TAG_DEPTH = L2CACHE_SETS;
+    localparam int L2CACHE_TAG_DATA_WIDTH = $bits(l2cache_tag_entry_t);
     
     //=============================================================================
     // 3. 内部信号定义 - 使用清晰的前缀命名规范

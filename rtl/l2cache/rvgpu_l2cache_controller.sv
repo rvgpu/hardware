@@ -67,15 +67,16 @@ module rvgpu_l2cache_controller (
         L2_STATE_IDLE          = 4'h0,    // 空闲状态
         L2_STATE_TAG_LOOKUP    = 4'h1,    // Tag查找
         L2_STATE_TAG_WAIT      = 4'h2,    // Tag等待
-        L2_STATE_DATA_ACCESS   = 4'h3,    // 数据访问
+        L2_STATE_DATA_READ     = 4'h3,    // 数据读操作
         L2_STATE_MISS_HANDLE   = 4'h4,    // 未命中处理
         L2_STATE_MEMORY_ACCESS = 4'h5,    // 内存访问
         L2_STATE_TAG_UPDATE    = 4'h6,    // Tag更新
-        L2_STATE_RESPONSE      = 4'h7,    // 响应
-        L2_STATE_WRITE_BACK    = 4'h8,    // 写回
-        L2_STATE_EVICT         = 4'h9,    // 驱逐
-        L2_STATE_SYNC          = 4'ha,    // 同步
-        L2_STATE_ERROR         = 4'hb     // 错误状态
+        L2_STATE_DATA_WRITE    = 4'h7,    // 数据写操作
+        L2_STATE_RESPONSE      = 4'h8,    // 响应
+        L2_STATE_WRITE_BACK    = 4'h9,    // 写回
+        L2_STATE_EVICT         = 4'ha,    // 驱逐
+        L2_STATE_SYNC          = 4'hb,    // 同步
+        L2_STATE_ERROR         = 4'hc     // 错误状态
     } l2cache_state_t;
     
     // Request queue configuration
@@ -236,9 +237,17 @@ module rvgpu_l2cache_controller (
                     hit_way_nxt = tag_if.hit_way;
                     
                     if (tag_if.lookup_hit) begin
-                        // Cache hit
-                        state_nxt = L2_STATE_DATA_ACCESS;
-                        `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("Tag Lookup: hit=1, way=%0d", tag_if.hit_way));
+                        // Cache hit - choose read or write state based on request type
+                        if (current_req_r.read) begin
+                            // Read hit: access data array
+                            state_nxt = L2_STATE_DATA_READ;
+                            `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("Tag Lookup: read hit, way=%0d", tag_if.hit_way));
+                        end else begin
+                            // Write hit: update tag and data simultaneously
+                            state_nxt = L2_STATE_TAG_UPDATE;
+                            selected_way_nxt = hit_way_r;
+                            `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("Tag Lookup: write hit, way=%0d", tag_if.hit_way));
+                        end
                     end else begin
                         // Cache miss
                         state_nxt = L2_STATE_MISS_HANDLE;
@@ -248,54 +257,30 @@ module rvgpu_l2cache_controller (
                 end
             end
             
-            L2_STATE_DATA_ACCESS: begin
-                // Data access state: read/write cache data
-                if (current_req_r.read) begin
-                    // Read operation
-                    if (!line_read_valid_r) begin
-                        line_read_valid_nxt = 1'b1;
-                    end
-                    
-                    data_if.line_read_valid = line_read_valid_r;
-                    data_if.line_read_index = current_addr_r.index;
-                    data_if.line_read_way = hit_way_r;
-                    
-                    if (data_if.line_read_ready) begin
-                        line_read_valid_nxt = 1'b0;
-                        state_nxt = L2_STATE_RESPONSE;
-                        
-                        // Prepare response
-                        current_resp_nxt.data = data_if.line_read_data.data;
-                        current_resp_nxt.status = L2CACHE_RESP_OKAY;
-                        current_resp_nxt.trans_id = current_req_r.trans_id;
-                        current_resp_nxt.dest_node = current_req_r.src_node;
-                        current_resp_nxt.hit = 1'b1;
-                        current_resp_nxt.dirty = 1'b0;
-                    end
+            L2_STATE_DATA_READ: begin
+                // Data read state: initiate data read request
+                if (!line_read_valid_r) begin
+                    line_read_valid_nxt = 1'b1;
+                    data_if.line_read_valid = 1'b1;
                 end else begin
-                    // Write operation
-                    if (!line_write_valid_r) begin
-                        line_write_valid_nxt = 1'b1;
-                    end
+                    data_if.line_read_valid = line_read_valid_r;
+                end
+                
+                data_if.line_read_index = current_addr_r.index;
+                data_if.line_read_way = hit_way_r;
+                
+                // Wait for data read completion
+                if (data_if.line_read_done) begin
+                    line_read_valid_nxt = 1'b0;
+                    state_nxt = L2_STATE_RESPONSE;
                     
-                    data_if.line_write_valid = line_write_valid_r;
-                    data_if.line_write_index = current_addr_r.index;
-                    data_if.line_write_way = hit_way_r;
-                    data_if.line_write_data.data = current_req_r.data;
-                    data_if.line_write_data.strb = current_req_r.strb;
-                    
-                    if (data_if.line_write_ready) begin
-                        line_write_valid_nxt = 1'b0;
-                        state_nxt = L2_STATE_RESPONSE;
-                        
-                        // Prepare response
-                        current_resp_nxt.data = '0;
-                        current_resp_nxt.status = L2CACHE_RESP_OKAY;
-                        current_resp_nxt.trans_id = current_req_r.trans_id;
-                        current_resp_nxt.dest_node = current_req_r.src_node;
-                        current_resp_nxt.hit = 1'b1;
-                        current_resp_nxt.dirty = 1'b1;
-                    end
+                    // Prepare response
+                    current_resp_nxt.data = data_if.line_read_data.data;
+                    current_resp_nxt.status = L2CACHE_RESP_OKAY;
+                    current_resp_nxt.trans_id = current_req_r.trans_id;
+                    current_resp_nxt.dest_node = current_req_r.src_node;
+                    current_resp_nxt.hit = 1'b1;
+                    current_resp_nxt.dirty = 1'b0;
                 end
             end
             
@@ -315,7 +300,7 @@ module rvgpu_l2cache_controller (
                                    axi_if.read_req_addr, axi_if.read_req_size));
                     end
                 end else begin
-                    // Write miss: write to memory
+                    // Write miss: write directly to memory (no cache update)
                     if (!line_write_valid_r) begin
                         axi_if.write_req_valid = 1'b1;
                         axi_if.write_req_addr = current_req_r.addr;
@@ -336,7 +321,7 @@ module rvgpu_l2cache_controller (
                             state_nxt = L2_STATE_RESPONSE;
                             line_write_valid_nxt = 1'b0;
                             
-                            // Prepare response
+                            // Prepare response for write miss
                             current_resp_nxt.data = '0;
                             current_resp_nxt.status = L2CACHE_RESP_OKAY;
                             current_resp_nxt.trans_id = current_req_r.trans_id;
@@ -354,32 +339,10 @@ module rvgpu_l2cache_controller (
                 
                 if (axi_if.read_resp_valid) begin
                     if (axi_if.read_resp_status == L2CACHE_RESP_OKAY) begin
-                        // Memory read successful, update tag array
-                        tag_if.update_valid = 1'b1;
-                        tag_if.update_index = current_addr_r.index;
-                        tag_if.update_way = selected_way_r;
-                        tag_if.update_entry = tag_if.tag_entry;
-                        
-                        // Update selected way
-                        tag_if.update_entry.ways[way_to_index(selected_way_r)].tag = current_addr_r.tag;
-                        tag_if.update_entry.ways[way_to_index(selected_way_r)].valid = 1'b1;
-                        tag_if.update_entry.ways[way_to_index(selected_way_r)].dirty = 1'b0;
-                        tag_if.update_entry.ways[way_to_index(selected_way_r)].mesi_state = CACHE_MESI_EXCLUSIVE;
-                        // 更新LRU位
-                        tag_if.update_entry.lru[way_to_index(selected_way_r)] = 1'b0; // 设为最近使用
-                        // 更新其他way的LRU位
-                        for (int i = 0; i < L2CACHE_WAYS; i++) begin
-                            if (i != way_to_index(selected_way_r)) begin
-                                tag_if.update_entry.lru[i] = 1'b1;
-                            end
-                        end
-                        
-                        if (tag_if.update_ready) begin
-                            state_nxt = L2_STATE_TAG_UPDATE;
-                        end
-                        
-                        `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("Memory response received, updating tag: index=0x%h, way=%0d", 
-                                   tag_if.update_index, tag_if.update_way));
+                        // Memory read successful, proceed to tag and data update
+                        state_nxt = L2_STATE_TAG_UPDATE;
+                        `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("Memory response received, proceeding to tag update: index=0x%h, way=%0d", 
+                                   current_addr_r.index, selected_way_r));
                     end else begin
                         // Memory access error
                         state_nxt = L2_STATE_RESPONSE;
@@ -394,33 +357,96 @@ module rvgpu_l2cache_controller (
             end
             
             L2_STATE_TAG_UPDATE: begin
-                // Tag update state: wait for tag update completion
-                if (tag_if.update_done) begin
-                    // Update data array
-                    if (!line_write_valid_r) begin
-                        line_write_valid_nxt = 1'b1;
-                    end
+                // Tag update state: update tag array
+                if (!tag_if.update_valid) begin
+                    // Initiate tag update
+                    tag_if.update_valid = 1'b1;
+                    tag_if.update_index = current_addr_r.index;
+                    tag_if.update_way = selected_way_r;
+                    tag_if.update_entry = tag_if.tag_entry;
                     
+                    // Update selected way based on operation type
+                    if (cache_hit_r) begin
+                        // Write hit: update dirty bit and LRU
+                        tag_if.update_entry.ways[way_to_index(selected_way_r)].dirty = 1'b1;
+                        tag_if.update_entry.lru[way_to_index(selected_way_r)] = 1'b0; // 设为最近使用
+                        // 更新其他way的LRU位
+                        for (int i = 0; i < L2CACHE_WAYS; i++) begin
+                            if (i != way_to_index(selected_way_r)) begin
+                                tag_if.update_entry.lru[i] = 1'b1;
+                            end
+                        end
+                    end else begin
+                        // Cache miss: update tag, valid, dirty, and LRU
+                        tag_if.update_entry.ways[way_to_index(selected_way_r)].tag = current_addr_r.tag;
+                        tag_if.update_entry.ways[way_to_index(selected_way_r)].valid = 1'b1;
+                        tag_if.update_entry.ways[way_to_index(selected_way_r)].dirty = 1'b0;
+                        tag_if.update_entry.ways[way_to_index(selected_way_r)].mesi_state = CACHE_MESI_EXCLUSIVE;
+                        tag_if.update_entry.lru[way_to_index(selected_way_r)] = 1'b0; // 设为最近使用
+                        // 更新其他way的LRU位
+                        for (int i = 0; i < L2CACHE_WAYS; i++) begin
+                            if (i != way_to_index(selected_way_r)) begin
+                                tag_if.update_entry.lru[i] = 1'b1;
+                            end
+                        end
+                    end
+                end
+                
+                // Wait for tag update completion
+                if (tag_if.update_done) begin
+                    state_nxt = L2_STATE_DATA_WRITE;
+                    `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("Tag update done, proceeding to data write: index=0x%h, way=%0d", 
+                               current_addr_r.index, selected_way_r));
+                end
+            end
+            
+            L2_STATE_DATA_WRITE: begin
+                // Data write state: initiate data write request
+                if (!line_write_valid_r) begin
+                    line_write_valid_nxt = 1'b1;
+                    data_if.line_write_valid = 1'b1;
+                end else begin
                     data_if.line_write_valid = line_write_valid_r;
-                    data_if.line_write_index = current_addr_r.index;
-                    data_if.line_write_way = selected_way_r;
+                end
+                
+                data_if.line_write_index = current_addr_r.index;
+                data_if.line_write_way = selected_way_r;
+                
+                if (cache_hit_r) begin
+                    // Write hit: write request data
+                    data_if.line_write_data.data = current_req_r.data;
+                    data_if.line_write_data.strb = current_req_r.strb;
+                end else begin
+                    // Cache miss: write memory data
                     data_if.line_write_data.data = axi_if.read_resp_data;
                     data_if.line_write_data.strb = '1;
+                end
+                
+                // Wait for data write completion
+                if (data_if.line_write_done) begin
+                    line_write_valid_nxt = 1'b0;
+                    state_nxt = L2_STATE_RESPONSE;
                     
-                    if (data_if.line_write_ready) begin
-                        line_write_valid_nxt = 1'b0;
-                        state_nxt = L2_STATE_RESPONSE;
-                        
-                        // Prepare response
+                    // Prepare response
+                    if (cache_hit_r) begin
+                        // Write hit response
+                        current_resp_nxt.data = '0;
+                        current_resp_nxt.status = L2CACHE_RESP_OKAY;
+                        current_resp_nxt.trans_id = current_req_r.trans_id;
+                        current_resp_nxt.dest_node = current_req_r.src_node;
+                        current_resp_nxt.hit = 1'b1;
+                        current_resp_nxt.dirty = 1'b1;
+                    end else begin
+                        // Cache miss response
                         current_resp_nxt.data = axi_if.read_resp_data;
                         current_resp_nxt.status = L2CACHE_RESP_OKAY;
                         current_resp_nxt.trans_id = current_req_r.trans_id;
                         current_resp_nxt.dest_node = current_req_r.src_node;
                         current_resp_nxt.hit = 1'b0;
                         current_resp_nxt.dirty = 1'b0;
-                        
-                        `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("Cache line written, response data=0x%h", current_resp_nxt.data));
                     end
+                    
+                    `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("Data write done, response data=0x%h", current_resp_nxt.data));
                 end
             end
             

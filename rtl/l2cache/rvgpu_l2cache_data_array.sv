@@ -37,8 +37,9 @@ module rvgpu_l2cache_data_array (
     // Data Array State Machine States
     typedef enum logic [1:0] {
         L2CACHE_DATA_STATE_IDLE = 2'b00,        // 空闲状态
-        L2CACHE_DATA_STATE_LINE_READ = 2'b01,   // 缓存行读操作
-        L2CACHE_DATA_STATE_LINE_WRITE = 2'b10   // 缓存行写操作
+        L2CACHE_DATA_STATE_LINE_READ = 2'b01,   // 缓存行读操作 - 发起SRAM读取
+        L2CACHE_DATA_STATE_LINE_READ_WAIT = 2'b10, // 缓存行读等待 - 等待SRAM读取完成
+        L2CACHE_DATA_STATE_LINE_WRITE = 2'b11   // 缓存行写操作
     } l2cache_data_state_t;
     
     // 数据数组相关参数
@@ -169,7 +170,13 @@ module rvgpu_l2cache_data_array (
             end
             
             L2CACHE_DATA_STATE_LINE_READ: begin
-                // 缓存行读操作状态
+                // 缓存行读操作状态 - 发起SRAM读取
+                sram_ce_nxt = '0; // 停止SRAM访问
+                state_nxt = L2CACHE_DATA_STATE_LINE_READ_WAIT;
+            end
+            
+            L2CACHE_DATA_STATE_LINE_READ_WAIT: begin
+                // 缓存行读等待状态 - 等待SRAM读取完成
                 sram_ce_nxt = '0; // 停止SRAM访问
                 
                 // 读取完整缓存行

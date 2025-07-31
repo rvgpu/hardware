@@ -254,7 +254,7 @@ module rvgpu_l2cache_controller (
                     end else begin
                         // Cache miss
                         state_nxt = L2_STATE_MISS_HANDLE;
-                        selected_way_nxt = (1 << select_lru_way(tag_if.tag_entry.lru));
+                        selected_way_nxt = (1 << select_lru_way(extract_lru_bits(tag_if.tag_entry)));
                         `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("Tag Lookup: miss, way=%0d", tag_if.hit_way));
                     end
                 end
@@ -377,11 +377,18 @@ module rvgpu_l2cache_controller (
                         tag_if.update_entry = tag_if.tag_entry;
                         
                         // Update selected way
-                        tag_if.update_entry.tag[way_to_index(selected_way_r)] = current_addr_r.tag;
-                        tag_if.update_entry.valid[way_to_index(selected_way_r)] = 1'b1;
-                        tag_if.update_entry.dirty[way_to_index(selected_way_r)] = 1'b0;
-                        tag_if.update_entry.mesi_state[way_to_index(selected_way_r)] = CACHE_MESI_EXCLUSIVE;
-                        tag_if.update_entry.lru = update_lru(tag_if.tag_entry.lru, way_to_index(selected_way_r));
+                        tag_if.update_entry.ways[way_to_index(selected_way_r)].tag = current_addr_r.tag;
+                        tag_if.update_entry.ways[way_to_index(selected_way_r)].valid = 1'b1;
+                        tag_if.update_entry.ways[way_to_index(selected_way_r)].dirty = 1'b0;
+                        tag_if.update_entry.ways[way_to_index(selected_way_r)].mesi_state = CACHE_MESI_EXCLUSIVE;
+                        // 更新LRU位
+                        tag_if.update_entry.lru[way_to_index(selected_way_r)] = 1'b0; // 设为最近使用
+                        // 更新其他way的LRU位
+                        for (int i = 0; i < L2CACHE_WAYS; i++) begin
+                            if (i != way_to_index(selected_way_r)) begin
+                                tag_if.update_entry.lru[i] = 1'b1;
+                            end
+                        end
                         
                         if (tag_if.update_ready) begin
                             state_nxt = L2_STATE_TAG_UPDATE;
@@ -512,6 +519,13 @@ module rvgpu_l2cache_controller (
         end
         
         return result;
+    endfunction
+    
+    // Extract LRU bits from new tag entry structure
+    function automatic logic [7:0] extract_lru_bits(
+        input l2cache_tag_entry_t tag_entry
+    );
+        return tag_entry.lru;
     endfunction
      
      //=============================================================================

@@ -46,6 +46,7 @@
 `include "rvgpu_l2cache_data_array.sv"
 `include "rvgpu_l2cache_axi_adapter.sv"
 `include "rvgpu_l2cache_noc_adapter.sv"
+`include "rvgpu_fifo_basic.sv"
 `include "rvgpu_l2cache.sv"
 
 `endif // RVGPU_L2CACHE_INCFILES_SVH 

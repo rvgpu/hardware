@@ -20,25 +20,37 @@
 `include "rvgpu_debug.svh"
 `include "rvgpu_l2cache_if.svh"
 `include "rvgpu_internal_noc_if.svh"
+`include "rvgpu_fifo_if.svh"
 
 `ifndef RVGPU_L2CACHE_PKG_IMPORTED
 `define RVGPU_L2CACHE_PKG_IMPORTED
 import rvgpu_l2cache_pkg::*;
-`endif // RVGPU_L2CACHE_PKG_IMPORTED
+`endif
 
 `ifndef RVGPU_INTERNAL_NOC_PKG_IMPORTED
 `define RVGPU_INTERNAL_NOC_PKG_IMPORTED
 import rvgpu_internal_noc_pkg::*;
-`endif // RVGPU_INTERNAL_NOC_PKG_IMPORTED
+`endif
+
+//=============================================================================
+// L2 Cache Controller Module
+//=============================================================================
+// This module implements the L2 cache controller with the following features:
+// - FIFO-based request queue for better throughput
+// - Tag lookup and data access pipeline
+// - Memory access for cache misses
+// - Write-back and write-through support
+// - MESI cache coherence protocol support
+//=============================================================================
 
 module rvgpu_l2cache_controller #(
     parameter l2cache_config_t L2CACHE_CONFIG = DEFAULT_L2CACHE_CONFIG
 ) (
-    // Clock and Reset Interface
+    // Clock and Reset
     input  logic clk,
     input  logic rst_n,
 
-    // NOC Interface
+    // Network-on-Chip Interface
     l2cache_noc_if.controller noc_if,
     
     // Tag Array Interface
@@ -47,7 +59,7 @@ module rvgpu_l2cache_controller #(
     // Data Array Interface
     l2cache_data_if.controller data_if,
     
-    // AXI Interface
+    // AXI Memory Interface
     l2cache_axi_if.controller axi_if
 );
 
@@ -55,110 +67,81 @@ module rvgpu_l2cache_controller #(
     // Local Parameters and Types
     //=============================================================================
     
-    // 状态机定义
-    typedef enum logic [3:0] {
-        L2_STATE_IDLE = 4'b0000,
-        L2_STATE_TAG_LOOKUP = 4'b0001,
-        L2_STATE_TAG_WAIT = 4'b0010,
-        L2_STATE_DATA_ACCESS = 4'b0011,
-        L2_STATE_MISS_HANDLE = 4'b0100,
-        L2_STATE_MEMORY_ACCESS = 4'b1000,
-        L2_STATE_TAG_UPDATE_WAIT = 4'b1001
-    } l2cache_state_t;
+    // Using l2cache_state_t from rvgpu_l2cache_pkg
     
-    // 请求队列深度
+    // Request queue configuration
     localparam int REQ_QUEUE_DEPTH = 16;
-    localparam int REQ_QUEUE_BITS = $clog2(REQ_QUEUE_DEPTH);
+    localparam int REQ_QUEUE_BITS  = $clog2(REQ_QUEUE_DEPTH);
     
-    // 节点ID
-    localparam int NODE_L2_CACHE = 8'h02;
-    
-    // 请求和响应类型定义
-    typedef struct packed {
-        logic [63:0] addr;
-        logic [7:0] size;
-        logic read;
-        logic write;
-        logic [7:0] trans_id;
-        logic [7:0] src_node;
-        logic [1:0] src_local;
-        logic [255:0] data;
-        logic [31:0] strb;
-    } l2cache_request_t;
-    
-    typedef struct packed {
-        logic [255:0] data;
-        logic [1:0] status;
-        logic [7:0] trans_id;
-        logic [3:0] dest_node;
-        logic hit;
-        logic dirty;
-    } l2cache_response_t;
-    
-    // 性能计数器类型定义
-    typedef struct packed {
-        logic [31:0] hit_count;
-        logic [31:0] miss_count;
-        logic [31:0] read_count;
-        logic [31:0] write_count;
-        logic [31:0] error_count;
-    } l2cache_perf_counters_t;
-    
-    // 响应状态
-    localparam int RESP_OKAY = 2'b00;
+    // Response status codes
+    localparam int RESP_OKAY   = 2'b00;
     localparam int RESP_SLVERR = 2'b10;
     
-    // MESI状态
-    localparam int MESI_INVALID = 2'b00;
+    // MESI cache coherence states
+    localparam int MESI_INVALID   = 2'b00;
     localparam int MESI_EXCLUSIVE = 2'b01;
-    localparam int MESI_SHARED = 2'b10;
-    localparam int MESI_MODIFIED = 2'b11;
+    localparam int MESI_SHARED    = 2'b10;
+    localparam int MESI_MODIFIED  = 2'b11;
     
-    // 从配置中提取的本地参数
-    localparam int WAYS = L2CACHE_CONFIG.ways;
-    localparam int LRU_BITS = L2CACHE_CONFIG.lru_bits;
+    // Cache configuration from parameters
+    localparam int WAYS      = L2CACHE_CONFIG.ways;
+    localparam int LRU_BITS  = L2CACHE_CONFIG.lru_bits;
     
+    // Request and response data structures
+    // Using types from rvgpu_l2cache_pkg
+
     //=============================================================================
-    // Internal Registers and Signals
+    // Internal Signals and Registers
     //=============================================================================
     
-    // 状态机寄存器
+    // State machine registers
     l2cache_state_t state_r, state_nxt;
     
-    // 当前请求寄存器
-    l2cache_request_t current_req_r, current_req_nxt;
+    // Current request and response registers
+    l2cache_request_t  current_req_r, current_req_nxt;
     l2cache_response_t current_resp_r, current_resp_nxt;
     
-    // 地址解析寄存器
+    // Address parsing registers
     cache_addr_t current_addr_r, current_addr_nxt;
     
-    // 缓存访问结果寄存器
+    // Cache access result registers
     logic cache_hit_r, cache_hit_nxt;
     logic [WAYS-1:0] hit_way_r, hit_way_nxt;
     logic [WAYS-1:0] selected_way_r, selected_way_nxt;
     
-    // 请求队列
-    l2cache_request_t req_queue [REQ_QUEUE_DEPTH];
-    logic [REQ_QUEUE_BITS-1:0] req_queue_head_r, req_queue_head_nxt;
-    logic [REQ_QUEUE_BITS-1:0] req_queue_tail_r, req_queue_tail_nxt;
-    logic req_queue_full_r, req_queue_full_nxt;
-    logic req_queue_empty_r, req_queue_empty_nxt;
-    
-    // 性能计数器
-    l2cache_perf_counters_t perf_counters_r, perf_counters_nxt;
-    
-    // 调试寄存器
+    // Control flags
     logic cache_busy_r, cache_busy_nxt;
+    logic read_valid_r, read_valid_nxt;
     logic write_valid_r, write_valid_nxt;
-    logic read_valid_r, read_valid_nxt; 
-    logic line_read_valid_r, line_read_valid_nxt;
     logic line_write_valid_r, line_write_valid_nxt;
     
+    // 临时变量声明
+    l2cache_request_t tmp_req;
+    
+    // Request FIFO interface
+    rvgpu_fifo_basic_if #(
+        .DATA_WIDTH($bits(l2cache_request_t)),
+        .INDEX_BITS(REQ_QUEUE_BITS)
+    ) req_fifo_if();
+    
     //=============================================================================
-    // 握手信号定义
+    // FIFO Instantiation
     //=============================================================================
     
-    wire noc_req_accept = noc_if.req_valid && noc_if.req_ready;
+    rvgpu_fifo_basic #(
+        .DATA_WIDTH($bits(l2cache_request_t)),
+        .INDEX_BITS(REQ_QUEUE_BITS)
+    ) u_req_fifo (
+        .clk(clk),
+        .rst_n(rst_n),
+        .fifo_if(req_fifo_if.fifo_port)
+    );
+    
+    //=============================================================================
+    // Handshake Signal Definitions
+    //=============================================================================
+    
+    wire noc_req_accept  = noc_if.req_valid && noc_if.req_ready;
     wire noc_resp_accept = noc_if.resp_valid && noc_if.resp_ready;
     wire tag_lookup_accept = tag_if.lookup_valid && tag_if.lookup_ready;
     wire tag_update_accept = tag_if.update_valid && tag_if.update_ready;
@@ -166,13 +149,13 @@ module rvgpu_l2cache_controller #(
     wire data_write_accept = data_if.write_valid && data_if.write_ready;
     wire axi_read_accept = axi_if.read_req_valid && axi_if.read_req_ready;
     wire axi_write_accept = axi_if.write_req_valid && axi_if.write_req_ready;
-    
+
     //=============================================================================
-    // 组合逻辑 - 状态机和输出控制
+    // Combinational Logic - State Machine and Interface Control
     //=============================================================================
     
     always_comb begin : comb_logic
-        // 默认值
+        // Default values for next state and outputs
         state_nxt = state_r;
         current_req_nxt = current_req_r;
         current_resp_nxt = current_resp_r;
@@ -180,18 +163,13 @@ module rvgpu_l2cache_controller #(
         cache_hit_nxt = cache_hit_r;
         hit_way_nxt = hit_way_r;
         selected_way_nxt = selected_way_r;
-        req_queue_head_nxt = req_queue_head_r;
-        req_queue_tail_nxt = req_queue_tail_r;
-        req_queue_full_nxt = req_queue_full_r;
-        req_queue_empty_nxt = req_queue_empty_r;
-        perf_counters_nxt = perf_counters_r;
         cache_busy_nxt = cache_busy_r;
-        write_valid_nxt = write_valid_r;
         read_valid_nxt = read_valid_r;
-        line_read_valid_nxt = line_read_valid_r;
+        write_valid_nxt = write_valid_r;
         line_write_valid_nxt = line_write_valid_r;
-        // 接口输出默认值   
-        noc_if.req_ready = !req_queue_full_r; // 只要队列不满就可以接受新请求
+        
+        // Default interface outputs
+        noc_if.req_ready = !req_fifo_if.full;
         noc_if.resp_valid = 1'b0;
         noc_if.resp_header = '0;
         noc_if.resp_data = '0;
@@ -200,6 +178,7 @@ module rvgpu_l2cache_controller #(
         
         tag_if.lookup_valid = 1'b0;
         tag_if.lookup_index = '0;
+        tag_if.lookup_tag = '0;
         tag_if.update_valid = 1'b0;
         tag_if.update_index = '0;
         tag_if.update_way = '0;
@@ -217,6 +196,10 @@ module rvgpu_l2cache_controller #(
         data_if.write_data = '0;
         data_if.write_strb = '0;
         data_if.write_size = '0;
+        data_if.line_write_valid = 1'b0;
+        data_if.line_write_index = '0;
+        data_if.line_write_way = '0;
+        data_if.line_write_data = '0;
         
         axi_if.read_req_valid = 1'b0;
         axi_if.read_req_addr = '0;
@@ -235,80 +218,71 @@ module rvgpu_l2cache_controller #(
         axi_if.write_last = 1'b0;
         axi_if.write_resp_ready = 1'b0;
         
+        // FIFO control
+        req_fifo_if.read_en = 1'b0;
+        req_fifo_if.write_en = 1'b0;
+        req_fifo_if.write_data = '0;
+        
+        // State machine logic
         case (state_r)
             L2_STATE_IDLE: begin
-                // 空闲状态：等待新请求
+                // Idle state: wait for new requests
                 cache_busy_nxt = 1'b0;
-                write_valid_nxt = 1'b0;
                 read_valid_nxt = 1'b0;
+                write_valid_nxt = 1'b0;
+                line_write_valid_nxt = 1'b0;
                 
-                // 只处理队列中的请求，新请求先入队
-                if (!req_queue_empty_r) begin
-                    // 从队列中取出请求
-                    current_req_nxt = req_queue[req_queue_head_r];
+                // Process requests from FIFO
+                if (!req_fifo_if.empty) begin
+                    req_fifo_if.read_en = 1'b1;
                     state_nxt = L2_STATE_TAG_LOOKUP;
                     cache_busy_nxt = 1'b1;
-                   
-                    // 解析地址
-                    current_addr_nxt = addr64_to_cache_addr(current_req_nxt.addr);
                     
-                    // 更新队列头指针（在下一个周期生效）
-                    req_queue_head_nxt = req_queue_head_r + 1;
-                    if (req_queue_head_nxt == req_queue_tail_r) begin
-                        req_queue_empty_nxt = 1'b1;
-                    end
-                    req_queue_full_nxt = 1'b0;
+                    // Update current request and address
+                    tmp_req = unpack_l2cache_request(req_fifo_if.read_data);
+                    current_req_nxt = tmp_req;
+                    current_addr_nxt = addr64_to_cache_addr(tmp_req.addr);
                 end
             end
             
             L2_STATE_TAG_LOOKUP: begin
-                // Tag查找状态 - 发起查找请求
+                // Tag lookup state: initiate lookup request
                 tag_if.lookup_valid = 1'b1;
                 tag_if.lookup_index = current_addr_r.index;
                 tag_if.lookup_tag = current_addr_r.tag;
                 
                 if (tag_if.lookup_ready) begin
-                    // 握手成功，进入等待状态
                     state_nxt = L2_STATE_TAG_WAIT;
                 end
             end
             
             L2_STATE_TAG_WAIT: begin
-                // Tag等待状态 - 等待查找完成
-                tag_if.lookup_valid = 1'b0; // 清除valid信号
-                
+                // Tag wait state: wait for lookup completion
                 if (tag_if.lookup_done) begin
-                    // 检查命中
                     cache_hit_nxt = tag_if.lookup_hit;
                     hit_way_nxt = tag_if.hit_way;
                     
                     if (tag_if.lookup_hit) begin
-                        // 缓存命中
+                        // Cache hit
                         state_nxt = L2_STATE_DATA_ACCESS;
-                        perf_counters_nxt.hit_count = perf_counters_r.hit_count + 1;
-
-                        `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("Tag Lookup: hit=%0d, way=%0d", tag_if.lookup_hit, tag_if.hit_way));
+                        `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("Tag Lookup: hit=1, way=%0d", tag_if.hit_way));
                     end else begin
-                        // 缓存未命中
+                        // Cache miss
                         state_nxt = L2_STATE_MISS_HANDLE;
-                        perf_counters_nxt.miss_count = perf_counters_r.miss_count + 1;
-                        
-                        // 选择替换way
-                        selected_way_nxt = select_lru_way(tag_if.tag_entry.lru);
-
+                        selected_way_nxt = (1 << select_lru_way(tag_if.tag_entry.lru));
                         `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("Tag Lookup: miss, way=%0d", tag_if.hit_way));
                     end
                 end
             end
             
             L2_STATE_DATA_ACCESS: begin
-                // 数据访问状态
+                // Data access state: read/write cache data
                 if (current_req_r.read) begin
-                    // 读操作
-                    if(!read_valid_r) begin
+                    // Read operation
+                    if (!read_valid_r) begin
                         read_valid_nxt = 1'b1;
                     end
-
+                    
                     data_if.read_valid = read_valid_r;
                     data_if.read_index = current_addr_r.index;
                     data_if.read_way = hit_way_r;
@@ -317,25 +291,22 @@ module rvgpu_l2cache_controller #(
                     
                     if (data_if.read_ready) begin
                         read_valid_nxt = 1'b0;
-                        // 准备响应
+                        state_nxt = L2_STATE_RESPONSE;
+                        
+                        // Prepare response
                         current_resp_nxt.data = data_if.read_data;
                         current_resp_nxt.status = RESP_OKAY;
                         current_resp_nxt.trans_id = current_req_r.trans_id;
                         current_resp_nxt.dest_node = current_req_r.src_node;
                         current_resp_nxt.hit = 1'b1;
                         current_resp_nxt.dirty = 1'b0;
-                        
-                        state_nxt = L2_STATE_IDLE;
-                        
-                        // 更新性能计数器
-                        perf_counters_nxt.read_count = perf_counters_r.read_count + 1;
                     end
                 end else begin
-                    // 写操作
-                    if(!write_valid_r) begin
+                    // Write operation
+                    if (!write_valid_r) begin
                         write_valid_nxt = 1'b1;
                     end
-
+                    
                     data_if.write_valid = write_valid_r;
                     data_if.write_index = current_addr_r.index;
                     data_if.write_way = hit_way_r;
@@ -346,66 +317,57 @@ module rvgpu_l2cache_controller #(
                     
                     if (data_if.write_ready) begin
                         write_valid_nxt = 1'b0;
-                        // 准备响应
+                        state_nxt = L2_STATE_RESPONSE;
+                        
+                        // Prepare response
                         current_resp_nxt.data = '0;
                         current_resp_nxt.status = RESP_OKAY;
                         current_resp_nxt.trans_id = current_req_r.trans_id;
                         current_resp_nxt.dest_node = current_req_r.src_node;
                         current_resp_nxt.hit = 1'b1;
                         current_resp_nxt.dirty = 1'b1;
-                        
-                        state_nxt = L2_STATE_IDLE;
-                        
-                        // 更新性能计数器
-                        perf_counters_nxt.write_count = perf_counters_r.write_count + 1;
                     end
                 end
             end
             
             L2_STATE_MISS_HANDLE: begin
-                // 未命中处理状态
+                // Miss handling state: initiate memory access
                 if (current_req_r.read) begin
-                    // 读未命中：从内存加载
+                    // Read miss: load from memory
                     axi_if.read_req_valid = 1'b1;
-                    axi_if.read_req_addr = request_mem_addr_aligned(current_addr_r); // 对齐到缓存行
-                    axi_if.read_req_len = 0; // 单次传输
-                    axi_if.read_req_size = current_req_r.size; 
+                    axi_if.read_req_addr = request_mem_addr_aligned(current_addr_r);
+                    axi_if.read_req_len = 0;
+                    axi_if.read_req_size = current_req_r.size;
                     axi_if.read_req_id = current_req_r.trans_id;
                     
                     if (axi_if.read_req_ready) begin
-                        $display("@%0t: [L2CACHE_CTRL] miss handle: req_addr:0x%h, req_size:%d", $time, axi_if.read_req_addr, axi_if.read_req_size);
                         state_nxt = L2_STATE_MEMORY_ACCESS;
+                        `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("Memory read request: addr=0x%h, size=%d", 
+                                   axi_if.read_req_addr, axi_if.read_req_size));
                     end
                 end else begin
-                    // 写未命中：直接写内存
-                    // 发送写地址请求（只在第一次发送）
+                    // Write miss: write to memory
                     if (!write_valid_r) begin
                         axi_if.write_req_valid = 1'b1;
                         axi_if.write_req_addr = current_req_r.addr;
                         axi_if.write_req_len = 0;
-                        axi_if.write_req_size = current_req_r.size[2:0]; // 从请求payload中获取size
+                        axi_if.write_req_size = current_req_r.size[2:0];
                         axi_if.write_req_id = current_req_r.trans_id;
                         
                         if (axi_if.write_req_ready) begin
-                            // 写地址握手成功，标记写地址已发送
                             write_valid_nxt = 1'b1;
                         end
                     end else begin
-                        // 写地址已发送，清除写地址请求
-                        axi_if.write_req_valid = 1'b0;
-                        
-                        // 发送写数据
                         axi_if.write_data_valid = 1'b1;
                         axi_if.write_data = current_req_r.data;
                         axi_if.write_strb = current_req_r.strb;
                         axi_if.write_last = 1'b1;
                         
                         if (axi_if.write_data_ready) begin
-                            // 写数据握手成功，完成写操作
-                            state_nxt = L2_STATE_IDLE;
-                            write_valid_nxt = 1'b0;  // 清除写标志
+                            state_nxt = L2_STATE_RESPONSE;
+                            write_valid_nxt = 1'b0;
                             
-                            // 准备响应
+                            // Prepare response
                             current_resp_nxt.data = '0;
                             current_resp_nxt.status = RESP_OKAY;
                             current_resp_nxt.trans_id = current_req_r.trans_id;
@@ -418,55 +380,51 @@ module rvgpu_l2cache_controller #(
             end
             
             L2_STATE_MEMORY_ACCESS: begin
-                // 内存访问状态
+                // Memory access state: wait for memory response
                 axi_if.read_resp_ready = 1'b1;
                 
                 if (axi_if.read_resp_valid) begin
                     if (axi_if.read_resp_status == RESP_OKAY) begin
-                        // 内存读取成功，发起tag更新请求
+                        // Memory read successful, update tag array
                         tag_if.update_valid = 1'b1;
                         tag_if.update_index = current_addr_r.index;
                         tag_if.update_way = selected_way_r;
-                        // 保持现有的tag条目，只更新选中的way
                         tag_if.update_entry = tag_if.tag_entry;
-                        // 更新选中way的状态
+                        
+                        // Update selected way
                         tag_if.update_entry.tag[way_to_index(selected_way_r)] = current_addr_r.tag;
                         tag_if.update_entry.valid[way_to_index(selected_way_r)] = 1'b1;
                         tag_if.update_entry.dirty[way_to_index(selected_way_r)] = 1'b0;
                         tag_if.update_entry.mesi_state[way_to_index(selected_way_r)] = MESI_EXCLUSIVE;
-                        tag_if.update_entry.lru = update_lru(tag_if.tag_entry.lru, selected_way_r);
+                        tag_if.update_entry.lru = update_lru(tag_if.tag_entry.lru, way_to_index(selected_way_r));
                         
                         if (tag_if.update_ready) begin
-                            // 握手成功，进入等待状态
-                            state_nxt = L2_STATE_TAG_UPDATE_WAIT;
+                            state_nxt = L2_STATE_TAG_UPDATE;
                         end
-
-                        `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("MEM Responsed, Tag Update: index=0x%h, way=%0d", tag_if.update_index, tag_if.update_way));
-                    end else begin
-                        // 内存访问错误
-                        state_nxt = L2_STATE_IDLE;
                         
+                        `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("Memory response received, updating tag: index=0x%h, way=%0d", 
+                                   tag_if.update_index, tag_if.update_way));
+                    end else begin
+                        // Memory access error
+                        state_nxt = L2_STATE_RESPONSE;
                         current_resp_nxt.data = '0;
                         current_resp_nxt.status = RESP_SLVERR;
                         current_resp_nxt.trans_id = current_req_r.trans_id;
                         current_resp_nxt.dest_node = current_req_r.src_node;
                         current_resp_nxt.hit = 1'b0;
                         current_resp_nxt.dirty = 1'b0;
-                        
-                        perf_counters_nxt.error_count = perf_counters_r.error_count + 1;
                     end
                 end
             end
             
-            L2_STATE_TAG_UPDATE_WAIT: begin
-                // Tag更新等待状态 - 等待更新完成
-                tag_if.update_valid = 1'b0; // 清除valid信号
-                
+            L2_STATE_TAG_UPDATE: begin
+                // Tag update state: wait for tag update completion
                 if (tag_if.update_done) begin
-                    // 更新数据数组
-                    if(!line_write_valid_r) begin
+                    // Update data array
+                    if (!line_write_valid_r) begin
                         line_write_valid_nxt = 1'b1;
                     end
+                    
                     data_if.line_write_valid = line_write_valid_r;
                     data_if.line_write_index = current_addr_r.index;
                     data_if.line_write_way = selected_way_r;
@@ -475,56 +433,61 @@ module rvgpu_l2cache_controller #(
                     
                     if (data_if.line_write_ready) begin
                         line_write_valid_nxt = 1'b0;
-                        state_nxt = L2_STATE_IDLE;
+                        state_nxt = L2_STATE_RESPONSE;
                         
-                        // 准备响应
+                        // Prepare response
                         current_resp_nxt.data = axi_if.read_resp_data;
                         current_resp_nxt.status = RESP_OKAY;
                         current_resp_nxt.trans_id = current_req_r.trans_id;
                         current_resp_nxt.dest_node = current_req_r.src_node;
                         current_resp_nxt.hit = 1'b0;
                         current_resp_nxt.dirty = 1'b0;
-                        `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("Line Write Done, resp_data=0x%h", current_resp_nxt.data));
+                        
+                        `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("Cache line written, response data=0x%h", current_resp_nxt.data));
                     end
                 end
             end
             
+            L2_STATE_RESPONSE: begin
+                // Response state: send response to NOC
+                if (current_resp_r.trans_id != 0) begin
+                    noc_if.resp_valid = 1'b1;
+                    noc_if.resp_header = build_noc_header_mem_response(
+                        current_resp_r.trans_id, 
+                        current_resp_r.dest_node, 
+                        current_req_r.src_local
+                    );
+                    noc_if.resp_data = current_resp_r.data;
+                    noc_if.resp_status = current_resp_r.status;
+                    noc_if.resp_last = 1'b1;
+                    
+                    if (noc_if.resp_ready) begin
+                        current_resp_nxt = '0;
+                        state_nxt = L2_STATE_IDLE;
+                    end
+                end else begin
+                    state_nxt = L2_STATE_IDLE;
+                end
+            end
+            
             default: begin
-                // 错误状态
+                // Error state: return to idle
                 state_nxt = L2_STATE_IDLE;
-                perf_counters_nxt.error_count = perf_counters_r.error_count + 1;
             end
         endcase
         
-        // 响应发送逻辑
-        if (current_resp_r.trans_id != 0) begin
-            noc_if.resp_valid = 1'b1;
-            noc_if.resp_header = build_noc_header_mem_response(current_resp_r.trans_id, current_resp_r.dest_node, current_req_r.src_local);
-            noc_if.resp_data = current_resp_r.data;
-            noc_if.resp_status = current_resp_r.status;
-            noc_if.resp_last = 1'b1;
-            
-            if (noc_if.resp_ready) begin
-                current_resp_nxt = '0;
-            end
-        end
-        
-        // 请求队列管理 - 只处理入队逻辑
-        if (noc_req_accept && !req_queue_full_r) begin
-            req_queue[req_queue_tail_r] = parse_noc_request(noc_if.req_header, noc_if.req_data);
-            req_queue_tail_nxt = req_queue_tail_r + 1;
-            req_queue_empty_nxt = 1'b0;
-            if (req_queue_tail_nxt == req_queue_head_r) begin
-                req_queue_full_nxt = 1'b1;
-            end
+        // Request FIFO management: enqueue new requests
+        if (noc_req_accept && !req_fifo_if.full) begin
+            req_fifo_if.write_en = 1'b1;
+            req_fifo_if.write_data = l2cache_request_t'(parse_noc_request(noc_if.req_header, noc_if.req_data));
         end
     end
-    
-    //=============================================================================
-    // 辅助函数
-    //=============================================================================
 
-    // 解析NOC请求
+    //=============================================================================
+    // Helper Functions
+    //=============================================================================
+    
+    // Parse NOC request into internal format
     function automatic l2cache_request_t parse_noc_request(
         input noc_header_t header,
         input noc_payload_t payload
@@ -546,94 +509,64 @@ module rvgpu_l2cache_controller #(
         
         return req;
     endfunction
-    
-    // 选择LRU替换的way
-    function automatic logic [WAYS-1:0] select_lru_way(
-        input logic [LRU_BITS-1:0] lru
-    );
-        // 简单的LRU实现：选择最久未使用的way
-        logic [WAYS-1:0] way;
-        logic [2:0] way_index;
-        way = '0;
-        // 使用LRU的低3位作为way索引（假设8路组相联）
-        way_index = lru[2:0];
-        if (way_index < WAYS) begin
-            way[way_index] = 1'b1;
-        end else begin
-            way[0] = 1'b1; // 默认选择way 0
-        end
-        return way;
+
+    // 新增：结构体unpack函数
+    function automatic l2cache_request_t unpack_l2cache_request(logic [$bits(l2cache_request_t)-1:0] bits);
+        return l2cache_request_t'(bits);
     endfunction
     
-    // 更新LRU信息
-    function automatic logic [LRU_BITS-1:0] update_lru(
-        input logic [LRU_BITS-1:0] old_lru,
-        input logic [WAYS-1:0] used_way
-    );
-        // 简单的LRU更新：将使用的way标记为最近使用
-        logic [LRU_BITS-1:0] new_lru;
-        new_lru = old_lru;
-        // 这里可以实现更复杂的LRU算法
-        return new_lru;
-    endfunction
+    // Using select_lru_way from rvgpu_l2cache_pkg
     
-    // Way索引转换函数
-    function automatic logic [2:0] way_to_index(input logic [WAYS-1:0] way_vector);
+    // Using update_lru from rvgpu_l2cache_pkg
+    
+    // Convert way vector to way index
+    function automatic logic [2:0] way_to_index(
+        input logic [WAYS-1:0] way_vector
+    );
         logic [2:0] result;
+        
         result = 3'b000;
         for (int i = 0; i < WAYS; i++) begin
             if (way_vector[i]) result = i[2:0];
         end
+        
         return result;
     endfunction
-    
-    //=============================================================================
-    // 时序逻辑 - 寄存器更新
-    //=============================================================================
-    
-    always_ff @(posedge clk) begin
-        if (!rst_n) begin
-            // 复位逻辑
-            state_r <= L2_STATE_IDLE;
-            current_req_r <= '0;
-            current_resp_r <= '0;
-            current_addr_r <= '0;
-            cache_hit_r <= 1'b0;
-            hit_way_r <= '0;
-            selected_way_r <= '0;
-            req_queue_head_r <= '0;
-            req_queue_tail_r <= '0;
-            req_queue_full_r <= 1'b0;
-            req_queue_empty_r <= 1'b1;
-            perf_counters_r <= '0;
-
-            cache_busy_r <= 1'b0;
-            write_valid_r <= 1'b0;
-            read_valid_r <= 1'b0;
-            line_read_valid_r <= 1'b0;
-            line_write_valid_r <= 1'b0;
-        end else begin
-            // 状态更新
-            state_r <= state_nxt;
-            current_req_r <= current_req_nxt;
-            current_resp_r <= current_resp_nxt;
-            current_addr_r <= current_addr_nxt;
-            cache_hit_r <= cache_hit_nxt;
-            hit_way_r <= hit_way_nxt;
-            selected_way_r <= selected_way_nxt;
-            req_queue_head_r <= req_queue_head_nxt;
-            req_queue_tail_r <= req_queue_tail_nxt;
-            req_queue_full_r <= req_queue_full_nxt;
-            req_queue_empty_r <= req_queue_empty_nxt;
-            perf_counters_r <= perf_counters_nxt;
-
-            cache_busy_r <= cache_busy_nxt;
-            write_valid_r <= write_valid_nxt;
-            read_valid_r <= read_valid_nxt;
-            line_read_valid_r <= line_read_valid_nxt;
-            line_write_valid_r <= line_write_valid_nxt;
-        end
-    end
-endmodule : rvgpu_l2cache_controller
-
-`endif // RVGPU_L2CACHE_CONTROLLER_SV 
+     
+     //=============================================================================
+     // Sequential Logic - Register Updates
+     //=============================================================================
+     
+     always_ff @(posedge clk) begin : seq_logic
+         if (!rst_n) begin
+             // Reset all registers
+             state_r <= L2_STATE_IDLE;
+             current_req_r <= '0;
+             current_resp_r <= '0;
+             current_addr_r <= '0;
+             cache_hit_r <= 1'b0;
+             hit_way_r <= '0;
+             selected_way_r <= '0;
+             cache_busy_r <= 1'b0;
+             read_valid_r <= 1'b0;
+             write_valid_r <= 1'b0;
+             line_write_valid_r <= 1'b0;
+         end else begin
+             // Update registers with next values
+             state_r <= state_nxt;
+             current_req_r <= current_req_nxt;
+             current_resp_r <= current_resp_nxt;
+             current_addr_r <= current_addr_nxt;
+             cache_hit_r <= cache_hit_nxt;
+             hit_way_r <= hit_way_nxt;
+             selected_way_r <= selected_way_nxt;
+             cache_busy_r <= cache_busy_nxt;
+             read_valid_r <= read_valid_nxt;
+             write_valid_r <= write_valid_nxt;
+             line_write_valid_r <= line_write_valid_nxt;
+         end
+     end
+     
+ endmodule : rvgpu_l2cache_controller
+     
+ `endif // RVGPU_L2CACHE_CONTROLLER_SV

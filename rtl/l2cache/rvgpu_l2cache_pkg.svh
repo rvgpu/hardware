@@ -71,6 +71,13 @@ package rvgpu_l2cache_pkg;
     // L2 Cache Data Structures
     //=============================================================================
     
+    // 缓存地址结构定义
+    typedef struct packed {
+        logic [`RVGPU_CONST_L2CACHE_TAG_BITS-1:0]       tag;
+        logic [`RVGPU_CONST_L2CACHE_INDEX_BITS-1:0]     index;
+        logic [`RVGPU_CONST_L2CACHE_OFFSET_BITS-1:0]    offset;
+    } cache_addr_t;
+    
     // Tag条目结构（使用固定大小，避免循环依赖）
     typedef struct packed {
         logic [7:0][31:0] tag;           // 每个way的地址标签（最多8路）
@@ -93,7 +100,8 @@ package rvgpu_l2cache_pkg;
         logic        read;                // 读操作
         logic        write;               // 写操作
         logic [7:0]  trans_id;            // 事务ID
-        logic [3:0]  src_node;            // 源节点ID
+        logic [7:0]  src_node;            // 源节点ID
+        logic [1:0]  src_local;           // 源本地地址
         logic [255:0] data;               // 写数据
         logic [31:0] strb;                // 写使能
     } l2cache_request_t;
@@ -103,10 +111,41 @@ package rvgpu_l2cache_pkg;
         logic [255:0] data;               // 读数据
         logic [1:0]   status;             // 响应状态
         logic [7:0]   trans_id;           // 事务ID
-        logic [3:0]   dest_node;          // 目标节点ID
+        logic [7:0]   dest_node;          // 目标节点ID
         logic         hit;                // 缓存命中
         logic         dirty;              // 脏位
     } l2cache_response_t;
+    
+    //=============================================================================
+    // 地址转换函数
+    //=============================================================================
+    
+    // 缓存地址转换为64位地址
+    function automatic logic [63:0] cache_addr_to_addr64(cache_addr_t addr);
+        return {addr.tag, addr.index, addr.offset};
+    endfunction
+    
+    // 64位地址转换为缓存地址
+    function automatic cache_addr_t addr64_to_cache_addr(logic [63:0] addr64);
+        localparam int OFFSET_LO = 0;
+        localparam int OFFSET_HI = `RVGPU_CONST_L2CACHE_OFFSET_BITS - 1;
+        localparam int INDEX_LO = OFFSET_HI + 1;
+        localparam int INDEX_HI = INDEX_LO + `RVGPU_CONST_L2CACHE_INDEX_BITS - 1;
+        localparam int TAG_LO = INDEX_HI + 1;
+        localparam int TAG_HI = TAG_LO + `RVGPU_CONST_L2CACHE_TAG_BITS - 1;
+
+        cache_addr_t addr;
+        addr.tag = addr64[TAG_HI:TAG_LO];
+        addr.index = addr64[INDEX_HI:INDEX_LO];
+        addr.offset = addr64[OFFSET_HI:OFFSET_LO];
+        return addr;
+    endfunction
+    
+    // 获取对齐的内存请求地址
+    function automatic logic [63:0] request_mem_addr_aligned(cache_addr_t addr);
+        logic [`RVGPU_CONST_L2CACHE_OFFSET_BITS-1:0] zero_offset = 0;
+        return {addr.tag, addr.index, zero_offset};
+    endfunction
     
     //=============================================================================
     // MESI状态定义
@@ -141,13 +180,16 @@ package rvgpu_l2cache_pkg;
     typedef enum logic [3:0] {
         L2_STATE_IDLE          = 4'h0,    // 空闲状态
         L2_STATE_TAG_LOOKUP    = 4'h1,    // Tag查找
-        L2_STATE_DATA_ACCESS   = 4'h2,    // 数据访问
-        L2_STATE_MISS_HANDLE   = 4'h3,    // 未命中处理
-        L2_STATE_MEMORY_ACCESS = 4'h4,    // 内存访问
-        L2_STATE_WRITE_BACK    = 4'h5,    // 写回
-        L2_STATE_EVICT         = 4'h6,    // 驱逐
-        L2_STATE_SYNC          = 4'h7,    // 同步
-        L2_STATE_ERROR         = 4'h8     // 错误状态
+        L2_STATE_TAG_WAIT      = 4'h2,    // Tag等待
+        L2_STATE_DATA_ACCESS   = 4'h3,    // 数据访问
+        L2_STATE_MISS_HANDLE   = 4'h4,    // 未命中处理
+        L2_STATE_MEMORY_ACCESS = 4'h5,    // 内存访问
+        L2_STATE_TAG_UPDATE    = 4'h6,    // Tag更新
+        L2_STATE_RESPONSE      = 4'h7,    // 响应
+        L2_STATE_WRITE_BACK    = 4'h8,    // 写回
+        L2_STATE_EVICT         = 4'h9,    // 驱逐
+        L2_STATE_SYNC          = 4'ha,    // 同步
+        L2_STATE_ERROR         = 4'hb     // 错误状态
     } l2cache_state_t;
     
     //=============================================================================
@@ -276,9 +318,12 @@ package rvgpu_l2cache_pkg;
         case (state)
             L2_STATE_IDLE: return "IDLE";
             L2_STATE_TAG_LOOKUP: return "TAG_LOOKUP";
+            L2_STATE_TAG_WAIT: return "TAG_WAIT";
             L2_STATE_DATA_ACCESS: return "DATA_ACCESS";
             L2_STATE_MISS_HANDLE: return "MISS_HANDLE";
             L2_STATE_MEMORY_ACCESS: return "MEMORY_ACCESS";
+            L2_STATE_TAG_UPDATE: return "TAG_UPDATE";
+            L2_STATE_RESPONSE: return "RESPONSE";
             L2_STATE_WRITE_BACK: return "WRITE_BACK";
             L2_STATE_EVICT: return "EVICT";
             L2_STATE_SYNC: return "SYNC";
@@ -316,9 +361,6 @@ package rvgpu_l2cache_pkg;
             default: return "UNKNOWN";
         endcase
     endfunction
-
-    `include "rvgpu_l2cache_types.svh"
-
 
 endpackage : rvgpu_l2cache_pkg
 

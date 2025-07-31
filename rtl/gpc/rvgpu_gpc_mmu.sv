@@ -313,11 +313,13 @@ module rvgpu_gpc_mmu #(
                     // 等待NOC Adapter响应
                     noc_if.m_resp_ready <= 1'b1;
                     
-                    if (noc_if.m_resp_valid) begin
+                    if (noc_if.m_resp_valid && noc_if.m_resp_ready) begin
                         noc_if.m_resp_ready <= 1'b0;
                         
                         // 从响应数据中提取信息 - 构建完整的物理地址
                         current_paddr <= {noc_if.m_resp_data[PA_WIDTH-1:PAGE_OFFSET_BITS], current_req.vaddr[PAGE_OFFSET_BITS-1:0]};
+
+                        `GPC_PRINT("MMU", $sformatf("WAIT_NOC, current_paddr: 0x%h", current_paddr));
                         
                         if (!noc_if.m_resp_data[28]) begin // 假设fault位在data[28]
                             // 如果没有错误，更新TLB

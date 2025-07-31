@@ -453,29 +453,6 @@ module rvgpu_gpc_noc_adapter #(
         noc_external_if.m_resp_ready = 1'b0;
         
         case (resp_route_state_r)
-            RESP_ROUTE_IDLE: begin
-                // 在空闲状态下，根据NOC响应的消息类型预先设置ready信号
-                // 这样可以确保状态转换和ready信号设置在同一周期内完成
-                if (noc_external_if.m_resp_valid) begin
-                    case (get_noc_header_msg_type(noc_external_if.m_resp_header))
-                        MSG_MEM_READ_RESP, MSG_MEM_WRITE_RESP: begin
-                            noc_external_if.m_resp_ready = l15_cache_if.m_resp_ready;
-                        end
-                        MSG_MMU_RESP: begin
-                            noc_external_if.m_resp_ready = mmu_if.m_resp_ready;
-                        end
-                        MSG_COMPUTE_RESP: begin
-                            noc_external_if.m_resp_ready = scheduler_if.m_resp_ready;
-                        end
-                        default: begin
-                            noc_external_if.m_resp_ready = 1'b0;
-                        end
-                    endcase
-                end else begin
-                    noc_external_if.m_resp_ready = 1'b0;
-                end
-            end
-            
             RESP_ROUTE_L15: begin
                 // 设置L15 Cache的ready信号，等待NOC的响应
                 noc_external_if.m_resp_ready = l15_cache_if.m_resp_ready;

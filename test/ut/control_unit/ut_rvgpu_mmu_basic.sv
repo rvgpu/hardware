@@ -2,7 +2,7 @@
 
 `include "svunit_defines.svh"
 `include "rvgpu_mmu_test_base.svh"
-`include "rvgpu_constant_mmu.svh"
+`include "rvgpu_constant.svh"
 `include "rvgpu_clk_rst.svh"
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_mmu_if.svh"

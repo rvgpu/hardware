@@ -41,7 +41,10 @@
 // L2Cache Configuration
 //=============================================================================
 `define L2CACHE_SLICE_NUMBER                1
-`define L2CACHE_SIZE                        512  // KB
+`define L2CACHE_CONFIG_WAYS                 8
+`define L2CACHE_CONFIG_SETS                 1024
+`define L2CACHE_CONFIG_LINE_WIDTH           256
+`define L2CACHE_CONFIG_SIZE                 (`L2CACHE_CONFIG_WAYS * `L2CACHE_CONFIG_SETS * `L2CACHE_CONFIG_LINE_WIDTH / 8)
 
 //=============================================================================
 // Debug Configuration

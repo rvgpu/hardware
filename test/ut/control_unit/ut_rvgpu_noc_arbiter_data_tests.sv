@@ -279,7 +279,7 @@ module rvgpu_noc_arbiter_data_tests_unit_test;
         noc_if.m_resp_valid = 1'b1;
         noc_if.m_resp_header = build_noc_header_mem_response(8'h50, NODE_L2_CACHE, NOC_NODE_CONTROL_JD);
         noc_if.m_resp_data = test_base.test_patterns[i];
-        noc_if.m_resp_status = RESP_OKAY;
+        noc_if.m_resp_status = NOC_RESP_OKAY;
         noc_if.m_resp_last = 1'b1;
         
         step(1);
@@ -289,7 +289,7 @@ module rvgpu_noc_arbiter_data_tests_unit_test;
         `FAIL_IF(dut.route_state !== dut.RESP_ROUTE_CP)
         `FAIL_IF(cp_if.m_resp_valid !== 1'b1)
         `FAIL_IF(cp_if.m_resp_data !== test_base.test_patterns[i])
-        `FAIL_IF(cp_if.m_resp_status !== RESP_OKAY)
+        `FAIL_IF(cp_if.m_resp_status !== NOC_RESP_OKAY)
         
         // Complete handshake
         cp_if.m_resp_ready = 1'b1;
@@ -303,7 +303,7 @@ module rvgpu_noc_arbiter_data_tests_unit_test;
         noc_if.m_resp_valid = 1'b0;
         noc_if.m_resp_header = 32'h0;
         noc_if.m_resp_data = 256'h0;
-        noc_if.m_resp_status = RESP_OKAY;
+        noc_if.m_resp_status = NOC_RESP_OKAY;
         noc_if.m_resp_last = 1'b0;
         step(1);
       end

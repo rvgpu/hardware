@@ -77,10 +77,10 @@ typedef struct packed {
 
 // 响应状态码
 typedef enum l2_t {
-    RESP_OKAY               = 2'b00,    // 正常完成
-    RESP_EXOKAY             = 2'b01,    // 独占访问正常
-    RESP_SLVERR             = 2'b10,    // 从设备错误
-    RESP_DECERR             = 2'b11     // 解码错误
+    NOC_RESP_OKAY               = 2'b00,    // 正常完成
+    NOC_RESP_EXOKAY             = 2'b01,    // 独占访问正常
+    NOC_RESP_SLVERR             = 2'b10,    // 从设备错误
+    NOC_RESP_DECERR             = 2'b11     // 解码错误
 } noc_resp_t;
 
 // noc size与axi awsize/arsize 相同

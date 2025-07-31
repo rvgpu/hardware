@@ -47,11 +47,6 @@ localparam int L2CACHE_TAG_BITS = `RVGPU_CONST_L2CACHE_TAG_BITS;
 localparam int L2CACHE_WAYS = `RVGPU_CONST_L2CACHE_WAYS;
 localparam int L2CACHE_LRU_BITS = `RVGPU_CONST_L2CACHE_LRU_BITS;
 
-// 响应状态码
-localparam int L2CACHE_RESP_OKAY   = 2'b00;
-localparam int L2CACHE_RESP_SLVERR = 2'b10;
-localparam int L2CACHE_RESP_DECERR = 2'b11;
-
 // MESI缓存一致性状态
 localparam int L2CACHE_MESI_INVALID   = 2'b00;
 localparam int L2CACHE_MESI_EXCLUSIVE = 2'b01;
@@ -65,6 +60,12 @@ localparam int L2CACHE_NOC_HEADER_WIDTH = `RVGPU_CONST_NOC_HEADER_WIDTH;
 //=============================================================================
 // L2 Cache Data Structures
 //=============================================================================
+
+typedef enum logic [1:0] {
+    L2CACHE_RESP_OKAY   = 2'b00,
+    L2CACHE_RESP_SLVERR = 2'b10,
+    L2CACHE_RESP_DECERR = 2'b11
+} l2cache_resp_status_t;
 
 // 缓存地址结构定义
 typedef struct packed {

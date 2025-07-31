@@ -63,7 +63,7 @@ module rvgpu_internal_noc_basic_unit_test;
     control_unit_if.s_resp_valid = 0;
     control_unit_if.s_resp_header = 0;
     control_unit_if.s_resp_data = 0;
-    control_unit_if.s_resp_status = RESP_OKAY;
+    control_unit_if.s_resp_status = NOC_RESP_OKAY;
     control_unit_if.s_resp_last = 0;
     control_unit_if.s_req_ready = 0;
 
@@ -77,7 +77,7 @@ module rvgpu_internal_noc_basic_unit_test;
     l2cache_if.s_resp_valid = 0;
     l2cache_if.s_resp_header = 0;
     l2cache_if.s_resp_data = 0;
-    l2cache_if.s_resp_status = RESP_OKAY;
+    l2cache_if.s_resp_status = NOC_RESP_OKAY;
     l2cache_if.s_resp_last = 0;
     l2cache_if.s_req_ready = 0;
 
@@ -96,7 +96,7 @@ module rvgpu_internal_noc_basic_unit_test;
       shader_core_if[0].s_resp_valid = 0;
       shader_core_if[0].s_resp_header = 0;
       shader_core_if[0].s_resp_data = 0;
-      shader_core_if[0].s_resp_status = RESP_OKAY;
+      shader_core_if[0].s_resp_status = NOC_RESP_OKAY;
       shader_core_if[0].s_resp_last = 0;
       shader_core_if[0].s_req_ready = 0;
     end
@@ -110,7 +110,7 @@ module rvgpu_internal_noc_basic_unit_test;
       shader_core_if[1].s_resp_valid = 0;
       shader_core_if[1].s_resp_header = 0;
       shader_core_if[1].s_resp_data = 0;
-      shader_core_if[1].s_resp_status = RESP_OKAY;
+      shader_core_if[1].s_resp_status = NOC_RESP_OKAY;
       shader_core_if[1].s_resp_last = 0;
       shader_core_if[1].s_req_ready = 0;
     end
@@ -154,7 +154,7 @@ module rvgpu_internal_noc_basic_unit_test;
     `FAIL_IF(control_unit_if.s_resp_valid !== 1'b0)
     `FAIL_IF(control_unit_if.s_resp_header !== 32'h0)
     `FAIL_IF(control_unit_if.s_resp_data !== 256'h0)
-    `FAIL_IF(control_unit_if.s_resp_status !== RESP_OKAY)
+    `FAIL_IF(control_unit_if.s_resp_status !== NOC_RESP_OKAY)
     `FAIL_IF(control_unit_if.s_resp_last !== 1'b0)
     `FAIL_IF(control_unit_if.s_req_ready !== 1'b0)
 
@@ -167,7 +167,7 @@ module rvgpu_internal_noc_basic_unit_test;
     `FAIL_IF(l2cache_if.s_resp_valid !== 1'b0)
     `FAIL_IF(l2cache_if.s_resp_header !== 32'h0)
     `FAIL_IF(l2cache_if.s_resp_data !== 256'h0)
-    `FAIL_IF(l2cache_if.s_resp_status !== RESP_OKAY)
+    `FAIL_IF(l2cache_if.s_resp_status !== NOC_RESP_OKAY)
     `FAIL_IF(l2cache_if.s_resp_last !== 1'b0)
     `FAIL_IF(l2cache_if.s_req_ready !== 1'b0)
 
@@ -180,7 +180,7 @@ module rvgpu_internal_noc_basic_unit_test;
     `FAIL_IF(shader_core_if[0].s_resp_valid !== 1'b0)
     `FAIL_IF(shader_core_if[0].s_resp_header !== 32'h0)
     `FAIL_IF(shader_core_if[0].s_resp_data !== 256'h0)
-    `FAIL_IF(shader_core_if[0].s_resp_status !== RESP_OKAY)
+    `FAIL_IF(shader_core_if[0].s_resp_status !== NOC_RESP_OKAY)
     `FAIL_IF(shader_core_if[0].s_resp_last !== 1'b0)
     `FAIL_IF(shader_core_if[0].s_req_ready !== 1'b0)
 
@@ -193,7 +193,7 @@ module rvgpu_internal_noc_basic_unit_test;
     `FAIL_IF(shader_core_if[1].s_resp_valid !== 1'b0)
     `FAIL_IF(shader_core_if[1].s_resp_header !== 32'h0)
     `FAIL_IF(shader_core_if[1].s_resp_data !== 256'h0)
-    `FAIL_IF(shader_core_if[1].s_resp_status !== RESP_OKAY)
+    `FAIL_IF(shader_core_if[1].s_resp_status !== NOC_RESP_OKAY)
     `FAIL_IF(shader_core_if[1].s_resp_last !== 1'b0)
     `FAIL_IF(shader_core_if[1].s_req_ready !== 1'b0)
     
@@ -283,7 +283,7 @@ module rvgpu_internal_noc_basic_unit_test;
     l2cache_if.s_resp_valid = 1'b1;
     l2cache_if.s_resp_header = resp_header;
     l2cache_if.s_resp_data = resp_data;
-    l2cache_if.s_resp_status = RESP_OKAY;
+    l2cache_if.s_resp_status = NOC_RESP_OKAY;
     l2cache_if.s_resp_last = 1'b1;
     
     step(1); // 使用SVUnit的step任务产生一个时钟周期
@@ -293,14 +293,14 @@ module rvgpu_internal_noc_basic_unit_test;
     `FAIL_IF(x_rvgpu_internal_noc.port_resp_out[NODE_L2_CACHE].valid !== 1'b1)
     `FAIL_IF(x_rvgpu_internal_noc.port_resp_out[NODE_L2_CACHE].header !== resp_header)
     `FAIL_IF(x_rvgpu_internal_noc.port_resp_out[NODE_L2_CACHE].data !== resp_data)
-    `FAIL_IF(x_rvgpu_internal_noc.port_resp_out[NODE_L2_CACHE].status !== RESP_OKAY)
+    `FAIL_IF(x_rvgpu_internal_noc.port_resp_out[NODE_L2_CACHE].status !== NOC_RESP_OKAY)
     `FAIL_IF(x_rvgpu_internal_noc.port_resp_out[NODE_L2_CACHE].last !== 1'b1)
     
     // 复位信号
     l2cache_if.s_resp_valid = 1'b0;
     l2cache_if.s_resp_header = 32'h0;
     l2cache_if.s_resp_data = 256'h0;
-    l2cache_if.s_resp_status = RESP_OKAY;
+    l2cache_if.s_resp_status = NOC_RESP_OKAY;
     l2cache_if.s_resp_last = 1'b0;
     
     $display("@%0t: Response path connectivity test passed", $time);

@@ -463,7 +463,7 @@ module rvgpu_noc_arbiter_baisc_unit_test;
       mmu_if.s_resp_valid = 1'b1;
       mmu_if.s_resp_header = slave_resp_packet.header;
       mmu_if.s_resp_data = slave_resp_packet.data;
-      mmu_if.s_resp_status = RESP_OKAY;
+      mmu_if.s_resp_status = NOC_RESP_OKAY;
       mmu_if.s_resp_last = 1'b1;
       
       step(1);
@@ -473,7 +473,7 @@ module rvgpu_noc_arbiter_baisc_unit_test;
       `FAIL_IF(noc_if.s_resp_valid !== 1'b1)
       `FAIL_IF(noc_if.s_resp_header !== slave_resp_packet.header)
       `FAIL_IF(noc_if.s_resp_data !== slave_resp_packet.data)
-      `FAIL_IF(noc_if.s_resp_status !== RESP_OKAY)
+      `FAIL_IF(noc_if.s_resp_status !== NOC_RESP_OKAY)
       `FAIL_IF(noc_if.s_resp_last !== 1'b1)
       `FAIL_IF(mmu_if.s_resp_ready !== 1'b1)  // MMU should be ready when NOC is ready
       
@@ -484,7 +484,7 @@ module rvgpu_noc_arbiter_baisc_unit_test;
       mmu_if.s_resp_valid = 1'b0;
       mmu_if.s_resp_header = 32'h0;
       mmu_if.s_resp_data = 256'h0;
-      mmu_if.s_resp_status = RESP_OKAY;
+      mmu_if.s_resp_status = NOC_RESP_OKAY;
       mmu_if.s_resp_last = 1'b0;
       
       $display("============== 5. Slave interface direct connection to MMU test passed ==============");
@@ -527,7 +527,7 @@ module rvgpu_noc_arbiter_baisc_unit_test;
       mmu_if.s_resp_valid = 1'b1;
       mmu_if.s_resp_header = 32'hDEADBEEF;
       mmu_if.s_resp_data = 256'hCAFEBABE;
-      mmu_if.s_resp_status = RESP_OKAY;
+      mmu_if.s_resp_status = NOC_RESP_OKAY;
       mmu_if.s_resp_last = 1'b1;
       noc_if.s_resp_ready = 1'b1;
       
@@ -546,7 +546,7 @@ module rvgpu_noc_arbiter_baisc_unit_test;
       mmu_if.s_resp_valid = 1'b0;
       mmu_if.s_resp_header = 32'h0;
       mmu_if.s_resp_data = 256'h0;
-      mmu_if.s_resp_status = RESP_OKAY;
+      mmu_if.s_resp_status = NOC_RESP_OKAY;
       mmu_if.s_resp_last = 1'b0;
       
       $display("============== 6. Command Processor slave interface unused test passed ==============");

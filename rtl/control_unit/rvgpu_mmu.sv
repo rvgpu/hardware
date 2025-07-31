@@ -21,7 +21,7 @@
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_mmu_if.svh"
 `include "rvgpu_debug.svh"
-`include "rvgpu_constant_mmu.svh"
+`include "rvgpu_constant.svh"
 `include "rvgpu_mmu_common.svh"
 `include "rvgpu_noc_message.svh"
 `include "rvgpu_fifo_if.svh"

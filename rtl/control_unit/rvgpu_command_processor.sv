@@ -67,7 +67,7 @@ module rvgpu_command_processor #(
     assign noc_if.s_resp_valid = 1'b0;     // 不发送slave响应
     assign noc_if.s_resp_header = '0;
     assign noc_if.s_resp_data = '0;
-    assign noc_if.s_resp_status = 2'b00;   // RESP_OKAY
+    assign noc_if.s_resp_status = NOC_RESP_OKAY;   // NOC_RESP_OKAY
     assign noc_if.s_resp_last = 1'b0;
     
     //=============================================================================

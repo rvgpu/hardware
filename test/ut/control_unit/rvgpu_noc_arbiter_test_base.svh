@@ -73,7 +73,7 @@ class rvgpu_noc_arbiter_test_base;
     cp_if.s_resp_valid = 0;
     cp_if.s_resp_header = 0;
     cp_if.s_resp_data = 0;
-    cp_if.s_resp_status = RESP_OKAY;
+    cp_if.s_resp_status = NOC_RESP_OKAY;
     cp_if.s_resp_last = 0;
 
     // MMU interface - device side (test acts as device, DUT acts as NOC)
@@ -87,7 +87,7 @@ class rvgpu_noc_arbiter_test_base;
     mmu_if.s_resp_valid = 0;
     mmu_if.s_resp_header = 0;
     mmu_if.s_resp_data = 0;
-    mmu_if.s_resp_status = RESP_OKAY;
+    mmu_if.s_resp_status = NOC_RESP_OKAY;
     mmu_if.s_resp_last = 0;
 
     // NOC interface - NOC side (test acts as NOC, DUT acts as device)
@@ -95,7 +95,7 @@ class rvgpu_noc_arbiter_test_base;
     noc_if.m_resp_valid = 0;     // NOC sends responses
     noc_if.m_resp_header = 0;
     noc_if.m_resp_data = 0;
-    noc_if.m_resp_status = RESP_OKAY;
+    noc_if.m_resp_status = NOC_RESP_OKAY;
     noc_if.m_resp_last = 0;
     noc_if.s_req_valid = 0;      // NOC sends slave requests
     noc_if.s_req_header = 0;
@@ -164,7 +164,7 @@ class rvgpu_noc_arbiter_test_base;
     noc_if.m_resp_valid = 1'b1;
     noc_if.m_resp_header = packet.header;
     noc_if.m_resp_data = packet.data;
-    noc_if.m_resp_status = RESP_OKAY;
+    noc_if.m_resp_status = NOC_RESP_OKAY;
     noc_if.m_resp_last = 1'b1;
     $display("@%0t: Sending response - Header: 0x%08x, Data: 0x%064x", 
              $time, packet.header, packet.data);
@@ -175,7 +175,7 @@ class rvgpu_noc_arbiter_test_base;
     noc_if.m_resp_valid = 1'b0;
     noc_if.m_resp_header = 32'h0;
     noc_if.m_resp_data = 256'h0;
-    noc_if.m_resp_status = RESP_OKAY;
+    noc_if.m_resp_status = NOC_RESP_OKAY;
     noc_if.m_resp_last = 1'b0;
   endtask
 
@@ -204,7 +204,7 @@ class rvgpu_noc_arbiter_test_base;
     `FAIL_IF(master_if.m_resp_valid !== 1'b1)
     `FAIL_IF(master_if.m_resp_header !== expected_packet.header)
     `FAIL_IF(master_if.m_resp_data !== expected_packet.data)
-    `FAIL_IF(master_if.m_resp_status !== RESP_OKAY)
+    `FAIL_IF(master_if.m_resp_status !== NOC_RESP_OKAY)
     `FAIL_IF(master_if.m_resp_last !== 1'b1)
     $display("@%0t: Response routing verified", $time);
   endtask

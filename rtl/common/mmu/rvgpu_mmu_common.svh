@@ -17,7 +17,6 @@
 `define RVGPU_MMU_COMMON_SVH
 
 `include "rvgpu_constant.svh"
-`include "rvgpu_constant_mmu.svh"
 
 //=============================================================================
 // 1. 常量定义 - 使用公共宏

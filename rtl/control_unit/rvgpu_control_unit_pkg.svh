@@ -17,7 +17,6 @@
 `define RVGPU_CONTROL_UNIT_PKG_SV
 
 `include "rvgpu_constant.svh"
-`include "rvgpu_constant_mmu.svh"
 `include "rvgpu_internal_noc_pkg.svh"
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_axi_config.svh"

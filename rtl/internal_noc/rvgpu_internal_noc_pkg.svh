@@ -47,7 +47,7 @@ package rvgpu_internal_noc_pkg;
 
     localparam noc_config_t DEFAULT_NOC_CONFIG = '{
         if_config: DEFAULT_NOC_IF_CONFIG,
-        num_shader_cores: `GPC_NUMBER,
+        num_shader_cores: `CONFIG_GPC_NUMBER,
         debug_enable: 1'b1
     };
 

@@ -42,7 +42,7 @@ module rvgpu_toplevel (
     host_if.slave host_if,
     
     // Memory Interface (AXI Master) - Each L2Cache Slice has one
-    memory_if.master mem_if [`L2CACHE_SLICE_NUMBER],
+    memory_if.master mem_if [`CONFIG_L2CACHE_SLICE_NUMBER],
     
     // GPU Interrupt Output
     output logic gpu_irq

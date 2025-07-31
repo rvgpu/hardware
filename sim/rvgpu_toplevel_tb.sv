@@ -41,11 +41,11 @@ module rvgpu_toplevel_tb;
     // GPU中断信号
     logic gpu_irq;
 
-    memory_if mem_if [`L2CACHE_SLICE_NUMBER]();
+    memory_if mem_if [`CONFIG_L2CACHE_SLICE_NUMBER]();
     host_if host_if_inst();
     
     rvgpu_host_axi host_axi;
-    rvgpu_memory_axi mem_axi[`L2CACHE_SLICE_NUMBER];
+    rvgpu_memory_axi mem_axi[`CONFIG_L2CACHE_SLICE_NUMBER];
     
     // 时钟生成器实例
     rvgpu_clk_rst_gen #(
@@ -86,14 +86,14 @@ module rvgpu_toplevel_tb;
     // 初始化mem_axi[`L2CACHE_SLICE_NUMBER]
     genvar gi;
     generate
-        for (gi = 0; gi < `L2CACHE_SLICE_NUMBER; gi = gi + 1) begin : mem_axi_gen
+        for (gi = 0; gi < `CONFIG_L2CACHE_SLICE_NUMBER; gi = gi + 1) begin : mem_axi_gen
             initial begin
                 mem_axi[gi] = new(mem_if[gi], clk_mgr, gi);
             end
         end : mem_axi_gen
     endgenerate
     generate
-        for (gi = 0; gi < `L2CACHE_SLICE_NUMBER; gi = gi + 1) begin : mem_axi_init  
+        for (gi = 0; gi < `CONFIG_L2CACHE_SLICE_NUMBER; gi = gi + 1) begin : mem_axi_init  
             initial begin
                 mem_axi[gi].init();
             end
@@ -124,7 +124,7 @@ module rvgpu_toplevel_tb;
     // GPU内存访问监控和处理
     genvar i;
     generate
-        for (i = 0; i < `L2CACHE_SLICE_NUMBER; i = i + 1) begin : gpu_mem_monitor
+        for (i = 0; i < `CONFIG_L2CACHE_SLICE_NUMBER; i = i + 1) begin : gpu_mem_monitor
             initial begin
                 clk_mgr.wait_clock_stable(5);
                 fork

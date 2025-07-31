@@ -19,36 +19,42 @@
 //=============================================================================
 // Host Interface Configuration (AXI-Lite Slave)
 //=============================================================================
-`define HOST_INTERFACE_ADDR_WIDTH           64
-`define HOST_INTERFACE_DATA_WIDTH           64
+`define CONFIG_HOST_INTERFACE_ADDR_WIDTH    64
+`define CONFIG_HOST_INTERFACE_DATA_WIDTH    64
 
 //=============================================================================
 // Memory Interface Configuration (AXI Master)
 //=============================================================================
-`define MEMORY_INTERFACE_ADDR_WIDTH         64
-`define MEMORY_INTERFACE_DATA_WIDTH         256
+`define CONFIG_MEMORY_INTERFACE_ADDR_WIDTH  64
+`define CONFIG_MEMORY_INTERFACE_DATA_WIDTH  256
 
 //=============================================================================
 // GPC(Graphics Processing Core) Configuration
 //=============================================================================
-`define GPC_NUMBER                          2      // GPC数量
-`define GPC_TPC_NUMBER                      4      // 每个GPC的TPC数量
-`define TPC_SM_NUMBER                       2      // 每个TPC的SM数量
-`define SM_CUDACORE_NUMBER                  32     // 每个SM的CUDACore数量
-`define WARP_THREAD_NUMBER                  32     // 每个WARP的线程数
+`define CONFIG_GPC_NUMBER                   2      // GPC数量
+`define CONFIG_GPC_TPC_NUMBER               4      // 每个GPC的TPC数量
+`define CONFIG_TPC_SM_NUMBER                2      // 每个TPC的SM数量
+`define CONFIG_SM_CUDACORE_NUMBER           32     // 每个SM的CUDACore数量
+`define CONFIG_WARP_THREAD_NUMBER           32     // 每个WARP的线程数
 
 //=============================================================================
 // L2Cache Configuration
 //=============================================================================
-`define L2CACHE_SLICE_NUMBER                1
-`define L2CACHE_CONFIG_WAYS                 8
-`define L2CACHE_CONFIG_SETS                 1024
-`define L2CACHE_CONFIG_LINE_WIDTH           256
-`define L2CACHE_CONFIG_SIZE                 (`L2CACHE_CONFIG_WAYS * `L2CACHE_CONFIG_SETS * `L2CACHE_CONFIG_LINE_WIDTH / 8)
+`define CONFIG_L2CACHE_SLICE_NUMBER         1
+`define CONFIG_L2CACHE_WAYS                 8
+`define CONFIG_L2CACHE_SETS                 1024
+`define CONFIG_L2CACHE_LINE_WIDTH           256
+`define CONFIG_L2CACHE_SIZE                 (`CONFIG_L2CACHE_WAYS * `CONFIG_L2CACHE_SETS * `CONFIG_L2CACHE_LINE_WIDTH / 8)
 
 //=============================================================================
 // Debug Configuration
 //=============================================================================
-`define RVGPU_CONFIG_DEBUG_ENABLE           1
+`define CONFIG_DEBUG_EN                     1
+`define CONFIG_DEBUG_MODULE                 32'hFFFFFFFF
+`define CONFIG_DEBUG_CU_MASK                32'h00000001
+`define CONFIG_DEBUG_GPC_MASK               32'h00000002
+`define CONFIG_DEBUG_L2CACHE_MASK           32'h00000004
+`define CONFIG_DEBUG_MMU_MASK               32'h00000008
+`define CONFIG_DEBUG_NOC_MASK               32'h00000010
 
 `endif // RVGPU_CONFIG_SVH

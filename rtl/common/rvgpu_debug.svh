@@ -16,6 +16,12 @@
 `ifndef RVGPU_DEBUG_SVH
 `define RVGPU_DEBUG_SVH
 
+`define DEBUG_CU_EN         (`CONFIG_DEBUG_EN && (`CONFIG_DEBUG_MODULE & `CONFIG_DEBUG_CU_MASK))
+`define DEBUG_GPC_EN        (`CONFIG_DEBUG_EN && (`CONFIG_DEBUG_MODULE & `CONFIG_DEBUG_GPC_MASK))
+`define DEBUG_L2CACHE_EN    (`CONFIG_DEBUG_EN && (`CONFIG_DEBUG_MODULE & `CONFIG_DEBUG_L2CACHE_MASK))
+`define DEBUG_MMU_EN        (`CONFIG_DEBUG_EN && (`CONFIG_DEBUG_MODULE & `CONFIG_DEBUG_MMU_MASK))
+`define DEBUG_NOC_EN        (`CONFIG_DEBUG_EN && (`CONFIG_DEBUG_MODULE & `CONFIG_DEBUG_NOC_MASK))
+
 // Debug打印宏 - SystemVerilog兼容
 `define DEBUG_PRINT(modulename, msg) \
     $display("@%0t: [%s] %s", $time, modulename, msg)

@@ -21,6 +21,7 @@
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_axi_config.svh"
 `include "rvgpu_interface_axi.svh"
+`include "rvgpu_debug.svh"
 
 package rvgpu_control_unit_pkg;
     //=============================================================================
@@ -59,7 +60,7 @@ package rvgpu_control_unit_pkg;
     localparam control_unit_config_t DEFAULT_CONTROL_UNIT_CONFIG = '{
         cu_parameter: DEFAULT_CONTROL_UNIT_PARAMETER,
         job_dispatcher_parameter: DEFAULT_JOB_DISPATCHER_PARAMETER,
-        debug: `RVGPU_CONFIG_DEBUG_ENABLE
+        debug: `DEBUG_CU_EN
     };
 
     //=============================================================================

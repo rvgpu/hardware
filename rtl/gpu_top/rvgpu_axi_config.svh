@@ -25,9 +25,9 @@ typedef struct packed {
 } host_axi_config_t;
 
 localparam host_axi_config_t DEFAULT_HOST_AXI_CONFIG = '{
-    addr_width: `HOST_INTERFACE_ADDR_WIDTH,
-    data_width: `HOST_INTERFACE_DATA_WIDTH,
-    strb_width: `HOST_INTERFACE_DATA_WIDTH/8
+    addr_width: `CONFIG_HOST_INTERFACE_ADDR_WIDTH,
+    data_width: `CONFIG_HOST_INTERFACE_DATA_WIDTH,
+    strb_width: `CONFIG_HOST_INTERFACE_DATA_WIDTH/8
 };
 
 typedef struct packed {
@@ -38,9 +38,9 @@ typedef struct packed {
 } memory_axi_config_t;
 
 localparam memory_axi_config_t DEFAULT_MEMORY_AXI_CONFIG = '{
-    addr_width: `MEMORY_INTERFACE_ADDR_WIDTH,
-    data_width: `MEMORY_INTERFACE_DATA_WIDTH,
-    strb_width: `MEMORY_INTERFACE_DATA_WIDTH/8,
+    addr_width: `CONFIG_MEMORY_INTERFACE_ADDR_WIDTH,
+    data_width: `CONFIG_MEMORY_INTERFACE_DATA_WIDTH,
+    strb_width: `CONFIG_MEMORY_INTERFACE_DATA_WIDTH/8,
     id_width: 8
 };
 

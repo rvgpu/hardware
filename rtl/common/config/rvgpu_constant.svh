@@ -23,15 +23,15 @@
 // ================================================
 //  Internal NOC Configuration
 // ================================================
-`define RVGPU_CONST_NOC_NUM_SHADER_CORES        `GPC_NUMBER
+`define RVGPU_CONST_NOC_NUM_SHADER_CORES        `CONFIG_GPC_NUMBER
 `define RVGPU_CONST_NOC_HEADER_WIDTH            32
 `define RVGPU_CONST_NOC_DATA_WIDTH              256
 
 // ================================================
 //  Control Unit Configuration
 // ================================================
-`define RVGPU_CONST_CU_AXI_ADDR_WIDTH           `HOST_INTERFACE_ADDR_WIDTH
-`define RVGPU_CONST_CU_AXI_DATA_WIDTH           `HOST_INTERFACE_DATA_WIDTH
+`define RVGPU_CONST_CU_AXI_ADDR_WIDTH           `CONFIG_HOST_INTERFACE_ADDR_WIDTH
+`define RVGPU_CONST_CU_AXI_DATA_WIDTH           `CONFIG_HOST_INTERFACE_DATA_WIDTH
 `define RVGPU_CONST_CU_MAX_PAYLOAD_SIZE         256
 `define RVGPU_CONST_CU_VA_WIDTH                 39
 `define RVGPU_CONST_CU_PA_WIDTH                 39
@@ -43,15 +43,15 @@
 // ================================================
 //  L2Cache Configuration
 // ================================================
-`define RVGPU_CONST_L2CACHE_AXI_ADDR_WIDTH      `MEMORY_INTERFACE_ADDR_WIDTH
-`define RVGPU_CONST_L2CACHE_AXI_DATA_WIDTH      `MEMORY_INTERFACE_DATA_WIDTH
+`define RVGPU_CONST_L2CACHE_AXI_ADDR_WIDTH      `CONFIG_MEMORY_INTERFACE_ADDR_WIDTH
+`define RVGPU_CONST_L2CACHE_AXI_DATA_WIDTH      `CONFIG_MEMORY_INTERFACE_DATA_WIDTH
 
-`define RVGPU_CONST_L2CACHE_SIZE                `L2CACHE_CONFIG_SIZE
-`define RVGPU_CONST_L2CACHE_SLICE_NUMBER        `L2CACHE_SLICE_NUMBER
+`define RVGPU_CONST_L2CACHE_SIZE                `CONFIG_L2CACHE_SIZE
+`define RVGPU_CONST_L2CACHE_SLICE_NUMBER        `CONFIG_L2CACHE_SLICE_NUMBER
 
-`define RVGPU_CONST_L2CACHE_LINE_WIDTH          `L2CACHE_CONFIG_LINE_WIDTH
-`define RVGPU_CONST_L2CACHE_WAYS                `L2CACHE_CONFIG_WAYS
-`define RVGPU_CONST_L2CACHE_SETS                `L2CACHE_CONFIG_SETS
+`define RVGPU_CONST_L2CACHE_LINE_WIDTH          `CONFIG_L2CACHE_LINE_WIDTH
+`define RVGPU_CONST_L2CACHE_WAYS                `CONFIG_L2CACHE_WAYS
+`define RVGPU_CONST_L2CACHE_SETS                `CONFIG_L2CACHE_SETS
 `define RVGPU_CONST_L2CACHE_LINE_STRB           (`RVGPU_CONST_L2CACHE_LINE_WIDTH / 8)
 `define RVGPU_CONST_L2CACHE_OFFSET_BITS         $clog2(`RVGPU_CONST_L2CACHE_LINE_WIDTH / 8)
 `define RVGPU_CONST_L2CACHE_INDEX_BITS          $clog2(`RVGPU_CONST_L2CACHE_SETS)

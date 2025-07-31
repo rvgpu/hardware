@@ -25,9 +25,9 @@ package rvgpu_gpc_pkg;
     } gpc_parameter_t;
 
     localparam gpc_parameter_t DEFAULT_GPC_CONFIG = '{
-        num_tpc:                `GPC_TPC_NUMBER,
-        num_sm_per_tpc:         `TPC_SM_NUMBER,
-        num_sm_per_gpc:         `GPC_TPC_NUMBER * `TPC_SM_NUMBER,
+        num_tpc:                `CONFIG_GPC_TPC_NUMBER,
+        num_sm_per_tpc:         `CONFIG_TPC_SM_NUMBER,
+        num_sm_per_gpc:         `CONFIG_GPC_TPC_NUMBER * `CONFIG_TPC_SM_NUMBER,
         debug:                  1
     };
 

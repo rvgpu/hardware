@@ -118,11 +118,22 @@ typedef struct packed {
     logic [45:0]    reserved3;      // 保留字段3 (46位) - 最低位
 } noc_req_mmu_t;
 
+// MMU响应数据结构
+typedef struct packed {
+    logic [127:0]   paddr;          // 物理地址 (128位)
+    logic [31:0]    reserved1;      // 保留字段1 (32位，值为0)
+    logic [3:0]     tpc_id;         // TPC ID (4位)
+    logic [3:0]     gpc_id;         // GPC ID (4位)
+    logic [31:0]    status;         // 状态标志 (32位，值为0表示正确，非0表示错误)
+    logic [55:0]    reserved0;      // 保留字段0 (56位)
+} noc_resp_mmu_t;
+
 typedef union packed {
     logic [`RVGPU_CONST_CU_MAX_PAYLOAD_SIZE-1:0] payload_256b; // 256bit   
     noc_req_mem_read_t req_mem_read;
     noc_resp_mem_read_t resp_mem_read;
     noc_req_mmu_t req_mmu;
+    noc_resp_mmu_t resp_mmu;
 } noc_payload_t;
 
 
@@ -273,6 +284,67 @@ function automatic noc_payload_t build_noc_payload_request_mmu(
     payload.req_mmu.gpc_id = gpc_id;
     payload.req_mmu.reserved3 = 46'h0;
     return payload;
+endfunction
+
+function automatic noc_payload_t build_noc_payload_response_mmu(
+    input logic [127:0] paddr,
+    input logic [3:0] tpc_id,
+    input logic [3:0] gpc_id,
+    input logic [31:0] status = 32'h0
+);
+    noc_payload_t payload;
+    payload.resp_mmu.paddr = paddr;
+    payload.resp_mmu.reserved1 = 32'h0;
+    payload.resp_mmu.tpc_id = tpc_id;
+    payload.resp_mmu.gpc_id = gpc_id;
+    payload.resp_mmu.status = status;
+    payload.resp_mmu.reserved0 = 56'h0;
+    return payload;
+endfunction
+
+function automatic noc_payload_t build_noc_payload_response_mmu_error(
+    input logic [3:0] tpc_id,
+    input logic [3:0] gpc_id
+);
+    noc_payload_t payload;
+    payload.resp_mmu.paddr = 128'h0;
+    payload.resp_mmu.reserved1 = 32'h0;
+    payload.resp_mmu.tpc_id = tpc_id;
+    payload.resp_mmu.gpc_id = gpc_id;
+    payload.resp_mmu.status = 32'h1;
+    payload.resp_mmu.reserved0 = 56'h0;
+    return payload;
+endfunction
+
+// 直接解析MMU响应数据的函数
+function automatic logic [127:0] get_mmu_response_paddr(input logic [255:0] resp_data);
+    noc_payload_t payload;
+    payload.payload_256b = resp_data;
+    return payload.resp_mmu.paddr;
+endfunction
+
+function automatic logic [3:0] get_mmu_response_tpc_id(input logic [255:0] resp_data);
+    noc_payload_t payload;
+    payload.payload_256b = resp_data;
+    return payload.resp_mmu.tpc_id;
+endfunction
+
+function automatic logic [3:0] get_mmu_response_gpc_id(input logic [255:0] resp_data);
+    noc_payload_t payload;
+    payload.payload_256b = resp_data;
+    return payload.resp_mmu.gpc_id;
+endfunction
+
+function automatic logic [31:0] get_mmu_response_status(input logic [255:0] resp_data);
+    noc_payload_t payload;
+    payload.payload_256b = resp_data;
+    return payload.resp_mmu.status;
+endfunction
+
+function automatic logic is_mmu_response_error(input logic [255:0] resp_data);
+    noc_payload_t payload;
+    payload.payload_256b = resp_data;
+    return (payload.resp_mmu.status != 32'h0);
 endfunction
 
 `endif // RVGPU_NOC_MESSAGE_SVH 

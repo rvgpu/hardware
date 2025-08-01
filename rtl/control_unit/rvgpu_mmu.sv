@@ -384,7 +384,7 @@ module rvgpu_mmu (
                         NOC_NODE_CONTROL_MMU
                     );
                     // 构建响应数据
-                    noc_s_resp_data_nxt = build_mmu_response_data(paddr_r, current_req.tpc_id, current_req.gpc_id);
+                    noc_s_resp_data_nxt = build_noc_payload_response_mmu(paddr_r, current_req.tpc_id, current_req.gpc_id);
                     
                     // 等待NOC接受响应
                     if (noc_if.s_resp_ready) begin
@@ -408,7 +408,7 @@ module rvgpu_mmu (
                         NOC_NODE_CONTROL_MMU
                     );
                     // 构建错误响应数据
-                    noc_s_resp_data_nxt = build_mmu_error_data();
+                    noc_s_resp_data_nxt = build_noc_payload_response_mmu_error(current_req.tpc_id, current_req.gpc_id);
                     
                     // 等待NOC接受响应
                     if (noc_if.s_resp_ready) begin
@@ -594,20 +594,6 @@ module rvgpu_mmu (
     // 检查是否可以处理请求
     function automatic logic can_process_request();
         return !req_buffer_empty && !current_req.pending;
-    endfunction
-    
-    // 构建MMU响应数据
-    function automatic logic [255:0] build_mmu_response_data(
-        input logic [PA_WIDTH-1:0] paddr,
-        input logic [3:0] tpc_id,
-        input logic [3:0] gpc_id
-    );
-        return {paddr, 32'h0, tpc_id, gpc_id};
-    endfunction
-    
-    // 构建MMU错误响应数据
-    function automatic logic [255:0] build_mmu_error_data();
-        return {32'h0, 32'h0, 32'h0, 32'h1}; // 错误标志
     endfunction
 
     //=============================================================================

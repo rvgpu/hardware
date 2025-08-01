@@ -316,17 +316,20 @@ module rvgpu_gpc_mmu #(
                     if (noc_if.m_resp_valid && noc_if.m_resp_ready) begin
                         noc_if.m_resp_ready <= 1'b0;
                         
-                        // 从响应数据中提取信息 - 构建完整的物理地址
-                        current_paddr <= {noc_if.m_resp_data[PA_WIDTH-1:PAGE_OFFSET_BITS], current_req.vaddr[PAGE_OFFSET_BITS-1:0]};
-
-                        `GPC_PRINT("MMU", $sformatf("WAIT_NOC, current_paddr: 0x%h", current_paddr));
-                        
-                        if (!noc_if.m_resp_data[28]) begin // 假设fault位在data[28]
-                            // 如果没有错误，更新TLB
-                            state <= UPDATE_TLB;
-                        end else begin
-                            // 如果有错误，直接发送响应
+                        // 检查是否为错误响应
+                        if (is_mmu_response_error(noc_if.m_resp_data)) begin
+                            // 错误响应，直接发送响应
+                            `GPC_PRINT("MMU", $sformatf("WAIT_NOC, MMU Error Response"));
                             state <= SEND_RESPONSE;
+                        end else begin
+                            // 正常响应，提取物理地址
+                            current_paddr <= get_mmu_response_paddr(noc_if.m_resp_data);
+                            
+                            `GPC_PRINT("MMU", $sformatf("WAIT_NOC, current_paddr: 0x%h, tpc_id: %d, gpc_id: %d", 
+                                     current_paddr, get_mmu_response_tpc_id(noc_if.m_resp_data), get_mmu_response_gpc_id(noc_if.m_resp_data)));
+                            
+                            // 更新TLB
+                            state <= UPDATE_TLB;
                         end
                     end
                 end

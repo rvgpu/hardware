@@ -9,6 +9,7 @@
 +incdir+$RVGPU_HARDWARE/rtl/common/fifo
 +incdir+$RVGPU_HARDWARE/rtl/common/mmu
 +incdir+$RVGPU_HARDWARE/rtl/common/sram
++incdir+$RVGPU_HARDWARE/rtl/common/noc
 +incdir+$RVGPU_HARDWARE/rtl/interface
 +incdir+$RVGPU_HARDWARE/rtl/gpu_top
 +incdir+$RVGPU_HARDWARE/rtl/internal_noc

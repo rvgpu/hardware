@@ -134,6 +134,7 @@ vcs: check $(OUT_DIR)
 	@echo "RTL_FILELIST = $(RTL_FILELIST)"
 	@echo "INCDIR_FILE = $(INCDIR_FILE)"
 	$(VCS) $(VCS_FLAGS) \
+		-top rvgpu_toplevel_tb \
 		-f $(RTL_FILELIST) \
 		-f $(INCDIR_FILE) \
 		$(SIM_SOURCES)

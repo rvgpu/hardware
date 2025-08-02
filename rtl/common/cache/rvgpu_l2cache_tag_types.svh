@@ -103,7 +103,7 @@ function automatic l2cache_tag_entry_t raw_to_l2cache_tag_entry(
     end
         
     for (int i = 0; i < L2CACHE_WAYS; i++) begin
-        entry.ways[i].mesi_state = raw[offset +: 2];
+        entry.ways[i].mesi_state = cache_mesi_state_t'(raw[offset +: 2]);
         offset += 2;
     end
         

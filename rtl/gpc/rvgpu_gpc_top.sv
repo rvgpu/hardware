@@ -95,9 +95,7 @@ module rvgpu_gpc_top #(
     );
     
     // L1.5 Cache实例化
-    rvgpu_gpc_l15_cache #(
-        .NUM_REQUESTERS(GPC_CONFIG.num_tpc+2)
-    ) u_l15_cache (
+    rvgpu_gpc_l15cache u_l15_cache (
         .clk(clk),
         .rst_n(rst_n),
         .noc_if(l15_noc_if.device),

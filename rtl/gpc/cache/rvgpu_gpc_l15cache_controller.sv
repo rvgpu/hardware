@@ -13,84 +13,79 @@
 // limitations under the License.
 //=============================================================================
 
-`ifndef RVGPU_L2CACHE_CONTROLLER_SV
-`define RVGPU_L2CACHE_CONTROLLER_SV
+`ifndef RVGPU_GPC_L15_CACHE_CONTROLLER_SV
+`define RVGPU_GPC_L15_CACHE_CONTROLLER_SV
 
-`include "rvgpu_l2cache_common.svh"
-`include "rvgpu_debug.svh"
-`include "rvgpu_l2cache_if.svh"
-`include "rvgpu_internal_noc_if.svh"
-`include "rvgpu_fifo_if.svh"
-`include "rvgpu_l2cache_types.svh"
+
+
+`include "types_cache_op.svh"
+`include "const_l15cache.svh"
+`include "types_l15cache.svh"
 `include "function_cache_lru.svh"
+`include "interface_l15cache_tag.svh"
+`include "interface_l15cache_data.svh"
+`include "rvgpu_debug.svh"
+`include "rvgpu_fifo_if.svh"
+`include "types_l15cache_controller.svh"
+
+
 
 `ifndef RVGPU_INTERNAL_NOC_PKG_IMPORTED
 `define RVGPU_INTERNAL_NOC_PKG_IMPORTED
 import rvgpu_internal_noc_pkg::*;
 `endif
 
-module rvgpu_l2cache_controller (
+module rvgpu_gpc_l15cache_controller (
     // Clock and Reset
     input  logic clk,
     input  logic rst_n,
 
     // Network-on-Chip Interface
-    l2cache_noc_if.controller noc_if,
+    rvgpu_internal_noc_if.device noc_if,
     
     // Tag Array Interface
-    l2cache_tag_if.controller tag_if,
+    l15cache_tag_if.controller tag_if,
     
     // Data Array Interface
-    l2cache_data_if.controller data_if,
+    l15cache_data_if.controller data_if,
     
-    // AXI Memory Interface
-    l2cache_axi_if.controller axi_if
+    // Single Requester Interface
+    input  logic                    req_valid,
+    input  l15cache_request_t       req_data,
+    output logic                    req_ready,
+    
+    output logic                    resp_valid,
+    output l15cache_response_t      resp_data,
+    input  logic                    resp_ready
 );
 
     //=============================================================================
     // Local Parameters and Types
     //=============================================================================
     
-    // L2 Cache Controller State Machine States
-    typedef enum logic [3:0] {
-        L2_STATE_IDLE          = 4'h0,    // 空闲状态
-        L2_STATE_TAG_LOOKUP    = 4'h1,    // Tag查找
-        L2_STATE_TAG_WAIT      = 4'h2,    // Tag等待
-        L2_STATE_DATA_READ     = 4'h3,    // 数据读操作
-        L2_STATE_MISS_HANDLE   = 4'h4,    // 未命中处理
-        L2_STATE_MEMORY_ACCESS = 4'h5,    // 内存访问
-        L2_STATE_TAG_UPDATE    = 4'h6,    // Tag更新
-        L2_STATE_DATA_WRITE    = 4'h7,    // 数据写操作
-        L2_STATE_RESPONSE      = 4'h8,    // 响应
-        L2_STATE_WRITE_BACK    = 4'h9,    // 写回
-        L2_STATE_EVICT         = 4'ha,    // 驱逐
-        L2_STATE_SYNC          = 4'hb,    // 同步
-        L2_STATE_ERROR         = 4'hc     // 错误状态
-    } l2cache_state_t;
-    
     // Request queue configuration
     localparam int REQ_QUEUE_DEPTH = 16;
     localparam int REQ_QUEUE_BITS  = $clog2(REQ_QUEUE_DEPTH);
-    localparam int REQ_DATA_WIDTH  = $bits(l2cache_request_t);
+    localparam int REQ_DATA_WIDTH  = $bits(l15cache_request_t);
     
     //=============================================================================
     // Internal Signals and Registers
     //=============================================================================
     
     // State machine registers
-    l2cache_state_t state_r, state_nxt;
+    l15cache_state_t state_r, state_nxt;
     
     // Current request and response registers
-    l2cache_request_t  current_req_r, current_req_nxt;
-    l2cache_response_t current_resp_r, current_resp_nxt;
+    l15cache_request_t  current_req_r, current_req_nxt;
+    l15cache_response_t current_resp_r, current_resp_nxt;
     
     // Address parsing registers
-    l2cache_addr_t current_addr_r, current_addr_nxt;
+    l15cache_addr_t current_addr_r, current_addr_nxt;
     
     // Cache access result registers
     logic cache_hit_r, cache_hit_nxt;
-    logic [L2CACHE_WAYS-1:0] hit_way_r, hit_way_nxt;
-    logic [L2CACHE_WAYS-1:0] selected_way_r, selected_way_nxt;
+    logic [L15CACHE_WAYS-1:0] hit_way_r, hit_way_nxt;
+    logic [L15CACHE_WAYS-1:0] selected_way_r, selected_way_nxt;
     
     // Control flags
     logic line_read_valid_r, line_read_valid_nxt;
@@ -119,15 +114,16 @@ module rvgpu_l2cache_controller (
     // Handshake Signal Definitions
     //=============================================================================
     
-    wire noc_req_accept  = noc_if.req_valid && noc_if.req_ready;
-    wire noc_resp_accept = noc_if.resp_valid && noc_if.resp_ready;
+    wire noc_req_accept  = noc_if.s_req_valid && noc_if.s_req_ready;
+    wire noc_resp_accept = noc_if.s_resp_valid && noc_if.s_resp_ready;
     wire tag_lookup_accept = tag_if.lookup_valid && tag_if.lookup_ready;
     wire tag_update_accept = tag_if.update_valid && tag_if.update_ready;
     wire data_line_read_accept = data_if.line_read_valid && data_if.line_read_ready;
     wire data_line_write_accept = data_if.line_write_valid && data_if.line_write_ready;
-    wire axi_read_accept = axi_if.read_req_valid && axi_if.read_req_ready;
-    wire axi_write_accept = axi_if.write_req_valid && axi_if.write_req_ready;
+    wire req_accept = req_valid && req_ready;
 
+
+    
     //=============================================================================
     // Combinational Logic - State Machine and Interface Control
     //=============================================================================
@@ -143,14 +139,15 @@ module rvgpu_l2cache_controller (
         selected_way_nxt = selected_way_r;
         line_read_valid_nxt = line_read_valid_r;
         line_write_valid_nxt = line_write_valid_r;
+
         
         // Default interface outputs
-        noc_if.req_ready = !req_fifo_if.full;
-        noc_if.resp_valid = 1'b0;
-        noc_if.resp_header = '0;
-        noc_if.resp_data = '0;
-        noc_if.resp_status = CACHE_RESP_OKAY;
-        noc_if.resp_last = 1'b0;
+        noc_if.s_req_ready = !req_fifo_if.full;
+        noc_if.s_resp_valid = 1'b0;
+        noc_if.s_resp_header = '0;
+        noc_if.s_resp_data = '0;
+        noc_if.s_resp_status = CACHE_RESP_OKAY;
+        noc_if.s_resp_last = 1'b0;
         
         tag_if.lookup_valid = 1'b0;
         tag_if.lookup_index = '0;
@@ -168,58 +165,47 @@ module rvgpu_l2cache_controller (
         data_if.line_write_way = '0;
         data_if.line_write_data = '0;
         
-        axi_if.read_req_valid = 1'b0;
-        axi_if.read_req_addr = '0;
-        axi_if.read_req_len = '0;
-        axi_if.read_req_size = '0;
-        axi_if.read_req_id = '0;
-        axi_if.read_resp_ready = 1'b0;
-        axi_if.write_req_valid = 1'b0;
-        axi_if.write_req_addr = '0;
-        axi_if.write_req_len = '0;
-        axi_if.write_req_size = '0;
-        axi_if.write_req_id = '0;
-        axi_if.write_data_valid = 1'b0;
-        axi_if.write_data = '0;
-        axi_if.write_strb = '0;
-        axi_if.write_last = 1'b0;
-        axi_if.write_resp_ready = 1'b0;
-        
         // FIFO control
         req_fifo_if.read_en = 1'b0;
         req_fifo_if.write_en = 1'b0;
         req_fifo_if.write_data = '0;
         
+        // Request interface
+        req_ready = (state_r == L15_STATE_IDLE);
+        resp_valid = 1'b0;
+        resp_data = '0;
+        
         // State machine logic
         case (state_r)
-            L2_STATE_IDLE: begin
+            L15_STATE_IDLE: begin
                 // Idle state: wait for new requests
                 line_read_valid_nxt = 1'b0;
                 line_write_valid_nxt = 1'b0;
                 
-                // Process requests from FIFO
-                if (!req_fifo_if.empty) begin
-                    req_fifo_if.read_en = 1'b1;
-                    state_nxt = L2_STATE_TAG_LOOKUP;
+                // Process request from single interface
+                if (req_valid) begin
+                    state_nxt = L15_STATE_TAG_LOOKUP;
                     
-                    // Update current request and address
-                    current_req_nxt = l2cache_request_t'(req_fifo_if.read_data);
-                    current_addr_nxt = addr64_to_l2cache_addr(current_req_nxt.addr);
+                    // Use request data directly
+                    current_req_nxt = req_data;
+                    
+                    // Update current address
+                    current_addr_nxt = addr64_to_l15cache_addr(current_req_nxt.addr);
                 end
             end
             
-            L2_STATE_TAG_LOOKUP: begin
+            L15_STATE_TAG_LOOKUP: begin
                 // Tag lookup state: initiate lookup request
                 tag_if.lookup_valid = 1'b1;
                 tag_if.lookup_index = current_addr_r.index;
                 tag_if.lookup_tag = current_addr_r.tag;
                 
                 if (tag_if.lookup_ready) begin
-                    state_nxt = L2_STATE_TAG_WAIT;
+                    state_nxt = L15_STATE_TAG_WAIT;
                 end
             end
             
-            L2_STATE_TAG_WAIT: begin
+            L15_STATE_TAG_WAIT: begin
                 // Tag wait state: wait for lookup completion
                 if (tag_if.lookup_done) begin
                     cache_hit_nxt = tag_if.lookup_hit;
@@ -229,24 +215,24 @@ module rvgpu_l2cache_controller (
                         // Cache hit - choose read or write state based on request type
                         if (current_req_r.read) begin
                             // Read hit: access data array
-                            state_nxt = L2_STATE_DATA_READ;
-                            `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("Tag Lookup: read hit, way=%0d", tag_if.hit_way));
+                            state_nxt = L15_STATE_DATA_READ;
+                            `DEBUG_PRINT("L15CACHE_CTRL", $sformatf("Tag Lookup: read hit, way=%0d", tag_if.hit_way));
                         end else begin
                             // Write hit: update tag and data simultaneously
-                            state_nxt = L2_STATE_TAG_UPDATE;
+                            state_nxt = L15_STATE_TAG_UPDATE;
                             selected_way_nxt = hit_way_r;
-                            `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("Tag Lookup: write hit, way=%0d", tag_if.hit_way));
+                            `DEBUG_PRINT("L15CACHE_CTRL", $sformatf("Tag Lookup: write hit, way=%0d", tag_if.hit_way));
                         end
                     end else begin
                         // Cache miss
-                        state_nxt = L2_STATE_MISS_HANDLE;
+                        state_nxt = L15_STATE_MISS_HANDLE;
                         selected_way_nxt = (1 << select_lru_way(extract_lru_bits(tag_if.tag_entry)));
-                        `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("Tag Lookup: miss, way=%0d", tag_if.hit_way));
+                        `DEBUG_PRINT("L15CACHE_CTRL", $sformatf("Tag Lookup: miss, way=%0d", tag_if.hit_way));
                     end
                 end
             end
             
-            L2_STATE_DATA_READ: begin
+            L15_STATE_DATA_READ: begin
                 // Data read state: initiate data read request
                 if (!line_read_valid_r) begin
                     line_read_valid_nxt = 1'b1;
@@ -261,7 +247,7 @@ module rvgpu_l2cache_controller (
                 // Wait for data read completion
                 if (data_if.line_read_done) begin
                     line_read_valid_nxt = 1'b0;
-                    state_nxt = L2_STATE_RESPONSE;
+                    state_nxt = L15_STATE_RESPONSE;
                     
                     // Prepare response
                     current_resp_nxt.data = data_if.line_read_data.data;
@@ -273,68 +259,63 @@ module rvgpu_l2cache_controller (
                 end
             end
             
-            L2_STATE_MISS_HANDLE: begin
-                // Miss handling state: initiate memory access
+            L15_STATE_MISS_HANDLE: begin
+                // Miss handling state: initiate memory access via NOC
                 if (current_req_r.read) begin
-                    // Read miss: load from memory
-                    axi_if.read_req_valid = 1'b1;
-                    axi_if.read_req_addr = request_mem_addr_aligned(current_addr_r);
-                    axi_if.read_req_len = 0;
-                    axi_if.read_req_size = current_req_r.size;
-                    axi_if.read_req_id = current_req_r.trans_id;
+                    // Read miss: send request to L2 cache via NOC
+                    noc_if.m_req_valid = 1'b1;
+                    noc_if.m_req_header = build_noc_header_mem_request(
+                        current_req_r.trans_id, 
+                        current_req_r.src_node, 
+                        current_req_r.src_local
+                    );
+                    noc_if.m_req_data = current_req_r.addr;
+                    noc_if.m_req_strb = '1;
+                    noc_if.m_req_last = 1'b1;
                     
-                    if (axi_if.read_req_ready) begin
-                        state_nxt = L2_STATE_MEMORY_ACCESS;
-                        `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("Memory read request: addr=0x%h, size=%d", 
-                                   axi_if.read_req_addr, axi_if.read_req_size));
+                    if (noc_if.m_req_ready) begin
+                        state_nxt = L15_STATE_MEMORY_ACCESS;
+                        `DEBUG_PRINT("L15CACHE_CTRL", $sformatf("Memory read request: addr=0x%h", current_req_r.addr));
                     end
                 end else begin
                     // Write miss: write directly to memory (no cache update)
-                    if (!line_write_valid_r) begin
-                        axi_if.write_req_valid = 1'b1;
-                        axi_if.write_req_addr = current_req_r.addr;
-                        axi_if.write_req_len = 0;
-                        axi_if.write_req_size = current_req_r.size[2:0];
-                        axi_if.write_req_id = current_req_r.trans_id;
+                    noc_if.m_req_valid = 1'b1;
+                    noc_if.m_req_header = build_noc_header_mem_request(
+                        current_req_r.trans_id, 
+                        current_req_r.src_node, 
+                        current_req_r.src_local
+                    );
+                    noc_if.m_req_data = current_req_r.data;
+                    noc_if.m_req_strb = current_req_r.strb;
+                    noc_if.m_req_last = 1'b1;
+                    
+                    if (noc_if.m_req_ready) begin
+                        state_nxt = L15_STATE_RESPONSE;
                         
-                        if (axi_if.write_req_ready) begin
-                            line_write_valid_nxt = 1'b1;
-                        end
-                    end else begin
-                        axi_if.write_data_valid = 1'b1;
-                        axi_if.write_data = current_req_r.data;
-                        axi_if.write_strb = current_req_r.strb;
-                        axi_if.write_last = 1'b1;
-                        
-                        if (axi_if.write_data_ready) begin
-                            state_nxt = L2_STATE_RESPONSE;
-                            line_write_valid_nxt = 1'b0;
-                            
-                            // Prepare response for write miss
-                            current_resp_nxt.data = '0;
-                            current_resp_nxt.status = CACHE_RESP_OKAY;
-                            current_resp_nxt.trans_id = current_req_r.trans_id;
-                            current_resp_nxt.dest_node = current_req_r.src_node;
-                            current_resp_nxt.hit = 1'b0;
-                            current_resp_nxt.dirty = 1'b0;
-                        end
+                        // Prepare response for write miss
+                        current_resp_nxt.data = '0;
+                        current_resp_nxt.status = CACHE_RESP_OKAY;
+                        current_resp_nxt.trans_id = current_req_r.trans_id;
+                        current_resp_nxt.dest_node = current_req_r.src_node;
+                        current_resp_nxt.hit = 1'b0;
+                        current_resp_nxt.dirty = 1'b0;
                     end
                 end
             end
             
-            L2_STATE_MEMORY_ACCESS: begin
+            L15_STATE_MEMORY_ACCESS: begin
                 // Memory access state: wait for memory response
-                axi_if.read_resp_ready = 1'b1;
+                noc_if.m_resp_ready = 1'b1;
                 
-                if (axi_if.read_resp_valid) begin
-                    if (axi_if.read_resp_status == CACHE_RESP_OKAY) begin
+                if (noc_if.m_resp_valid) begin
+                    if (noc_if.m_resp_status == CACHE_RESP_OKAY) begin
                         // Memory read successful, proceed to tag and data update
-                        state_nxt = L2_STATE_TAG_UPDATE;
-                        `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("Memory response received, proceeding to tag update: index=0x%h, way=%0d", 
+                        state_nxt = L15_STATE_TAG_UPDATE;
+                        `DEBUG_PRINT("L15CACHE_CTRL", $sformatf("Memory response received, proceeding to tag update: index=0x%h, way=%0d", 
                                    current_addr_r.index, selected_way_r));
                     end else begin
                         // Memory access error
-                        state_nxt = L2_STATE_RESPONSE;
+                        state_nxt = L15_STATE_RESPONSE;
                         current_resp_nxt.data = '0;
                         current_resp_nxt.status = CACHE_RESP_SLVERR;
                         current_resp_nxt.trans_id = current_req_r.trans_id;
@@ -345,7 +326,7 @@ module rvgpu_l2cache_controller (
                 end
             end
             
-            L2_STATE_TAG_UPDATE: begin
+            L15_STATE_TAG_UPDATE: begin
                 // Tag update state: update tag array
                 if (!tag_if.update_valid) begin
                     // Initiate tag update
@@ -360,7 +341,7 @@ module rvgpu_l2cache_controller (
                         tag_if.update_entry.ways[way_to_index(selected_way_r)].dirty = 1'b1;
                         tag_if.update_entry.lru[way_to_index(selected_way_r)] = 1'b0; // 设为最近使用
                         // 更新其他way的LRU位
-                        for (int i = 0; i < L2CACHE_WAYS; i++) begin
+                        for (int i = 0; i < L15CACHE_WAYS; i++) begin
                             if (i != way_to_index(selected_way_r)) begin
                                 tag_if.update_entry.lru[i] = 1'b1;
                             end
@@ -373,7 +354,7 @@ module rvgpu_l2cache_controller (
                         tag_if.update_entry.ways[way_to_index(selected_way_r)].mesi_state = CACHE_MESI_EXCLUSIVE;
                         tag_if.update_entry.lru[way_to_index(selected_way_r)] = 1'b0; // 设为最近使用
                         // 更新其他way的LRU位
-                        for (int i = 0; i < L2CACHE_WAYS; i++) begin
+                        for (int i = 0; i < L15CACHE_WAYS; i++) begin
                             if (i != way_to_index(selected_way_r)) begin
                                 tag_if.update_entry.lru[i] = 1'b1;
                             end
@@ -383,13 +364,13 @@ module rvgpu_l2cache_controller (
                 
                 // Wait for tag update completion
                 if (tag_if.update_done) begin
-                    state_nxt = L2_STATE_DATA_WRITE;
-                    `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("Tag update done, proceeding to data write: index=0x%h, way=%0d", 
+                    state_nxt = L15_STATE_DATA_WRITE;
+                    `DEBUG_PRINT("L15CACHE_CTRL", $sformatf("Tag update done, proceeding to data write: index=0x%h, way=%0d", 
                                current_addr_r.index, selected_way_r));
                 end
             end
             
-            L2_STATE_DATA_WRITE: begin
+            L15_STATE_DATA_WRITE: begin
                 // Data write state: initiate data write request
                 if (!line_write_valid_r) begin
                     line_write_valid_nxt = 1'b1;
@@ -407,14 +388,14 @@ module rvgpu_l2cache_controller (
                     data_if.line_write_data.strb = current_req_r.strb;
                 end else begin
                     // Cache miss: write memory data
-                    data_if.line_write_data.data = axi_if.read_resp_data;
+                    data_if.line_write_data.data = noc_if.m_resp_data;
                     data_if.line_write_data.strb = '1;
                 end
                 
                 // Wait for data write completion
                 if (data_if.line_write_done) begin
                     line_write_valid_nxt = 1'b0;
-                    state_nxt = L2_STATE_RESPONSE;
+                    state_nxt = L15_STATE_RESPONSE;
                     
                     // Prepare response
                     if (cache_hit_r) begin
@@ -427,7 +408,7 @@ module rvgpu_l2cache_controller (
                         current_resp_nxt.dirty = 1'b1;
                     end else begin
                         // Cache miss response
-                        current_resp_nxt.data = axi_if.read_resp_data;
+                        current_resp_nxt.data = noc_if.m_resp_data;
                         current_resp_nxt.status = CACHE_RESP_OKAY;
                         current_resp_nxt.trans_id = current_req_r.trans_id;
                         current_resp_nxt.dest_node = current_req_r.src_node;
@@ -435,85 +416,44 @@ module rvgpu_l2cache_controller (
                         current_resp_nxt.dirty = 1'b0;
                     end
                     
-                    `DEBUG_PRINT("L2CACHE_CTRL", $sformatf("Data write done, response data=0x%h", current_resp_nxt.data));
+                    `DEBUG_PRINT("L15CACHE_CTRL", $sformatf("Data write done, response data=0x%h", current_resp_nxt.data));
                 end
             end
             
-            L2_STATE_RESPONSE: begin
-                // Response state: send response to NOC
+            L15_STATE_RESPONSE: begin
+                // Response state: send response to requester
                 if (current_resp_r.trans_id != 0) begin
-                    noc_if.resp_valid = 1'b1;
-                    noc_if.resp_header = build_noc_header_mem_response(
-                        current_resp_r.trans_id, 
-                        current_resp_r.dest_node, 
-                        current_req_r.src_local
-                    );
-                    noc_if.resp_data = current_resp_r.data;
-                    noc_if.resp_status = current_resp_r.status;
-                    noc_if.resp_last = 1'b1;
+                    resp_valid = 1'b1;
+                    resp_data = current_resp_r;
                     
-                    if (noc_if.resp_ready) begin
+                    if (resp_ready) begin
                         current_resp_nxt = '0;
-                        state_nxt = L2_STATE_IDLE;
+                        state_nxt = L15_STATE_IDLE;
                     end
                 end else begin
-                    state_nxt = L2_STATE_IDLE;
+                    state_nxt = L15_STATE_IDLE;
                 end
             end
             
             default: begin
                 // Error state: return to idle
-                state_nxt = L2_STATE_IDLE;
+                state_nxt = L15_STATE_IDLE;
             end
         endcase
-        
-        // Request FIFO management: enqueue new requests
-        if (noc_req_accept && !req_fifo_if.full) begin
-            req_fifo_if.write_en = 1'b1;
-            req_fifo_if.write_data = l2cache_request_t'(parse_noc_request(noc_if.req_header, noc_if.req_data));
-        end
     end
 
     //=============================================================================
     // Helper Functions
     //=============================================================================
     
-    // Parse NOC request into internal format
-    function automatic l2cache_request_t parse_noc_request(
-        input noc_header_t header,
-        input noc_payload_t payload
-    );
-        l2cache_request_t req;
-        noc_header_t noc_header;
-        
-        noc_header = noc_header_t'(header);
-        
-        req.addr = payload.req_mem_read.addr;
-        req.size = payload.req_mem_read.size;
-        req.strb = 32'hffffffff;
-        req.read = (noc_header.msg_type == MSG_MEM_READ_REQ);
-        req.write = (noc_header.msg_type == MSG_MEM_WRITE_REQ);
-        req.trans_id = noc_header.trans_id;
-        req.src_node = noc_header.src_node;
-        req.src_local = noc_header.src_local;
-        req.data = payload.payload_256b;
-        
-        return req;
-    endfunction
-
-    // 新增：结构体unpack函数
-    function automatic l2cache_request_t unpack_l2cache_request(logic [$bits(l2cache_request_t)-1:0] bits);
-        return l2cache_request_t'(bits);
-    endfunction
-
     // Convert way vector to way index
     function automatic logic [2:0] way_to_index(
-        input logic [L2CACHE_WAYS-1:0] way_vector
+        input logic [L15CACHE_WAYS-1:0] way_vector
     );
         logic [2:0] result;
         
         result = 3'b000;
-        for (int i = 0; i < L2CACHE_WAYS; i++) begin
+        for (int i = 0; i < L15CACHE_WAYS; i++) begin
             if (way_vector[i]) result = i[2:0];
         end
         
@@ -522,41 +462,42 @@ module rvgpu_l2cache_controller (
     
     // Extract LRU bits from new tag entry structure
     function automatic logic [7:0] extract_lru_bits(
-        input l2cache_tag_entry_t tag_entry
+        input l15cache_tag_entry_t tag_entry
     );
         return tag_entry.lru;
     endfunction
      
-     //=============================================================================
-     // Sequential Logic - Register Updates
-     //=============================================================================
+    //=============================================================================
+    // Sequential Logic - Register Updates
+    //=============================================================================
      
-     always_ff @(posedge clk) begin : seq_logic
-         if (!rst_n) begin
-             // Reset all registers
-             state_r <= L2_STATE_IDLE;
-             current_req_r <= '0;
-             current_resp_r <= '0;
-             current_addr_r <= '0;
-             cache_hit_r <= 1'b0;
-             hit_way_r <= '0;
-             selected_way_r <= '0;
-             line_read_valid_r <= 1'b0;
-             line_write_valid_r <= 1'b0;
-         end else begin
-             // Update registers with next values
-             state_r <= state_nxt;
-             current_req_r <= current_req_nxt;
-             current_resp_r <= current_resp_nxt;
-             current_addr_r <= current_addr_nxt;
-             cache_hit_r <= cache_hit_nxt;
-             hit_way_r <= hit_way_nxt;
-             selected_way_r <= selected_way_nxt;
-             line_read_valid_r <= line_read_valid_nxt;
-             line_write_valid_r <= line_write_valid_nxt;
-         end
-     end
+    always_ff @(posedge clk) begin : seq_logic
+        if (!rst_n) begin
+            // Reset all registers
+            state_r <= L15_STATE_IDLE;
+            current_req_r <= '0;
+            current_resp_r <= '0;
+            current_addr_r <= '0;
+            cache_hit_r <= 1'b0;
+            hit_way_r <= '0;
+            selected_way_r <= '0;
+            line_read_valid_r <= 1'b0;
+            line_write_valid_r <= 1'b0;
+
+        end else begin
+            // Update registers with next values
+            state_r <= state_nxt;
+            current_req_r <= current_req_nxt;
+            current_resp_r <= current_resp_nxt;
+            current_addr_r <= current_addr_nxt;
+            cache_hit_r <= cache_hit_nxt;
+            hit_way_r <= hit_way_nxt;
+            selected_way_r <= selected_way_nxt;
+            line_read_valid_r <= line_read_valid_nxt;
+            line_write_valid_r <= line_write_valid_nxt;
+        end
+    end
      
- endmodule : rvgpu_l2cache_controller
+endmodule : rvgpu_gpc_l15cache_controller
      
- `endif // RVGPU_L2CACHE_CONTROLLER_SV
+`endif // RVGPU_GPC_L15_CACHE_CONTROLLER_SV 

@@ -13,23 +13,29 @@
 // limitations under the License.
 //=============================================================================
 
-`ifndef RVGPU_L2CACHE_TAG_ARRAY_SV
-`define RVGPU_L2CACHE_TAG_ARRAY_SV
+`ifndef RVGPU_GPC_L15_TAG_ARRAY_SV
+`define RVGPU_GPC_L15_TAG_ARRAY_SV
 
-`include "rvgpu_l2cache_common.svh"
-`include "rvgpu_l2cache_if.svh"
+
+`include "types_cache_op.svh"
+`include "const_l15cache.svh"
+`include "types_l15cache.svh"
+`include "types_cache_op.svh"
+`include "function_cache_lru.svh"
+
+`include "interface_l15cache_tag.svh"
 `include "rvgpu_sram_if.svh"
 `include "rvgpu_debug.svh"
-`include "rvgpu_l2cache_common.svh"
-`include "rvgpu_l2cache_types.svh"
+`include "types_l15cache.svh"
+`include "types_l15cache_tag.svh"
 
-module rvgpu_l2cache_tag_array (
+module rvgpu_gpc_l15cache_tag_array (
     // Clock and Reset Interface
     input  logic clk,
     input  logic rst_n,
 
     // Controller Interface
-    l2cache_tag_if.tag_array tag_if
+    l15cache_tag_if.tag_array tag_if
 );  
     //=============================================================================
     // 1. 状态机定义 - 明确定义所有状态
@@ -45,9 +51,9 @@ module rvgpu_l2cache_tag_array (
     } tag_state_t;
 
     // 标签数组相关参数
-    localparam int L2CACHE_TAG_ENTRY_ADDR_WIDTH = L2CACHE_INDEX_BITS;
-    localparam int L2CACHE_TAG_ENTRY_DEPTH = L2CACHE_SETS;
-    localparam int L2CACHE_TAG_ENTRY_DATA_WIDTH = $bits(l2cache_tag_entry_t);
+    localparam int L15CACHE_TAG_ENTRY_ADDR_WIDTH = L15CACHE_INDEX_BITS;
+    localparam int L15CACHE_TAG_ENTRY_DEPTH = L15CACHE_SETS;
+    localparam int L15CACHE_TAG_ENTRY_DATA_WIDTH = $bits(l15cache_tag_entry_t);
     
     //=============================================================================
     // 2. 内部信号定义
@@ -57,22 +63,22 @@ module rvgpu_l2cache_tag_array (
     tag_state_t state_r, state_nxt;
     
     // SRAM初始化相关寄存器
-    logic [L2CACHE_TAG_ENTRY_ADDR_WIDTH-1:0] clear_addr_r, clear_addr_nxt;
+    logic [L15CACHE_TAG_ENTRY_ADDR_WIDTH-1:0] clear_addr_r, clear_addr_nxt;
     logic clear_done_r, clear_done_nxt;
     
     // 查找请求寄存器
-    logic [L2CACHE_TAG_ENTRY_ADDR_WIDTH-1:0] lookup_index_r, lookup_index_nxt;
-    logic [L2CACHE_TAG_BITS-1:0] lookup_tag_r, lookup_tag_nxt;
+    logic [L15CACHE_TAG_ENTRY_ADDR_WIDTH-1:0] lookup_index_r, lookup_index_nxt;
+    logic [L15CACHE_TAG_BITS-1:0] lookup_tag_r, lookup_tag_nxt;
     
     // 更新请求寄存器
-    logic [L2CACHE_TAG_ENTRY_ADDR_WIDTH-1:0] update_index_r, update_index_nxt;
-    logic [L2CACHE_WAYS-1:0] update_way_r, update_way_nxt;
-    l2cache_tag_entry_t update_entry_r, update_entry_nxt;
+    logic [L15CACHE_TAG_ENTRY_ADDR_WIDTH-1:0] update_index_r, update_index_nxt;
+    logic [L15CACHE_WAYS-1:0] update_way_r, update_way_nxt;
+    l15cache_tag_entry_t update_entry_r, update_entry_nxt;
     
     // 查找结果寄存器
     logic lookup_hit_r, lookup_hit_nxt;
-    logic [L2CACHE_WAYS-1:0] hit_way_r, hit_way_nxt;
-    l2cache_tag_entry_t tag_entry_r, tag_entry_nxt;
+    logic [L15CACHE_WAYS-1:0] hit_way_r, hit_way_nxt;
+    l15cache_tag_entry_t tag_entry_r, tag_entry_nxt;
     logic lookup_done_r, lookup_done_nxt;
     logic update_done_r, update_done_nxt;
     
@@ -81,7 +87,7 @@ module rvgpu_l2cache_tag_array (
     logic update_ready_r, update_ready_nxt;
     
     // Tag比较信号
-    logic [L2CACHE_WAYS-1:0] way_hit;
+    logic [L15CACHE_WAYS-1:0] way_hit;
     logic any_hit;
     
     // 错误检测信号
@@ -94,8 +100,8 @@ module rvgpu_l2cache_tag_array (
     
     // 创建SRAM接口实例
     rvgpu_sram_if #(
-        .WIDTH(L2CACHE_TAG_ENTRY_DATA_WIDTH),
-        .HEIGHT(L2CACHE_TAG_ENTRY_DEPTH)
+        .WIDTH(L15CACHE_TAG_ENTRY_DATA_WIDTH),
+        .HEIGHT(L15CACHE_TAG_ENTRY_DEPTH)
     ) sram_if_inst();
     
     // 连接时钟
@@ -103,9 +109,9 @@ module rvgpu_l2cache_tag_array (
     
     // SRAM实例化
     rvgpu_sram_sp #(
-        .WIDTH(L2CACHE_TAG_ENTRY_DATA_WIDTH),
-        .HEIGHT(L2CACHE_TAG_ENTRY_DEPTH),
-        .RAMNAME("L2CACHE_TAG_SRAM")
+        .WIDTH(L15CACHE_TAG_ENTRY_DATA_WIDTH),
+        .HEIGHT(L15CACHE_TAG_ENTRY_DEPTH),
+        .RAMNAME("L15CACHE_TAG_SRAM")
     ) u_tag_sram (
         .sram_if(sram_if_inst.sram_port)
     );
@@ -140,7 +146,7 @@ module rvgpu_l2cache_tag_array (
                 sram_if_inst.ce = 1'b1;
                 sram_if_inst.we = 1'b1;
                 sram_if_inst.addr = update_index_r;
-                sram_if_inst.wdata = l2cache_tag_entry_to_raw(update_entry_r);
+                sram_if_inst.wdata = l15cache_tag_entry_to_raw(update_entry_r);
             end
             default: begin
                 // 其他状态不访问SRAM
@@ -178,11 +184,11 @@ module rvgpu_l2cache_tag_array (
                 update_ready_nxt = 1'b0;
                 
                 // 检查是否完成初始化
-                if (clear_addr_r == L2CACHE_TAG_ENTRY_DEPTH - 1) begin
+                if (clear_addr_r == L15CACHE_TAG_ENTRY_DEPTH - 1) begin
                     // 初始化完成，进入IDLE状态
                     state_nxt = TAG_IDLE;
                     clear_done_nxt = 1'b1;
-                    `DEBUG_PRINT("L2CACHE_TAG", $sformatf("SRAM initialization completed, %0d entries cleared", L2CACHE_TAG_ENTRY_DEPTH));
+                    `DEBUG_PRINT("L15CACHE_TAG", $sformatf("SRAM initialization completed, %0d entries cleared", L15CACHE_TAG_ENTRY_DEPTH));
                 end else begin
                     // 继续初始化下一个地址
                     clear_addr_nxt = clear_addr_r + 1;
@@ -205,14 +211,13 @@ module rvgpu_l2cache_tag_array (
                     update_entry_nxt = tag_if.update_entry;
                     update_ready_nxt = 1'b0;
                     lookup_ready_nxt = 1'b0; // 阻止查找请求
-                    `DEBUG_PRINT("L2CACHE_TAG", $sformatf("Update: index=0x%h, way=%0d, entry=0x%h", tag_if.update_index, tag_if.update_way, tag_if.update_entry));
                 end else if (tag_if.lookup_valid && tag_if.lookup_ready) begin
                     // 开始Tag查找
                     state_nxt = TAG_LOOKUP;
                     lookup_index_nxt = tag_if.lookup_index;
                     lookup_tag_nxt = tag_if.lookup_tag;
                     lookup_ready_nxt = 1'b0;
-                    `DEBUG_PRINT("L2CACHE_TAG", $sformatf("Lookup: index=0x%h, tag=0x%h", tag_if.lookup_index, tag_if.lookup_tag));
+                    `DEBUG_PRINT("L15CACHE_TAG", $sformatf("Lookup: index=0x%h, tag=0x%h", tag_if.lookup_index, tag_if.lookup_tag));
                 end
             end
             
@@ -224,10 +229,10 @@ module rvgpu_l2cache_tag_array (
             TAG_LOOKUP_WAIT: begin
                 // Tag查找等待状态 - 等待SRAM读取完成
                 // 解析Tag条目
-                tag_entry_nxt = raw_to_l2cache_tag_entry(sram_if_inst.rdata);
+                tag_entry_nxt = raw_to_l15cache_tag_entry(sram_if_inst.rdata);
                 
                 // 并行比较所有way
-                for (int i = 0; i < L2CACHE_WAYS; i++) begin
+                for (int i = 0; i < L15CACHE_WAYS; i++) begin
                     way_hit[i] = tag_entry_nxt.ways[i].valid && (tag_entry_nxt.ways[i].tag == lookup_tag_r);
                 end
                 
@@ -235,7 +240,7 @@ module rvgpu_l2cache_tag_array (
                 
                 // 错误检测
                 multiple_hit_error = $countones(way_hit) > 1;
-                invalid_way_error = (tag_if.update_valid && tag_if.update_ready) ? (tag_if.update_way >= L2CACHE_WAYS) : 1'b0;
+                invalid_way_error = (tag_if.update_valid && tag_if.update_ready) ? (tag_if.update_way >= L15CACHE_WAYS) : 1'b0;
                 
                 // 更新查找结果
                 lookup_hit_nxt = any_hit;
@@ -257,7 +262,7 @@ module rvgpu_l2cache_tag_array (
                 
                 // 返回空闲状态
                 state_nxt = TAG_IDLE;
-                `DEBUG_PRINT("L2CACHE_TAG", "Update done");
+                `DEBUG_PRINT("L15CACHE_TAG", "Update done");
             end
             
             default: begin
@@ -265,7 +270,6 @@ module rvgpu_l2cache_tag_array (
                 state_nxt = TAG_IDLE;
                 lookup_hit_nxt = 1'b0;
                 hit_way_nxt = '0;
-                tag_entry_nxt = '0;
             end
         endcase
     end
@@ -299,10 +303,8 @@ module rvgpu_l2cache_tag_array (
             lookup_tag_r <= '0;
             update_index_r <= '0;
             update_way_r <= '0;
-            update_entry_r <= '0;
             lookup_hit_r <= 1'b0;
             hit_way_r <= '0;
-            tag_entry_r <= '0;
             lookup_done_r <= 1'b0;
             update_done_r <= 1'b0;
             lookup_ready_r <= 1'b0;
@@ -327,6 +329,6 @@ module rvgpu_l2cache_tag_array (
         end
     end
 
-endmodule : rvgpu_l2cache_tag_array
+endmodule : rvgpu_gpc_l15cache_tag_array
 
-`endif // RVGPU_L2CACHE_TAG_ARRAY_SV 
+`endif // RVGPU_GPC_L15_TAG_ARRAY_SV 

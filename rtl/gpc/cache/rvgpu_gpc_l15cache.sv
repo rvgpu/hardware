@@ -40,7 +40,7 @@ module rvgpu_gpc_l15cache (
     rvgpu_internal_noc_if.device noc_if,
     
     // Requester Interface Array - TPC、Block Scheduler、Raster等
-    gpc_l15_cache_if.cache requester_if[L15CACHE_NUM_REQUESTERS]
+    interface_l15cache.cache requester_if[L15CACHE_NUM_REQUESTERS]
 );
 
     //=============================================================================

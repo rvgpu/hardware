@@ -42,7 +42,7 @@ module rvgpu_gpc_top #(
     // 内部接口声明
     gpc_block_raster_if      block_raster_if();
     gpc_block_tpc_if         block_tpc_if[GPC_CONFIG.num_tpc]();
-    gpc_l15_cache_if         l15_cache_if[GPC_CONFIG.num_tpc+2]();  // NUM_TPC个TPC + Block Scheduler + Raster
+    interface_l15cache         l15_cache_if[GPC_CONFIG.num_tpc+2]();  // NUM_TPC个TPC + Block Scheduler + Raster
     rvgpu_internal_noc_if    l15_noc_if();                          // L1.5缓存NOC接口
     // GPC MMU接口
     mmu_if                   gpc_mmu_if[GPC_CONFIG.num_tpc+1]();    // NUM_TPC个TPC + Block Scheduler

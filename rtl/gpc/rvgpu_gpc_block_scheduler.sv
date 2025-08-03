@@ -22,7 +22,7 @@
 `include "rvgpu_mmu_if.svh"
 
 `include "gpc_block_raster_if.svh"
-`include "gpc_l15_cache_if.svh"
+`include "interface_l15cache.svh"
 
 module rvgpu_gpc_block_scheduler #(
     parameter int GPC_ID = 0,
@@ -43,7 +43,7 @@ module rvgpu_gpc_block_scheduler #(
     gpc_block_raster_if.scheduler raster_if,
     
     // L1.5 Cache接口
-    gpc_l15_cache_if.requester l15_if,
+    interface_l15cache.requester l15_if,
     
     // MMU接口
     mmu_if.requester_port mmu_if
@@ -237,7 +237,7 @@ module rvgpu_gpc_block_scheduler #(
                 l15_if.req_is_read = 1'b1;
                 l15_if.req_paddr = arglist_paddr_r;
                 l15_if.req_size = 4'b0100; // 32字节 (256位)
-                l15_if.req_type = L15_CACHE_NORMAL;
+                l15_if.req_type = CACHE_OP_READ;
                 l15_if.req_data = '0;
                 l15_if.req_mask = '0;
                 l15_if.req_id = '0;

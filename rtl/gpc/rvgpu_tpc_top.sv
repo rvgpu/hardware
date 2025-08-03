@@ -18,7 +18,7 @@
 
 `include "rvgpu_typedef.svh"
 `include "gpc_block_tpc_if.svh"
-`include "gpc_l15_cache_if.svh"
+`include "interface_l15cache.svh"
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_noc_message.svh"
 `include "rvgpu_mmu_if.svh"
@@ -39,7 +39,7 @@ module rvgpu_tpc_top #(
     gpc_block_tpc_if.tpc tpc_if,
     
     // L1.5 Cache接口（汇聚所有SM的缓存请求）
-    gpc_l15_cache_if.requester l15_if,
+    interface_l15cache.requester l15_if,
     
     // GPC MMU接口（汇聚所有SM的TLB请求）
     mmu_if.requester_port tlb_if,
@@ -71,7 +71,7 @@ module rvgpu_tpc_top #(
     logic [$clog2(NUM_SM)-1:0] round_robin_counter; // 轮询计数器
     
     // SM接口信号
-    gpc_l15_cache_if sm_l15_if[NUM_SM]();     // 每个SM的L1.5 Cache接口
+    interface_l15cache sm_l15_if[NUM_SM]();     // 每个SM的L1.5 Cache接口
     mmu_if sm_tlb_if[NUM_SM]();        // 每个SM的TLB接口
     gpc_tlb_update_if sm_tlb_update_if[NUM_SM](); // 每个SM的TLB更新接口
     gpc_block_tpc_if sm_dispatch_if[NUM_SM](); // 每个SM的任务分发接口
@@ -294,12 +294,12 @@ module rvgpu_tpc_top #(
         // 默认值
         sm_l15_if[0].resp_valid = 1'b0;
         sm_l15_if[0].resp_data = '0;
-        sm_l15_if[0].resp_error = 1'b0;
+        sm_l15_if[0].resp_status = CACHE_RESP_OKAY;
         sm_l15_if[0].resp_id = '0;
         
         sm_l15_if[1].resp_valid = 1'b0;
         sm_l15_if[1].resp_data = '0;
-        sm_l15_if[1].resp_error = 1'b0;
+        sm_l15_if[1].resp_status = CACHE_RESP_OKAY;
         sm_l15_if[1].resp_id = '0;
         
         // 根据target_sm分发响应
@@ -308,13 +308,13 @@ module rvgpu_tpc_top #(
                 0: begin
                     sm_l15_if[0].resp_valid = 1'b1;
                     sm_l15_if[0].resp_data = l15_if.resp_data;
-                    sm_l15_if[0].resp_error = l15_if.resp_error;
+                    sm_l15_if[0].resp_status = l15_if.resp_status;
                     sm_l15_if[0].resp_id = {l15_if.resp_id[30:0], 1'b0};
                 end
                 1: begin
                     sm_l15_if[1].resp_valid = 1'b1;
                     sm_l15_if[1].resp_data = l15_if.resp_data;
-                    sm_l15_if[1].resp_error = l15_if.resp_error;
+                    sm_l15_if[1].resp_status = l15_if.resp_status;
                     sm_l15_if[1].resp_id = {l15_if.resp_id[30:0], 1'b0};
                 end
             endcase

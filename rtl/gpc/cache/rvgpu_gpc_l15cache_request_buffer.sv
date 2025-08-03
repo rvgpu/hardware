@@ -23,14 +23,14 @@
 
 `include "rvgpu_fifo_if.svh"
 `include "types_l15cache_buffer.svh"
-`include "gpc_l15_cache_if.svh"
+`include "interface_l15cache.svh"
 
 module rvgpu_gpc_l15cache_request_buffer (
     input  logic clk,
     input  logic rst_n,
 
     // Multiple Requester Interfaces (TPC + Block Scheduler + Raster)
-    gpc_l15_cache_if.cache requester_if[L15CACHE_NUM_REQUESTERS],
+    interface_l15cache.cache requester_if[L15CACHE_NUM_REQUESTERS],
     
     // Single Controller Interface
     output logic                    ctrl_req_valid,
@@ -249,32 +249,32 @@ module rvgpu_gpc_l15cache_request_buffer (
         // 初始化所有响应信号
         requester_if[0].resp_valid = 1'b0;
         requester_if[0].resp_data = '0;
-        requester_if[0].resp_error = 1'b0;
+        requester_if[0].resp_status = CACHE_RESP_OKAY;
         requester_if[0].resp_id = '0;
         
         requester_if[1].resp_valid = 1'b0;
         requester_if[1].resp_data = '0;
-        requester_if[1].resp_error = 1'b0;
+        requester_if[1].resp_status = CACHE_RESP_OKAY;
         requester_if[1].resp_id = '0;
         
         requester_if[2].resp_valid = 1'b0;
         requester_if[2].resp_data = '0;
-        requester_if[2].resp_error = 1'b0;
+        requester_if[2].resp_status = CACHE_RESP_OKAY;
         requester_if[2].resp_id = '0;
         
         requester_if[3].resp_valid = 1'b0;
         requester_if[3].resp_data = '0;
-        requester_if[3].resp_error = 1'b0;
+        requester_if[3].resp_status = CACHE_RESP_OKAY;
         requester_if[3].resp_id = '0;
         
         requester_if[4].resp_valid = 1'b0;
         requester_if[4].resp_data = '0;
-        requester_if[4].resp_error = 1'b0;
+        requester_if[4].resp_status = CACHE_RESP_OKAY;
         requester_if[4].resp_id = '0;
         
         requester_if[5].resp_valid = 1'b0;
         requester_if[5].resp_data = '0;
-        requester_if[5].resp_error = 1'b0;
+        requester_if[5].resp_status = CACHE_RESP_OKAY;
         requester_if[5].resp_id = '0;
         
         if (ctrl_resp_valid) begin
@@ -282,42 +282,42 @@ module rvgpu_gpc_l15cache_request_buffer (
                 3'b000: begin
                     requester_if[0].resp_valid = 1'b1;
                     requester_if[0].resp_data = ctrl_resp_data.data;
-                    requester_if[0].resp_error = (ctrl_resp_data.status != CACHE_RESP_OKAY);
+                    requester_if[0].resp_status = ctrl_resp_data.status;
                     requester_if[0].resp_id = ctrl_resp_data.trans_id;
                     ctrl_resp_ready = requester_if[0].resp_ready;
                 end
                 3'b001: begin
                     requester_if[1].resp_valid = 1'b1;
                     requester_if[1].resp_data = ctrl_resp_data.data;
-                    requester_if[1].resp_error = (ctrl_resp_data.status != CACHE_RESP_OKAY);
+                    requester_if[1].resp_status = ctrl_resp_data.status;
                     requester_if[1].resp_id = ctrl_resp_data.trans_id;
                     ctrl_resp_ready = requester_if[1].resp_ready;
                 end
                 3'b010: begin
                     requester_if[2].resp_valid = 1'b1;
                     requester_if[2].resp_data = ctrl_resp_data.data;
-                    requester_if[2].resp_error = (ctrl_resp_data.status != CACHE_RESP_OKAY);
+                    requester_if[2].resp_status = ctrl_resp_data.status;
                     requester_if[2].resp_id = ctrl_resp_data.trans_id;
                     ctrl_resp_ready = requester_if[2].resp_ready;
                 end
                 3'b011: begin
                     requester_if[3].resp_valid = 1'b1;
                     requester_if[3].resp_data = ctrl_resp_data.data;
-                    requester_if[3].resp_error = (ctrl_resp_data.status != CACHE_RESP_OKAY);
+                    requester_if[3].resp_status = ctrl_resp_data.status;
                     requester_if[3].resp_id = ctrl_resp_data.trans_id;
                     ctrl_resp_ready = requester_if[3].resp_ready;
                 end
                 3'b100: begin
                     requester_if[4].resp_valid = 1'b1;
                     requester_if[4].resp_data = ctrl_resp_data.data;
-                    requester_if[4].resp_error = (ctrl_resp_data.status != CACHE_RESP_OKAY);
+                    requester_if[4].resp_status = ctrl_resp_data.status;
                     requester_if[4].resp_id = ctrl_resp_data.trans_id;
                     ctrl_resp_ready = requester_if[4].resp_ready;
                 end
                 3'b101: begin
                     requester_if[5].resp_valid = 1'b1;
                     requester_if[5].resp_data = ctrl_resp_data.data;
-                    requester_if[5].resp_error = (ctrl_resp_data.status != CACHE_RESP_OKAY);
+                    requester_if[5].resp_status = ctrl_resp_data.status;
                     requester_if[5].resp_id = ctrl_resp_data.trans_id;
                     ctrl_resp_ready = requester_if[5].resp_ready;
                 end

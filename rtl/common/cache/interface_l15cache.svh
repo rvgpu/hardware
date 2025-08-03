@@ -13,67 +13,61 @@
 // limitations under the License.
 //=============================================================================
 
-`ifndef GPC_L15_CACHE_IF_SVH
-`define GPC_L15_CACHE_IF_SVH
+`ifndef RVGPU_INTERFACE_L15CACHE_SVH
+`define RVGPU_INTERFACE_L15CACHE_SVH
 
 `include "rvgpu_typedef.svh"
+`include "types_l15cache.svh"
+`include "types_cache_op.svh"
+`include "types_cache_resp.svh"
+`include "const_l15cache.svh"
 
-// 访问类型定义
-typedef enum logic [3:0] {
-    L15_CACHE_NORMAL      = 4'b0000,     // 普通读写
-    L15_CACHE_ATOMIC_ADD  = 4'b0001,     // 原子加
-    L15_CACHE_ATOMIC_AND  = 4'b0010,     // 原子与
-    L15_CACHE_ATOMIC_OR   = 4'b0011,     // 原子或
-    L15_CACHE_ATOMIC_XOR  = 4'b0100,     // 原子异或
-    L15_CACHE_ATOMIC_CAS  = 4'b0101,     // 原子比较和交换
-    L15_CACHE_ATOMIC_EXCH = 4'b0110,     // 原子交换
-    L15_CACHE_FENCE       = 4'b0111,     // 内存屏障
-    L15_CACHE_PREFETCH    = 4'b1000,     // 预取
-    L15_CACHE_FLUSH       = 4'b1001,     // 刷新
-    L15_CACHE_INVALIDATE  = 4'b1010      // 缓存失效
-} l15_cache_access_type_e;
-
-// L1.5缓存请求者接口
-interface gpc_l15_cache_if;
+// L1.5缓存接口
+interface interface_l15cache;
     // 请求通道
     logic                req_valid;      // 请求有效
     logic                req_is_read;    // 1=读请求, 0=写请求
     logic [3:0]          req_size;       // 访问大小
-    logic [3:0]          req_type;       // 访问类型
+    cache_op_type_t      req_type;       // 访问类型
     logic [63:0]         req_paddr;      // 物理地址
-    logic [1023:0]       req_data;       // 写数据
-    logic [127:0]        req_mask;       // 写掩码
+    logic [L15CACHE_LINE_WIDTH-1:0] req_data;  // 写数据
+    logic [L15CACHE_LINE_WIDTH_BYTES-1:0] req_mask; // 写掩码
     logic [31:0]         req_id;         // 请求ID
     logic                req_ready;      // 缓存准备好接收请求
+    
     // 响应通道
     logic                resp_valid;     // 响应有效
-    logic [1023:0]       resp_data;      // 读数据
-    logic                resp_error;     // 错误标志
+    logic [L15CACHE_LINE_WIDTH-1:0] resp_data; // 读数据
+    cache_resp_status_t  resp_status;    // 响应状态
     logic [31:0]         resp_id;        // 响应ID
     logic                resp_ready;     // 请求者准备好接收响应
+    
     // 控制信号
     logic                flush;          // 刷新请求
+    
     // 状态信号
     logic [7:0]          pending_count;  // 未完成请求数量
+    
     // requester视角（发请求，收响应）
     modport requester (
         output req_valid, req_is_read, req_size, req_type, req_paddr, req_data, req_mask, req_id,
         input  req_ready,
-        input  resp_valid, resp_data, resp_error, resp_id,
+        input  resp_valid, resp_data, resp_status, resp_id,
         output resp_ready,
         output flush,
         input  pending_count
     );
+    
     // cache视角（收请求，发响应）
     modport cache (
         input  req_valid, req_is_read, req_size, req_type, req_paddr, req_data, req_mask, req_id,
         output req_ready,
-        output resp_valid, resp_data, resp_error, resp_id,
+        output resp_valid, resp_data, resp_status, resp_id,
         input  resp_ready,
         input  flush,
         output pending_count
     );
     
-endinterface : gpc_l15_cache_if
+endinterface : interface_l15cache
 
-`endif // GPC_L15_CACHE_IF_SVH 
+`endif // RVGPU_INTERFACE_L15CACHE_SVH 

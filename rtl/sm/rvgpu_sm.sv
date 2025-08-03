@@ -39,7 +39,7 @@ module rvgpu_sm #(
     ldst_sm_if.sm ldst_if,
     
     // L1.5 Cache接口 (用于指令获取)
-    gpc_l15_cache_if.requester l15_if,
+    interface_l15cache.requester l15_if,
     
     // TLB接口
     mmu_if.requester_port tlb_if,

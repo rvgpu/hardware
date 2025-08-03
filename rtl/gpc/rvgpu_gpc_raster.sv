@@ -18,7 +18,7 @@
 
 `include "rvgpu_typedef.svh"
 `include "gpc_block_raster_if.svh"
-`include "gpc_l15_cache_if.svh"
+`include "interface_l15cache.svh"
 
 // GPC Raster Engine模块
 // 负责图形光栅化操作
@@ -33,7 +33,7 @@ module rvgpu_gpc_raster #(
     gpc_block_raster_if.raster raster_if,
     
     // L1.5 Cache接口
-    gpc_l15_cache_if.requester l15_if
+    interface_l15cache.requester l15_if
 );
     // 状态机状态
     typedef enum logic [3:0] {
@@ -147,9 +147,9 @@ module rvgpu_gpc_raster #(
                     // 从L1.5 Cache获取命令数据
                     l15_if.req_valid <= 1'b1;
                     l15_if.req_is_read <= 1'b1;
-                    l15_if.req_paddr <= cmd_data + (cmd_index << 2); // 假设每个命令是4字节
-                    l15_if.req_size <= 2; // 4字节
-                    l15_if.req_type <= L15_CACHE_NORMAL;
+                    l15_if.req_paddr <= cmd_data + (cmd_index << 2);   // 假设每个命令是4字节
+                    l15_if.req_size <= 2;    // 4字节
+                    l15_if.req_type <= CACHE_OP_READ;
                     l15_if.req_data <= '0;
                     l15_if.req_mask <= '0;
                     l15_if.req_id <= req_id_counter;
@@ -278,7 +278,7 @@ module rvgpu_gpc_raster #(
                     l15_if.req_is_read <= 1'b1;
                     l15_if.req_paddr <= texture_addr;
                     l15_if.req_size <= 6; // 64字节
-                    l15_if.req_type <= L15_CACHE_NORMAL;
+                    l15_if.req_type <= CACHE_OP_READ;
                     l15_if.req_data <= '0;
                     l15_if.req_mask <= '0;
                     l15_if.req_id <= req_id_counter;
@@ -323,7 +323,7 @@ module rvgpu_gpc_raster #(
                     l15_if.req_is_read <= 1'b0;
                     l15_if.req_paddr <= framebuffer_addr + ((current_y * viewport_width + current_x) << 2);
                     l15_if.req_size <= 2; // 4字节
-                    l15_if.req_type <= L15_CACHE_NORMAL;
+                    l15_if.req_type <= CACHE_OP_WRITE;
                     l15_if.req_data <= {15{color_data}}; // 重复颜色数据填充
                     l15_if.req_mask <= 4'hF; // 写入所有字节
                     l15_if.req_id <= req_id_counter;

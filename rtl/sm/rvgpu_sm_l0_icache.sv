@@ -18,7 +18,7 @@
 
 `include "rvgpu_typedef.svh"
 `include "rvgpu_mmu_if.svh"
-`include "gpc_l15_cache_if.svh"
+`include "interface_l15cache.svh"
 
 // SM L0 ICache模块
 // 提供快速的指令获取，减少指令获取延迟

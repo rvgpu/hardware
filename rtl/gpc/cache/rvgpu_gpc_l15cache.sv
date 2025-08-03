@@ -47,8 +47,8 @@ module rvgpu_gpc_l15cache (
     // Internal Interface Instances
     //=============================================================================
     
-    l15cache_tag_if controller_tag();
-    l15cache_data_if controller_data();
+    interface_l15cache_tag controller_tag();
+    interface_l15cache_data controller_data();
     interface_l15cache_controller ctrl_if();
 
     //=============================================================================
@@ -63,10 +63,10 @@ module rvgpu_gpc_l15cache (
         .noc_if(noc_if),
         
         // Tag Array Interface
-        .tag_if(controller_tag.controller),
+        .tag_if(controller_tag.ctrl_port),
         
         // Data Array Interface
-        .data_if(controller_data.controller),
+        .data_if(controller_data.ctrl_port),
         
         // Controller Interface
         .ctrl_if(ctrl_if.ctrl_port)
@@ -96,7 +96,7 @@ module rvgpu_gpc_l15cache (
         .rst_n(rst_n),
         
         // Controller Interface
-        .tag_if(controller_tag.tag_array)
+        .tag_if(controller_tag.tag_port)
     );
 
     //=============================================================================
@@ -108,7 +108,7 @@ module rvgpu_gpc_l15cache (
         .rst_n(rst_n),
         
         // Controller Interface
-        .data_if(controller_data.data_array)
+        .data_if(controller_data.data_port)
     );
 
 

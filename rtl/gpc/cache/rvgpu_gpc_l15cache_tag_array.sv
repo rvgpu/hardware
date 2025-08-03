@@ -35,7 +35,7 @@ module rvgpu_gpc_l15cache_tag_array (
     input  logic rst_n,
 
     // Controller Interface
-    l15cache_tag_if.tag_array tag_if
+    interface_l15cache_tag.tag_port tag_if
 );  
     //=============================================================================
     // 1. 状态机定义 - 明确定义所有状态

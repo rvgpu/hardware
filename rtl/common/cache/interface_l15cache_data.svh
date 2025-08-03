@@ -24,7 +24,7 @@
 //=============================================================================
 // Data Array Interface - Controller <-> Data Array
 //=============================================================================
-interface l15cache_data_if;
+interface interface_l15cache_data;
     // 缓存行读请求通道
     logic                              line_read_valid;
     logic [L15CACHE_INDEX_BITS-1:0]     line_read_index;
@@ -46,7 +46,7 @@ interface l15cache_data_if;
     logic                              line_write_done;
     
     // Controller modport (发起数据操作)
-    modport controller (
+    modport ctrl_port (
         output line_read_valid, line_read_index, line_read_way,
         input  line_read_ready, line_read_done, line_read_data,
         output line_write_valid, line_write_index, line_write_way, line_write_data,
@@ -54,12 +54,12 @@ interface l15cache_data_if;
     );
     
     // Data Array modport (执行数据操作)
-    modport data_array (
+    modport data_port (
         input  line_read_valid, line_read_index, line_read_way,
         output line_read_ready, line_read_done, line_read_data,
         input  line_write_valid, line_write_index, line_write_way, line_write_data,
         output line_write_ready, line_write_done
     );
-endinterface : l15cache_data_if
+endinterface : interface_l15cache_data
 
 `endif // RVGPU_INTERFACE_L15CACHE_DATA_SVH 

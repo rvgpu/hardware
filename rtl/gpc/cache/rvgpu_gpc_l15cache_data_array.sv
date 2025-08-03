@@ -34,7 +34,7 @@ module rvgpu_gpc_l15cache_data_array (
     input  logic rst_n,
 
     // Controller Interface
-    l15cache_data_if.data_array data_if
+    interface_l15cache_data.data_port data_if
 );
 
     //=============================================================================

@@ -24,7 +24,7 @@
 //=============================================================================
 // Tag Array Interface - Controller <-> Tag Array
 //=============================================================================
-interface l15cache_tag_if;
+interface interface_l15cache_tag;
     // 查找请求通道
     logic                                   lookup_valid;
     logic [L15CACHE_INDEX_BITS-1:0]          lookup_index;
@@ -48,7 +48,7 @@ interface l15cache_tag_if;
     logic                                   update_done;
     
     // Controller modport (发起Tag操作)
-    modport controller (
+    modport ctrl_port (
         output lookup_valid, lookup_index, lookup_tag,
         input  lookup_ready, lookup_hit, hit_way, tag_entry, lookup_done,
         output update_valid, update_index, update_way, update_entry,
@@ -56,12 +56,12 @@ interface l15cache_tag_if;
     );
     
     // Tag Array modport (执行Tag操作)
-    modport tag_array (
+    modport tag_port (
         input  lookup_valid, lookup_index, lookup_tag,
         output lookup_ready, lookup_hit, hit_way, tag_entry, lookup_done,
         input  update_valid, update_index, update_way, update_entry,
         output update_ready, update_done
     );
-endinterface : l15cache_tag_if
+endinterface : interface_l15cache_tag
 
 `endif // RVGPU_INTERFACE_L15CACHE_TAG_SVH 

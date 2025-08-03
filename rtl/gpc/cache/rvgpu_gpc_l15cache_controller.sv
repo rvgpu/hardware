@@ -45,10 +45,10 @@ module rvgpu_gpc_l15cache_controller (
     rvgpu_internal_noc_if.device noc_if,
     
     // Tag Array Interface
-    l15cache_tag_if.controller tag_if,
+    interface_l15cache_tag.ctrl_port tag_if,
     
     // Data Array Interface
-    l15cache_data_if.controller data_if,
+    interface_l15cache_data.ctrl_port data_if,
     
     // Controller Interface
     interface_l15cache_controller.ctrl_port ctrl_if

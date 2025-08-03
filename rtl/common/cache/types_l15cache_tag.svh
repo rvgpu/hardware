@@ -26,16 +26,6 @@
 // L1.5 Cache Tag Array Types
 //=============================================================================
 
-// Tag Array状态机状态定义
-typedef enum logic [3:0] {
-    TAG_CLEAR = 4'b0000,            // SRAM初始化状态
-    TAG_IDLE = 4'b0001,             // 空闲状态
-    TAG_LOOKUP = 4'b0010,           // 发起Tag查找
-    TAG_LOOKUP_WAIT = 4'b0011,      // 等待Tag查找完成
-    TAG_UPDATE = 4'b0100,           // 发起Tag更新
-    TAG_UPDATE_WAIT = 4'b0101       // 等待Tag更新完成
-} tag_state_t;
-
 // Tag比较结果类型
 typedef struct packed {
     logic [L15CACHE_WAYS-1:0]       way_hit;        // 每个way的命中情况

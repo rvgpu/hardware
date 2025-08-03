@@ -16,10 +16,8 @@
 `ifndef RVGPU_TYPES_L15CACHE_SVH
 `define RVGPU_TYPES_L15CACHE_SVH
 
-
-
 `include "types_cache_op.svh"
-`include "types_cache_resp.svh"
+`include "types_cache_resp_status.svh"
 `include "const_l15cache.svh"
 
 //=============================================================================

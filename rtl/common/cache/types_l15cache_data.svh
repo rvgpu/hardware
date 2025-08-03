@@ -16,8 +16,6 @@
 `ifndef RVGPU_TYPES_L15CACHE_DATA_SVH
 `define RVGPU_TYPES_L15CACHE_DATA_SVH
 
-
-
 `include "types_cache_op.svh"
 `include "const_l15cache.svh"
 `include "types_l15cache.svh"
@@ -25,14 +23,6 @@
 //=============================================================================
 // L1.5 Cache Data Array Types
 //=============================================================================
-
-// Data Array状态机状态定义
-typedef enum logic [1:0] {
-    L15CACHE_DATA_STATE_IDLE = 2'b00,        // 空闲状态
-    L15CACHE_DATA_STATE_LINE_READ = 2'b01,   // 缓存行读操作 - 发起SRAM读取
-    L15CACHE_DATA_STATE_LINE_READ_WAIT = 2'b10, // 缓存行读等待 - 等待SRAM读取完成
-    L15CACHE_DATA_STATE_LINE_WRITE = 2'b11   // 缓存行写操作
-} l15cache_data_state_t;
 
 // Data Array访问结果类型
 typedef struct packed {

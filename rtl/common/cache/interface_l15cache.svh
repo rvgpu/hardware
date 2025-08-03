@@ -19,7 +19,7 @@
 `include "rvgpu_typedef.svh"
 `include "types_l15cache.svh"
 `include "types_cache_op.svh"
-`include "types_cache_resp.svh"
+`include "types_cache_resp_status.svh"
 `include "const_l15cache.svh"
 
 // L1.5缓存接口

@@ -20,7 +20,7 @@
 `include "types_l15cache.svh"
 `include "types_l15cache_controller.svh"
 `include "types_cache_op.svh"
-`include "types_cache_resp.svh"
+`include "types_cache_resp_status.svh"
 `include "const_l15cache.svh"
 
 // L1.5缓存控制器接口

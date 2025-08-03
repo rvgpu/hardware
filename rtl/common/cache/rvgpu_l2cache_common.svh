@@ -60,7 +60,7 @@ localparam int L2CACHE_NOC_HEADER_WIDTH     = `RVGPU_CONST_NOC_HEADER_WIDTH;
 
 `include "types_cache_mesi.svh"
 `include "types_cache_op.svh"
-`include "types_cache_resp.svh"
+`include "types_cache_resp_status.svh"
 
 //=============================================================================
 // L2 Cache Data Structures

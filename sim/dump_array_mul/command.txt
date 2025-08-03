@@ -1,6 +1,7 @@
 #  写入寄存器测试 - 添加strb参数
 load_mem memdata_mmupagetable.hex
 load_mem memdata_command.hex
+load_mem memdata_program.hex
 
 write_reg 0x00 0x10000000
 write_reg 0x04 0x00000000  # MMU基地址 0x10000000

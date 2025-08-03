@@ -361,7 +361,7 @@ module rvgpu_gpc_mmu #(
                         bs_if.resp_hit <= mmu_tlb.resp_hit;
                         bs_if.resp_status <= MMU_RESP_OKAY;
                         
-                        if (bs_if.resp_ready) begin
+                        if (bs_if.resp_ready && bs_if.resp_valid) begin
                             bs_if.resp_valid <= 1'b0;
                             state <= IDLE;
                         end

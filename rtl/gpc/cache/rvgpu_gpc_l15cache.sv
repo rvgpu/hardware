@@ -47,17 +47,9 @@ module rvgpu_gpc_l15cache (
     // Internal Interface Instances
     //=============================================================================
     
-    // 控制器与子模块的接口
     l15cache_tag_if controller_tag();
     l15cache_data_if controller_data();
-    
-    // 控制器请求接口
-    logic                    ctrl_req_valid;
-    l15cache_request_t       ctrl_req_data;
-    logic                    ctrl_req_ready;
-    logic                    ctrl_resp_valid;
-    l15cache_response_t      ctrl_resp_data;
-    logic                    ctrl_resp_ready;
+    interface_l15cache_controller ctrl_if();
 
     //=============================================================================
     // L1.5 Cache Controller Instance
@@ -76,13 +68,8 @@ module rvgpu_gpc_l15cache (
         // Data Array Interface
         .data_if(controller_data.controller),
         
-        // Single Request Interface
-        .req_valid(ctrl_req_valid),
-        .req_data(ctrl_req_data),
-        .req_ready(ctrl_req_ready),
-        .resp_valid(ctrl_resp_valid),
-        .resp_data(ctrl_resp_data),
-        .resp_ready(ctrl_resp_ready)
+        // Controller Interface
+        .ctrl_if(ctrl_if.ctrl_port)
     );
 
     //=============================================================================
@@ -96,13 +83,8 @@ module rvgpu_gpc_l15cache (
         // Multiple Requester Interfaces
         .requester_if(requester_if),
         
-        // Single Controller Interface
-        .ctrl_req_valid(ctrl_req_valid),
-        .ctrl_req_data(ctrl_req_data),
-        .ctrl_req_ready(ctrl_req_ready),
-        .ctrl_resp_valid(ctrl_resp_valid),
-        .ctrl_resp_data(ctrl_resp_data),
-        .ctrl_resp_ready(ctrl_resp_ready)
+        // Controller Interface
+        .ctrl_if(ctrl_if.buffer_port)
     );
 
     //=============================================================================

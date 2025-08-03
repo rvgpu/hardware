@@ -27,6 +27,7 @@
 `include "rvgpu_debug.svh"
 `include "rvgpu_fifo_if.svh"
 `include "types_l15cache_controller.svh"
+`include "interface_l15cache_controller.svh"
 
 
 
@@ -49,14 +50,8 @@ module rvgpu_gpc_l15cache_controller (
     // Data Array Interface
     l15cache_data_if.controller data_if,
     
-    // Single Requester Interface
-    input  logic                    req_valid,
-    input  l15cache_request_t       req_data,
-    output logic                    req_ready,
-    
-    output logic                    resp_valid,
-    output l15cache_response_t      resp_data,
-    input  logic                    resp_ready
+    // Controller Interface
+    interface_l15cache_controller.ctrl_port ctrl_if
 );
 
     //=============================================================================
@@ -120,7 +115,7 @@ module rvgpu_gpc_l15cache_controller (
     wire tag_update_accept = tag_if.update_valid && tag_if.update_ready;
     wire data_line_read_accept = data_if.line_read_valid && data_if.line_read_ready;
     wire data_line_write_accept = data_if.line_write_valid && data_if.line_write_ready;
-    wire req_accept = req_valid && req_ready;
+    wire req_accept = ctrl_if.ctrl_req_valid && ctrl_if.ctrl_req_ready;
 
 
     
@@ -171,9 +166,9 @@ module rvgpu_gpc_l15cache_controller (
         req_fifo_if.write_data = '0;
         
         // Request interface
-        req_ready = (state_r == L15_STATE_IDLE);
-        resp_valid = 1'b0;
-        resp_data = '0;
+        ctrl_if.ctrl_req_ready = (state_r == L15_STATE_IDLE);
+        ctrl_if.ctrl_resp_valid = 1'b0;
+        ctrl_if.ctrl_resp_data = '0;
         
         // State machine logic
         case (state_r)
@@ -183,11 +178,11 @@ module rvgpu_gpc_l15cache_controller (
                 line_write_valid_nxt = 1'b0;
                 
                 // Process request from single interface
-                if (req_valid) begin
+                if (ctrl_if.ctrl_req_valid) begin
                     state_nxt = L15_STATE_TAG_LOOKUP;
                     
                     // Use request data directly
-                    current_req_nxt = req_data;
+                    current_req_nxt = ctrl_if.ctrl_req_data;
                     
                     // Update current address
                     current_addr_nxt = addr64_to_l15cache_addr(current_req_nxt.addr);
@@ -423,10 +418,10 @@ module rvgpu_gpc_l15cache_controller (
             L15_STATE_RESPONSE: begin
                 // Response state: send response to requester
                 if (current_resp_r.trans_id != 0) begin
-                    resp_valid = 1'b1;
-                    resp_data = current_resp_r;
+                    ctrl_if.ctrl_resp_valid = 1'b1;
+                    ctrl_if.ctrl_resp_data = current_resp_r;
                     
-                    if (resp_ready) begin
+                    if (ctrl_if.ctrl_resp_ready) begin
                         current_resp_nxt = '0;
                         state_nxt = L15_STATE_IDLE;
                     end

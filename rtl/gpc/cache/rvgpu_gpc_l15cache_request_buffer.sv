@@ -24,6 +24,7 @@
 `include "rvgpu_fifo_if.svh"
 `include "types_l15cache_buffer.svh"
 `include "interface_l15cache.svh"
+`include "interface_l15cache_controller.svh"
 
 module rvgpu_gpc_l15cache_request_buffer (
     input  logic clk,
@@ -32,14 +33,8 @@ module rvgpu_gpc_l15cache_request_buffer (
     // Multiple Requester Interfaces (TPC + Block Scheduler + Raster)
     interface_l15cache.cache requester_if[L15CACHE_NUM_REQUESTERS],
     
-    // Single Controller Interface
-    output logic                    ctrl_req_valid,
-    output l15cache_request_t       ctrl_req_data,
-    input  logic                    ctrl_req_ready,
-    
-    input  logic                    ctrl_resp_valid,
-    input  l15cache_response_t      ctrl_resp_data,
-    output logic                    ctrl_resp_ready
+    // Controller Interface
+    interface_l15cache_controller.buffer_port ctrl_if
 );
 
     // Request buffer configuration
@@ -206,12 +201,12 @@ module rvgpu_gpc_l15cache_request_buffer (
     
     // FIFO control
     always_comb begin
-        req_fifo_if.read_en = ctrl_req_ready && !req_fifo_if.empty;
+        req_fifo_if.read_en = ctrl_if.ctrl_req_ready && !req_fifo_if.empty;
         req_fifo_if.write_en = req_formatted_valid;
         req_fifo_if.write_data = formatted_req;
         
-        ctrl_req_valid = !req_fifo_if.empty;
-        ctrl_req_data = req_fifo_if.read_data;
+        ctrl_if.ctrl_req_valid = !req_fifo_if.empty;
+        ctrl_if.ctrl_req_data = req_fifo_if.read_data;
     end
     
     // Track requester for response routing
@@ -219,7 +214,7 @@ module rvgpu_gpc_l15cache_request_buffer (
         if (!rst_n) begin
             resp_requester_r <= '0;
         end else begin
-            if (ctrl_req_valid && ctrl_req_ready) begin
+            if (ctrl_if.ctrl_req_valid && ctrl_if.ctrl_req_ready) begin
                 if (req_grant_array[0]) begin
                     resp_requester_r <= 3'b000;
                 end
@@ -244,7 +239,7 @@ module rvgpu_gpc_l15cache_request_buffer (
     
     // Response routing
     always_comb begin
-        ctrl_resp_ready = 1'b0;
+        ctrl_if.ctrl_resp_ready = 1'b0;
         
         // 初始化所有响应信号
         requester_if[0].resp_valid = 1'b0;
@@ -277,58 +272,58 @@ module rvgpu_gpc_l15cache_request_buffer (
         requester_if[5].resp_status = CACHE_RESP_OKAY;
         requester_if[5].resp_id = '0;
         
-        if (ctrl_resp_valid) begin
+        if (ctrl_if.ctrl_resp_valid) begin
             case (resp_requester_r)
                 3'b000: begin
                     requester_if[0].resp_valid = 1'b1;
-                    requester_if[0].resp_data = ctrl_resp_data.data;
-                    requester_if[0].resp_status = ctrl_resp_data.status;
-                    requester_if[0].resp_id = ctrl_resp_data.trans_id;
-                    ctrl_resp_ready = requester_if[0].resp_ready;
+                    requester_if[0].resp_data = ctrl_if.ctrl_resp_data.data;
+                    requester_if[0].resp_status = ctrl_if.ctrl_resp_data.status;
+                    requester_if[0].resp_id = ctrl_if.ctrl_resp_data.trans_id;
+                    ctrl_if.ctrl_resp_ready = requester_if[0].resp_ready;
                 end
                 3'b001: begin
                     requester_if[1].resp_valid = 1'b1;
-                    requester_if[1].resp_data = ctrl_resp_data.data;
-                    requester_if[1].resp_status = ctrl_resp_data.status;
-                    requester_if[1].resp_id = ctrl_resp_data.trans_id;
-                    ctrl_resp_ready = requester_if[1].resp_ready;
+                    requester_if[1].resp_data = ctrl_if.ctrl_resp_data.data;
+                    requester_if[1].resp_status = ctrl_if.ctrl_resp_data.status;
+                    requester_if[1].resp_id = ctrl_if.ctrl_resp_data.trans_id;
+                    ctrl_if.ctrl_resp_ready = requester_if[1].resp_ready;
                 end
                 3'b010: begin
                     requester_if[2].resp_valid = 1'b1;
-                    requester_if[2].resp_data = ctrl_resp_data.data;
-                    requester_if[2].resp_status = ctrl_resp_data.status;
-                    requester_if[2].resp_id = ctrl_resp_data.trans_id;
-                    ctrl_resp_ready = requester_if[2].resp_ready;
+                    requester_if[2].resp_data = ctrl_if.ctrl_resp_data.data;
+                    requester_if[2].resp_status = ctrl_if.ctrl_resp_data.status;
+                    requester_if[2].resp_id = ctrl_if.ctrl_resp_data.trans_id;
+                    ctrl_if.ctrl_resp_ready = requester_if[2].resp_ready;
                 end
                 3'b011: begin
                     requester_if[3].resp_valid = 1'b1;
-                    requester_if[3].resp_data = ctrl_resp_data.data;
-                    requester_if[3].resp_status = ctrl_resp_data.status;
-                    requester_if[3].resp_id = ctrl_resp_data.trans_id;
-                    ctrl_resp_ready = requester_if[3].resp_ready;
+                    requester_if[3].resp_data = ctrl_if.ctrl_resp_data.data;
+                    requester_if[3].resp_status = ctrl_if.ctrl_resp_data.status;
+                    requester_if[3].resp_id = ctrl_if.ctrl_resp_data.trans_id;
+                    ctrl_if.ctrl_resp_ready = requester_if[3].resp_ready;
                 end
                 3'b100: begin
                     requester_if[4].resp_valid = 1'b1;
-                    requester_if[4].resp_data = ctrl_resp_data.data;
-                    requester_if[4].resp_status = ctrl_resp_data.status;
-                    requester_if[4].resp_id = ctrl_resp_data.trans_id;
-                    ctrl_resp_ready = requester_if[4].resp_ready;
+                    requester_if[4].resp_data = ctrl_if.ctrl_resp_data.data;
+                    requester_if[4].resp_status = ctrl_if.ctrl_resp_data.status;
+                    requester_if[4].resp_id = ctrl_if.ctrl_resp_data.trans_id;
+                    ctrl_if.ctrl_resp_ready = requester_if[4].resp_ready;
                 end
                 3'b101: begin
                     requester_if[5].resp_valid = 1'b1;
-                    requester_if[5].resp_data = ctrl_resp_data.data;
-                    requester_if[5].resp_status = ctrl_resp_data.status;
-                    requester_if[5].resp_id = ctrl_resp_data.trans_id;
-                    ctrl_resp_ready = requester_if[5].resp_ready;
+                    requester_if[5].resp_data = ctrl_if.ctrl_resp_data.data;
+                    requester_if[5].resp_status = ctrl_if.ctrl_resp_data.status;
+                    requester_if[5].resp_id = ctrl_if.ctrl_resp_data.trans_id;
+                    ctrl_if.ctrl_resp_ready = requester_if[5].resp_ready;
                 end
                 default: begin
-                    ctrl_resp_ready = 1'b0;
+                    ctrl_if.ctrl_resp_ready = 1'b0;
                 end
             endcase
         end
     end
     
-    // Requester ready signals - 展开循环
+    // Requester ready signals
     always_comb begin
         requester_if[0].req_ready = req_grant_array[0] && !req_fifo_if.full;
         requester_if[1].req_ready = req_grant_array[1] && !req_fifo_if.full;

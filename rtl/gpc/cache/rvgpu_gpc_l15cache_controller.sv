@@ -36,7 +36,9 @@
 import rvgpu_internal_noc_pkg::*;
 `endif
 
-module rvgpu_gpc_l15cache_controller (
+module rvgpu_gpc_l15cache_controller #(
+    parameter int GPC_ID = 0
+) (
     // Clock and Reset
     input  logic clk,
     input  logic rst_n,
@@ -163,6 +165,14 @@ module rvgpu_gpc_l15cache_controller (
         noc_if.s_resp_status = CACHE_RESP_OKAY;
         noc_if.s_resp_last = 1'b0;
         
+        // NOC master interface defaults
+        noc_if.m_req_valid = 1'b0;
+        noc_if.m_req_header = '0;
+        noc_if.m_req_data = '0;
+        noc_if.m_req_strb = '0;
+        noc_if.m_req_last = 1'b0;
+        noc_if.m_resp_ready = 1'b0;
+        
         tag_if.lookup_valid = 1'b0;
         tag_if.lookup_index = '0;
         tag_if.lookup_tag = '0;
@@ -280,7 +290,7 @@ module rvgpu_gpc_l15cache_controller (
                     noc_if.m_req_valid = 1'b1;
                     noc_if.m_req_header = build_noc_header_mem_request(
                         current_req_r.trans_id, 
-                        current_req_r.src_node, 
+                        noc_node_id_t'(NODE_SHADER_0 + GPC_ID), 
                         current_req_r.src_local
                     );
                     noc_if.m_req_data = current_req_r.addr;
@@ -296,7 +306,7 @@ module rvgpu_gpc_l15cache_controller (
                     noc_if.m_req_valid = 1'b1;
                     noc_if.m_req_header = build_noc_header_mem_request(
                         current_req_r.trans_id, 
-                        current_req_r.src_node, 
+                        noc_node_id_t'(NODE_SHADER_0 + GPC_ID), 
                         current_req_r.src_local
                     );
                     noc_if.m_req_data = current_req_r.data;
@@ -436,15 +446,11 @@ module rvgpu_gpc_l15cache_controller (
             
             L15_STATE_RESPONSE: begin
                 // Response state: send response to requester
-                if (current_resp_r.trans_id != 0) begin
-                    ctrl_if.ctrl_resp_valid = 1'b1;
-                    ctrl_if.ctrl_resp_data = current_resp_r;
-                    
-                    if (ctrl_if.ctrl_resp_ready) begin
-                        current_resp_nxt = '0;
-                        state_nxt = L15_STATE_IDLE;
-                    end
-                end else begin
+                ctrl_if.ctrl_resp_valid = 1'b1;
+                ctrl_if.ctrl_resp_data = current_resp_r;
+                
+                if (ctrl_if.ctrl_resp_ready && ctrl_if.ctrl_resp_valid) begin
+                    current_resp_nxt = '0;
                     state_nxt = L15_STATE_IDLE;
                 end
             end

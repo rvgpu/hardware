@@ -441,22 +441,14 @@ module rvgpu_l2cache_controller (
             
             L2_STATE_RESPONSE: begin
                 // Response state: send response to NOC
-                if (current_resp_r.trans_id != 0) begin
-                    noc_if.resp_valid = 1'b1;
-                    noc_if.resp_header = build_noc_header_mem_response(
-                        current_resp_r.trans_id, 
-                        current_resp_r.dest_node, 
-                        current_req_r.src_local
-                    );
-                    noc_if.resp_data = current_resp_r.data;
-                    noc_if.resp_status = current_resp_r.status;
-                    noc_if.resp_last = 1'b1;
+                noc_if.resp_valid = 1'b1;
+                noc_if.resp_header = build_noc_header_mem_response(current_resp_r.trans_id, current_resp_r.dest_node, current_req_r.src_local);
+                noc_if.resp_data = current_resp_r.data;
+                noc_if.resp_status = current_resp_r.status;
+                noc_if.resp_last = 1'b1;
                     
-                    if (noc_if.resp_ready) begin
-                        current_resp_nxt = '0;
-                        state_nxt = L2_STATE_IDLE;
-                    end
-                end else begin
+                if (noc_if.resp_ready && noc_if.resp_valid) begin
+                    current_resp_nxt = '0;
                     state_nxt = L2_STATE_IDLE;
                 end
             end

@@ -20,13 +20,16 @@
 `include "const_l15cache.svh"
 `include "types_l15cache.svh"
 `include "function_cache_lru.svh"
+`include "rvgpu_noc_message.svh"
 
 `include "rvgpu_fifo_if.svh"
 `include "types_l15cache_buffer.svh"
 `include "interface_l15cache.svh"
 `include "interface_l15cache_controller.svh"
 
-module rvgpu_gpc_l15cache_request_buffer (
+module rvgpu_gpc_l15cache_request_buffer #(
+    parameter int GPC_ID = 0
+) (
     input  logic clk,
     input  logic rst_n,
 
@@ -131,7 +134,7 @@ module rvgpu_gpc_l15cache_request_buffer (
             formatted_req.read = requester_if[0].req_is_read;
             formatted_req.write = !requester_if[0].req_is_read;
             formatted_req.trans_id = requester_if[0].req_id;
-            formatted_req.src_node = 0;
+            formatted_req.src_node = NODE_SHADER_0 + GPC_ID;
             formatted_req.src_local = 2'b00;
             formatted_req.data = requester_if[0].req_data;
             formatted_req.strb = requester_if[0].req_mask;
@@ -143,7 +146,7 @@ module rvgpu_gpc_l15cache_request_buffer (
             formatted_req.read = requester_if[1].req_is_read;
             formatted_req.write = !requester_if[1].req_is_read;
             formatted_req.trans_id = requester_if[1].req_id;
-            formatted_req.src_node = 0;
+            formatted_req.src_node = NODE_SHADER_0 + GPC_ID;
             formatted_req.src_local = 2'b01;
             formatted_req.data = requester_if[1].req_data;
             formatted_req.strb = requester_if[1].req_mask;
@@ -155,7 +158,7 @@ module rvgpu_gpc_l15cache_request_buffer (
             formatted_req.read = requester_if[2].req_is_read;
             formatted_req.write = !requester_if[2].req_is_read;
             formatted_req.trans_id = requester_if[2].req_id;
-            formatted_req.src_node = 0;
+            formatted_req.src_node = NODE_SHADER_0 + GPC_ID;
             formatted_req.src_local = 2'b10;
             formatted_req.data = requester_if[2].req_data;
             formatted_req.strb = requester_if[2].req_mask;
@@ -167,7 +170,7 @@ module rvgpu_gpc_l15cache_request_buffer (
             formatted_req.read = requester_if[3].req_is_read;
             formatted_req.write = !requester_if[3].req_is_read;
             formatted_req.trans_id = requester_if[3].req_id;
-            formatted_req.src_node = 0;
+            formatted_req.src_node = NODE_SHADER_0 + GPC_ID;
             formatted_req.src_local = 2'b11;
             formatted_req.data = requester_if[3].req_data;
             formatted_req.strb = requester_if[3].req_mask;
@@ -179,7 +182,7 @@ module rvgpu_gpc_l15cache_request_buffer (
             formatted_req.read = requester_if[4].req_is_read;
             formatted_req.write = !requester_if[4].req_is_read;
             formatted_req.trans_id = requester_if[4].req_id;
-            formatted_req.src_node = 0;
+            formatted_req.src_node = NODE_SHADER_0 + GPC_ID;
             formatted_req.src_local = 2'b00;
             formatted_req.data = requester_if[4].req_data;
             formatted_req.strb = requester_if[4].req_mask;
@@ -191,7 +194,7 @@ module rvgpu_gpc_l15cache_request_buffer (
             formatted_req.read = requester_if[5].req_is_read;
             formatted_req.write = !requester_if[5].req_is_read;
             formatted_req.trans_id = requester_if[5].req_id;
-            formatted_req.src_node = 0;
+            formatted_req.src_node = NODE_SHADER_0 + GPC_ID;
             formatted_req.src_local = 2'b01;
             formatted_req.data = requester_if[5].req_data;
             formatted_req.strb = requester_if[5].req_mask;

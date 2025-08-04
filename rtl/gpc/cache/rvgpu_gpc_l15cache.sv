@@ -31,7 +31,9 @@
 import rvgpu_internal_noc_pkg::*;
 `endif // RVGPU_INTERNAL_NOC_PKG_IMPORTED
 
-module rvgpu_gpc_l15cache (
+module rvgpu_gpc_l15cache #(
+    parameter int GPC_ID = 0
+) (
     // Clock and Reset Interface
     input  logic clk,
     input  logic rst_n,
@@ -55,7 +57,9 @@ module rvgpu_gpc_l15cache (
     // L1.5 Cache Controller Instance
     //=============================================================================
     
-    rvgpu_gpc_l15cache_controller u_l15cache_controller (
+    rvgpu_gpc_l15cache_controller #(
+        .GPC_ID(GPC_ID)
+    ) u_l15cache_controller (
         .clk(clk),
         .rst_n(rst_n),
         
@@ -76,7 +80,9 @@ module rvgpu_gpc_l15cache (
     // L1.5 Cache Request Buffer Instance
     //=============================================================================
     
-    rvgpu_gpc_l15cache_request_buffer u_l15cache_request_buffer (
+    rvgpu_gpc_l15cache_request_buffer #(
+        .GPC_ID(GPC_ID)
+    ) u_l15cache_request_buffer (
         .clk(clk),
         .rst_n(rst_n),
         

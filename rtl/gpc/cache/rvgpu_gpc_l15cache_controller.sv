@@ -25,6 +25,7 @@
 `include "interface_l15cache_tag.svh"
 `include "interface_l15cache_data.svh"
 `include "rvgpu_debug.svh"
+`include "rvgpu_noc_debug.svh"
 `include "rvgpu_fifo_if.svh"
 `include "types_l15cache_controller.svh"
 `include "interface_l15cache_controller.svh"
@@ -103,6 +104,12 @@ module rvgpu_gpc_l15cache_controller #(
     logic [L15CACHE_WAYS-1:0] hit_way_r, hit_way_nxt;
     logic [L15CACHE_WAYS-1:0] selected_way_r, selected_way_nxt;
     
+    // Saved tag entry for cache miss updates
+    l15cache_tag_entry_t saved_tag_entry_r, saved_tag_entry_nxt;
+    
+    // Saved memory data for cache miss updates
+    logic [511:0] saved_memory_data_r, saved_memory_data_nxt;
+    
     // Control flags
     logic line_read_valid_r, line_read_valid_nxt;
     logic line_write_valid_r, line_write_valid_nxt;
@@ -153,6 +160,8 @@ module rvgpu_gpc_l15cache_controller #(
         cache_hit_nxt = cache_hit_r;
         hit_way_nxt = hit_way_r;
         selected_way_nxt = selected_way_r;
+        saved_tag_entry_nxt = saved_tag_entry_r;
+        saved_memory_data_nxt = saved_memory_data_r;
         line_read_valid_nxt = line_read_valid_r;
         line_write_valid_nxt = line_write_valid_r;
 
@@ -234,6 +243,7 @@ module rvgpu_gpc_l15cache_controller #(
                 if (tag_if.lookup_done) begin
                     cache_hit_nxt = tag_if.lookup_hit;
                     hit_way_nxt = tag_if.hit_way;
+                    saved_tag_entry_nxt = tag_if.tag_entry;  // 保存tag entry用于后续更新
                     
                     if (tag_if.lookup_hit) begin
                         // Cache hit - choose read or write state based on request type
@@ -333,10 +343,11 @@ module rvgpu_gpc_l15cache_controller #(
                 
                 if (noc_if.m_resp_valid) begin
                     if (noc_if.m_resp_status == CACHE_RESP_OKAY) begin
-                        // Memory read successful, proceed to tag and data update
+                        // Memory read successful, save memory data and proceed to tag and data update
+                        saved_memory_data_nxt = noc_if.m_resp_data;
                         state_nxt = L15_STATE_TAG_UPDATE;
-                        `DEBUG_PRINT("L15CACHE_CTRL", $sformatf("Memory response received, proceeding to tag update: index=0x%h, way=%0d", 
-                                   current_addr_r.index, selected_way_r));
+                        `DEBUG_PRINT("L15CACHE_CTRL", $sformatf("Memory response received, proceeding to tag update: index=0x%h, way=%0d", current_addr_r.index, selected_way_r));
+                        `GPC_PRINT("CACHE.CTRL", $sformatf("%s", noc_response_mem_read_to_string(noc_if.m_resp_header, noc_if.m_resp_data)));
                     end else begin
                         // Memory access error
                         state_nxt = L15_STATE_RESPONSE;
@@ -357,7 +368,7 @@ module rvgpu_gpc_l15cache_controller #(
                     tag_if.update_valid = 1'b1;
                     tag_if.update_index = current_addr_r.index;
                     tag_if.update_way = selected_way_r;
-                    tag_if.update_entry = tag_if.tag_entry;
+                    tag_if.update_entry = saved_tag_entry_r;  // 使用保存的tag entry
                     
                     // Update selected way based on operation type
                     if (cache_hit_r) begin
@@ -411,8 +422,8 @@ module rvgpu_gpc_l15cache_controller #(
                     data_if.line_write_data.data = current_req_r.data;
                     data_if.line_write_data.strb = current_req_r.strb;
                 end else begin
-                    // Cache miss: write memory data
-                    data_if.line_write_data.data = noc_if.m_resp_data;
+                    // Cache miss: write saved memory data
+                    data_if.line_write_data.data = saved_memory_data_r;
                     data_if.line_write_data.strb = '1;
                 end
                 
@@ -432,7 +443,7 @@ module rvgpu_gpc_l15cache_controller #(
                         current_resp_nxt.dirty = 1'b1;
                     end else begin
                         // Cache miss response
-                        current_resp_nxt.data = noc_if.m_resp_data;
+                        current_resp_nxt.data = saved_memory_data_r;
                         current_resp_nxt.status = CACHE_RESP_OKAY;
                         current_resp_nxt.trans_id = current_req_r.trans_id;
                         current_resp_nxt.dest_node = current_req_r.src_node;
@@ -501,6 +512,8 @@ module rvgpu_gpc_l15cache_controller #(
             cache_hit_r <= 1'b0;
             hit_way_r <= '0;
             selected_way_r <= '0;
+            saved_tag_entry_r <= '{default: '0};
+            saved_memory_data_r <= '0;
             line_read_valid_r <= 1'b0;
             line_write_valid_r <= 1'b0;
 
@@ -513,6 +526,8 @@ module rvgpu_gpc_l15cache_controller #(
             cache_hit_r <= cache_hit_nxt;
             hit_way_r <= hit_way_nxt;
             selected_way_r <= selected_way_nxt;
+            saved_tag_entry_r <= saved_tag_entry_nxt;
+            saved_memory_data_r <= saved_memory_data_nxt;
             line_read_valid_r <= line_read_valid_nxt;
             line_write_valid_r <= line_write_valid_nxt;
         end

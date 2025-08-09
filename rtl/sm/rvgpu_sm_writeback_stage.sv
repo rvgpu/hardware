@@ -31,7 +31,7 @@ module rvgpu_sm_writeback_stage #(
     input  logic                                mem_wb_valid,
     input  logic [31:0]                         mem_wb_inst,
     input  logic [63:0]                         mem_wb_pc,
-    input  logic [$clog2(WARP_COUNT)-1:0]      mem_wb_warp_id,
+    input  logic [$clog2(WARP_COUNT)-1:0]       mem_wb_warp_id,
     input  logic [THREAD_COUNT-1:0]             mem_wb_active_mask,
     input  logic [4:0]                          mem_wb_rd,
     input  logic [31:0]                         mem_wb_result[THREAD_COUNT],
@@ -43,14 +43,14 @@ module rvgpu_sm_writeback_stage #(
     
     // 寄存器文件写接口
     output logic                                reg_write_enable,
-    output logic [$clog2(WARP_COUNT)-1:0]      reg_write_warp_id,
+    output logic [$clog2(WARP_COUNT)-1:0]       reg_write_warp_id,
     output logic [4:0]                          reg_write_addr,
     output logic [31:0]                         reg_write_data[THREAD_COUNT],
     output logic [THREAD_COUNT-1:0]             reg_write_mask,
     
     // PC更新接口
     output logic                                pc_update_valid,
-    output logic [$clog2(WARP_COUNT)-1:0]      pc_update_warp_id,
+    output logic [$clog2(WARP_COUNT)-1:0]       pc_update_warp_id,
     output logic [63:0]                         pc_update_pc,
     
     // 分支预测反馈
@@ -61,7 +61,7 @@ module rvgpu_sm_writeback_stage #(
     
     // Warp完成信号
     output logic                                warp_complete,
-    output logic [$clog2(WARP_COUNT)-1:0]      warp_complete_id,
+    output logic [$clog2(WARP_COUNT)-1:0]       warp_complete_id,
     
     // 流水线控制
     input  logic                                pipeline_stall,

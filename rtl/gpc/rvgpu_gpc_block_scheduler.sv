@@ -286,8 +286,7 @@ module rvgpu_gpc_block_scheduler #(
                     state_n = DISPATCH_BLOCK;
                 end
                 
-                `GPC_PRINT("Scheduler", $sformatf("Stored args[%d-%d], counter=%d", 
-                    args_counter_r, args_counter_r + 3, args_counter_n));
+                `GPC_PRINT("Scheduler", $sformatf("Stored args[%0d-%0d], counter=%0d", args_counter_r, args_counter_r + 3, args_counter_n));
             end
             
             DISPATCH_BLOCK: begin

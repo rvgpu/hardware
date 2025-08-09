@@ -8,7 +8,7 @@
 // RTL Module files
 //=============================================================================
 
-// Common FIFO - 必须放在最前面，因为其他模块依赖它
+// Common FIFO
 $RVGPU_HARDWARE/rtl/common/fifo/rvgpu_fifo_basic.sv
 // $RVGPU_HARDWARE/rtl/common/fifo/rvgpu_fifo_stream.sv
 
@@ -61,12 +61,12 @@ $RVGPU_HARDWARE/rtl/sm/rvgpu_sm_decode_stage.sv
 $RVGPU_HARDWARE/rtl/sm/rvgpu_sm_execute_stage.sv
 $RVGPU_HARDWARE/rtl/sm/rvgpu_sm_memory_stage.sv
 $RVGPU_HARDWARE/rtl/sm/rvgpu_sm_writeback_stage.sv
-$RVGPU_HARDWARE/rtl/sm/rvgpu_sm.sv
+$RVGPU_HARDWARE/rtl/sm/rvgpu_sm_top.sv
 
 // CUDA Core
 $RVGPU_HARDWARE/rtl/cudacore/rvgpu_sm_cuda_core.sv
 $RVGPU_HARDWARE/rtl/cudacore/rvgpu_sm_tensor_core.sv
 $RVGPU_HARDWARE/rtl/cudacore/rvgpu_sm_cuda_core_unit.sv
 
-// GPU Top - 必须放在最后，作为顶层模块
+// GPU Top
 $RVGPU_HARDWARE/rtl/gpu_top/rvgpu_toplevel.sv

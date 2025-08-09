@@ -351,7 +351,7 @@ module rvgpu_tpc_top #(
     genvar i;
     generate
         for (i = 0; i < NUM_SM; i++) begin : sm_gen
-            rvgpu_sm #(
+            rvgpu_sm_top #(
                 .SM_ID(i),
                 .WARP_COUNT(MAX_WARPS_PER_SM),
                 .MAX_THREAD_PER_WARP(32),

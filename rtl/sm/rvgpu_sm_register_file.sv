@@ -32,7 +32,7 @@ module rvgpu_sm_register_file #(
     
     // 读端口
     input  logic [READ_PORTS-1:0]                    read_enable,
-    input  logic [$clog2(WARP_COUNT)-1:0]           read_warp_id[READ_PORTS],
+    input  logic [$clog2(WARP_COUNT)-1:0]            read_warp_id[READ_PORTS],
     input  logic [4:0]                               read_reg_addr[READ_PORTS],
     output logic [31:0]                              read_data[READ_PORTS][THREAD_COUNT],
     
@@ -45,11 +45,11 @@ module rvgpu_sm_register_file #(
     
     // Warp管理
     input  logic                                     warp_alloc_valid,
-    input  logic [$clog2(WARP_COUNT)-1:0]           warp_alloc_id,
+    input  logic [$clog2(WARP_COUNT)-1:0]            warp_alloc_id,
     output logic                                     warp_alloc_ready,
     
     input  logic                                     warp_dealloc_valid,
-    input  logic [$clog2(WARP_COUNT)-1:0]           warp_dealloc_id,
+    input  logic [$clog2(WARP_COUNT)-1:0]            warp_dealloc_id,
     
     // 状态输出
     output logic [WARP_COUNT-1:0]                    warp_allocated,

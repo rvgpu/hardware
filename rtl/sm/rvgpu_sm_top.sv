@@ -13,15 +13,12 @@
 // limitations under the License.
 //=============================================================================
 
-`ifndef RVGPU_SM_SV
-`define RVGPU_SM_SV
+`ifndef RVGPU_SM_TOP_SV
+`define RVGPU_SM_TOP_SV
 
 `include "rvgpu_typedef.svh"
 
-// SM (Streaming Multiprocessor) - 4个CUDA Core架构
-// 参考现代GPU架构，每个SM包含4个CUDA Core子单元
-// 采用两级调度：GPC Block Scheduler -> SM Warp Scheduler -> CUDA Core Units
-module rvgpu_sm #(
+module rvgpu_sm_top #(
     parameter int SM_ID = 0,                    // SM ID
     parameter int WARP_COUNT = 32,              // 每个SM支持的warp数量
     parameter int MAX_THREAD_PER_WARP = 32,     // 每个warp的最大线程数
@@ -311,7 +308,7 @@ module rvgpu_sm #(
         .warp_stalled(warp_stalled),
         .warp_barrier(warp_barrier),
         .warp_waiting(warp_waiting),
-        .scheduler_stall(1'b0), // 暂时设为0，简化处理
+        .scheduler_stall(1'b0), // 简化处理
         .new_warp_id(new_warp_id),
         .new_warp_valid(new_warp_valid),
         .warp_schedule_valid(warp_schedule_valid),
@@ -328,7 +325,7 @@ module rvgpu_sm #(
     rvgpu_sm_register_file #(
         .WARP_COUNT(WARP_COUNT),
         .THREAD_COUNT(MAX_THREAD_PER_WARP),
-        .REG_COUNT(512),  // 增大到512个寄存器/线程 (16384/32)
+        .REG_COUNT(512),  // 512个寄存器/线程
         .READ_PORTS(3 * NUM_CUDA_CORES),  // 每个CUDA Core 3个读端口
         .WRITE_PORTS(NUM_CUDA_CORES)      // 每个CUDA Core 1个写端口
     ) u_register_file (
@@ -365,7 +362,6 @@ module rvgpu_sm #(
     
     // 管理扁平化信号和分组信号之间的转换
     always_comb begin
-        // 从扁平化信号到寄存器文件信号
         for (int core = 0; core < NUM_CUDA_CORES; core++) begin
             for (int port = 0; port < 3; port++) begin
                 reg_read_enable_flat[core*3 + port] = reg_read_enable_core[core][port];
@@ -374,12 +370,6 @@ module rvgpu_sm #(
             end
         end
     end
-    
-    // L1 Data Cache输出端口连接 - 简化处理
-    // always_comb begin
-    //     // 这些信号由u_l1_data_cache模块驱动，不需要在这里初始化
-    //     // 移除所有对l1_data_req_ready和l1_data_resp信号的驱动
-    // end
     
     // =========================================================================
     // 取指和解码阶段实例化
@@ -466,7 +456,6 @@ module rvgpu_sm #(
     // CUDA Core选择逻辑
     // =========================================================================
     
-    // 简单轮询选择可用的CUDA Core
     always_comb begin
         selected_cuda_core = 0;
         if (cuda_core_dispatch_ready[0]) begin
@@ -494,7 +483,6 @@ module rvgpu_sm #(
     // 4个CUDA Core单元实例化
     // =========================================================================
     
-    // CUDA Core实例化
     generate
         for (genvar i = 0; i < NUM_CUDA_CORES; i++) begin : cuda_core_gen
             rvgpu_sm_cuda_core_unit #(
@@ -545,11 +533,11 @@ module rvgpu_sm #(
                 // L1 Data Cache接口 - 输入端口
                 .l1_data_req_ready(i == 0 ? l1_data_req_ready_0 : i == 1 ? l1_data_req_ready_1 : i == 2 ? l1_data_req_ready_2 : l1_data_req_ready_3),
                 .l1_data_resp_valid(i == 0 ? l1_data_resp_valid_0 : i == 1 ? l1_data_resp_valid_1 : i == 2 ? l1_data_resp_valid_2 : l1_data_resp_valid_3),
-                .l1_data_resp_warp_id(i == 0 ? l1_data_resp_warp_id_0 : i == 1 ? l1_data_resp_warp_id_1 : i == 2 ? l1_data_resp_warp_id_2 : l1_data_resp_warp_id_3),
-                .l1_data_resp_mask(i == 0 ? l1_data_resp_mask_0 : i == 1 ? l1_data_resp_mask_1 : i == 2 ? l1_data_resp_mask_2 : l1_data_resp_mask_3),
-                .l1_data_resp_data(i == 0 ? l1_data_resp_data_0 : i == 1 ? l1_data_resp_data_1 : i == 2 ? l1_data_resp_data_2 : l1_data_resp_data_3),
+                .l1_data_resp_warp_id(i == 0 ? l1_data_resp_warp_id_0 : i == 1 ? l1_data_resp_warp_id_1 : i == 2 ? l1_data_resp_warp_id_2 : i == 3 ? l1_data_resp_warp_id_3 : '0),
+                .l1_data_resp_mask(i == 0 ? l1_data_resp_mask_0 : i == 1 ? l1_data_resp_mask_1 : i == 2 ? l1_data_resp_mask_2 : i == 3 ? l1_data_resp_mask_3 : '0),
+                .l1_data_resp_data(i == 0 ? l1_data_resp_data_0 : i == 1 ? l1_data_resp_data_1 : i == 2 ? l1_data_resp_data_2 : i == 3 ? l1_data_resp_data_3 : '{default:'0}),
                 
-                // L1 Data Cache接口 - 输出端口 (保持未连接，由always_comb块驱动)
+                // L1 Data Cache接口 - 输出端口 (保持未连接，由上层仲裁驱动)
                 .l1_data_req_valid(),
                 .l1_data_req_warp_id(),
                 .l1_data_req_mask(),
@@ -785,7 +773,6 @@ module rvgpu_sm #(
     // 流水线控制
     assign pipeline_stall = 1'b0; // 简化实现
     assign pipeline_flush = 1'b0; // 简化实现
-    // scheduler_stall = pipeline_stall || !decode_ready; // 移除此行
     
     // L1.5 Cache接口连接 (指令获取)
     assign l15_if.req_is_read = 1'b1;
@@ -794,6 +781,8 @@ module rvgpu_sm #(
     assign l15_if.req_mask = '0;
     assign l15_if.flush = 1'b0;
 
-endmodule : rvgpu_sm
+endmodule : rvgpu_sm_top
 
-`endif // RVGPU_SM_SV 
+`endif // RVGPU_SM_TOP_SV 
+
+

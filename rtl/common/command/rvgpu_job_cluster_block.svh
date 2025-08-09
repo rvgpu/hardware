@@ -72,8 +72,7 @@ endfunction
 function automatic logic [31:0] get_total_blocks_in_cluster(
     input job_cluster_t job_cluster
 );
-    return (job_cluster.job_dim.cluster_x * job_cluster.job_dim.cluster_y * job_cluster.job_dim.cluster_z) *
-           (job_cluster.job_dim.block_x * job_cluster.job_dim.block_y * job_cluster.job_dim.block_z);
+    return (job_cluster.job_dim.cluster_x * job_cluster.job_dim.cluster_y * job_cluster.job_dim.cluster_z);
 endfunction
 
 function automatic logic [31:0] get_total_clusters_in_grid(

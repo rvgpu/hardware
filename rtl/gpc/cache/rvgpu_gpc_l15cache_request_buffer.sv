@@ -52,6 +52,13 @@ module rvgpu_gpc_l15cache_request_buffer #(
         .INDEX_BITS(REQ_BUFFER_BITS)
     ) req_fifo_if();
     
+    // Source (requester id) FIFO interface to track response routing
+    localparam int SRC_ID_WIDTH = REQUESTER_BITS;
+    rvgpu_fifo_basic_if #(
+        .DATA_WIDTH(SRC_ID_WIDTH),
+        .INDEX_BITS(REQ_BUFFER_BITS)
+    ) src_fifo_if();
+    
     // Requester arbitration
     logic [L15CACHE_NUM_REQUESTERS-1:0] req_valid_array;
     logic [L15CACHE_NUM_REQUESTERS-1:0] req_grant_array;
@@ -61,6 +68,7 @@ module rvgpu_gpc_l15cache_request_buffer #(
     // Request formatting
     l15cache_request_t formatted_req;
     logic req_formatted_valid;
+    logic [REQUESTER_BITS-1:0] selected_requester_id;
     
     // FIFO Instantiation
     rvgpu_fifo_basic #(
@@ -70,6 +78,16 @@ module rvgpu_gpc_l15cache_request_buffer #(
         .clk(clk),
         .rst_n(rst_n),
         .fifo_if(req_fifo_if.fifo_port)
+    );
+    
+    // FIFO to store requester id aligned with requests
+    rvgpu_fifo_basic #(
+        .DATA_WIDTH(SRC_ID_WIDTH),
+        .INDEX_BITS(REQ_BUFFER_BITS)
+    ) u_src_fifo (
+        .clk(clk),
+        .rst_n(rst_n),
+        .fifo_if(src_fifo_if.fifo_port)
     );
     
     // 将请求有效信号组合成数组 - 展开循环
@@ -127,6 +145,7 @@ module rvgpu_gpc_l15cache_request_buffer #(
     always_comb begin
         formatted_req = '0;
         req_formatted_valid = 1'b0;
+        selected_requester_id = '0;
         
         if (req_grant_array[0]) begin
             formatted_req.addr = requester_if[0].req_paddr;
@@ -139,6 +158,7 @@ module rvgpu_gpc_l15cache_request_buffer #(
             formatted_req.data = requester_if[0].req_data;
             formatted_req.strb = requester_if[0].req_mask;
             req_formatted_valid = 1'b1;
+            selected_requester_id = REQUESTER_BITS'(0);
         end
         else if (req_grant_array[1]) begin
             formatted_req.addr = requester_if[1].req_paddr;
@@ -151,6 +171,7 @@ module rvgpu_gpc_l15cache_request_buffer #(
             formatted_req.data = requester_if[1].req_data;
             formatted_req.strb = requester_if[1].req_mask;
             req_formatted_valid = 1'b1;
+            selected_requester_id = REQUESTER_BITS'(1);
         end
         else if (req_grant_array[2]) begin
             formatted_req.addr = requester_if[2].req_paddr;
@@ -163,6 +184,7 @@ module rvgpu_gpc_l15cache_request_buffer #(
             formatted_req.data = requester_if[2].req_data;
             formatted_req.strb = requester_if[2].req_mask;
             req_formatted_valid = 1'b1;
+            selected_requester_id = REQUESTER_BITS'(2);
         end
         else if (req_grant_array[3]) begin
             formatted_req.addr = requester_if[3].req_paddr;
@@ -175,6 +197,7 @@ module rvgpu_gpc_l15cache_request_buffer #(
             formatted_req.data = requester_if[3].req_data;
             formatted_req.strb = requester_if[3].req_mask;
             req_formatted_valid = 1'b1;
+            selected_requester_id = REQUESTER_BITS'(3);
         end
         else if (req_grant_array[4]) begin
             formatted_req.addr = requester_if[4].req_paddr;
@@ -187,6 +210,7 @@ module rvgpu_gpc_l15cache_request_buffer #(
             formatted_req.data = requester_if[4].req_data;
             formatted_req.strb = requester_if[4].req_mask;
             req_formatted_valid = 1'b1;
+            selected_requester_id = REQUESTER_BITS'(4);
         end
         else if (req_grant_array[5]) begin
             formatted_req.addr = requester_if[5].req_paddr;
@@ -199,6 +223,7 @@ module rvgpu_gpc_l15cache_request_buffer #(
             formatted_req.data = requester_if[5].req_data;
             formatted_req.strb = requester_if[5].req_mask;
             req_formatted_valid = 1'b1;
+            selected_requester_id = REQUESTER_BITS'(5);
         end
     end
     
@@ -207,6 +232,11 @@ module rvgpu_gpc_l15cache_request_buffer #(
         req_fifo_if.read_en = ctrl_if.ctrl_req_ready && !req_fifo_if.empty;
         req_fifo_if.write_en = req_formatted_valid;
         req_fifo_if.write_data = formatted_req;
+        
+        // Keep source FIFO aligned with request FIFO
+        src_fifo_if.read_en = req_fifo_if.read_en;
+        src_fifo_if.write_en = req_fifo_if.write_en;
+        src_fifo_if.write_data = selected_requester_id;
         
         ctrl_if.ctrl_req_valid = !req_fifo_if.empty;
         ctrl_if.ctrl_req_data = req_fifo_if.read_data;
@@ -218,24 +248,7 @@ module rvgpu_gpc_l15cache_request_buffer #(
             resp_requester_r <= '0;
         end else begin
             if (ctrl_if.ctrl_req_valid && ctrl_if.ctrl_req_ready) begin
-                if (req_grant_array[0]) begin
-                    resp_requester_r <= 3'b000;
-                end
-                else if (req_grant_array[1]) begin
-                    resp_requester_r <= 3'b001;
-                end
-                else if (req_grant_array[2]) begin
-                    resp_requester_r <= 3'b010;
-                end
-                else if (req_grant_array[3]) begin
-                    resp_requester_r <= 3'b011;
-                end
-                else if (req_grant_array[4]) begin
-                    resp_requester_r <= 3'b100;
-                end
-                else if (req_grant_array[5]) begin
-                    resp_requester_r <= 3'b101;
-                end
+                resp_requester_r <= src_fifo_if.read_data;
             end
         end
     end

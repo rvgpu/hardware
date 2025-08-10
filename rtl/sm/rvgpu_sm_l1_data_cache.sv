@@ -17,6 +17,8 @@
 `define RVGPU_SM_L1_DATA_CACHE_SV
 
 `include "rvgpu_typedef.svh"
+`include "interface_sm_l1data.svh"
+`include "interface_sm_l15data_reqresp.svh"
 
 // SM L1 Data Cache/Shared Memory
 // 128KB统一缓存，可配置为数据缓存或共享内存
@@ -34,38 +36,11 @@ module rvgpu_sm_l1_data_cache #(
     input  logic clk,
     input  logic rst_n,
     
-    // CUDA Core接口 (4个CUDA Core的数据访问)
-    input  logic                                req_valid[4],
-    input  logic [$clog2(WARP_COUNT)-1:0]      req_warp_id[4],
-    input  logic [THREAD_COUNT-1:0]             req_mask[4],
-    input  logic [63:0]                         req_addr[4][THREAD_COUNT],
-    input  logic [31:0]                         req_data[4][THREAD_COUNT],
-    input  logic [2:0]                          req_size[4],
-    input  logic                                req_is_load[4], // 1=共享内存访问，0=全局内存访问
-    input  logic                                req_is_shared[4], // 1=共享内存访问，0=全局内存访问
-    output logic                                req_ready[4],
+    // CUDA Core接口 (4个CUDA Core的数据访问) - 接口化
+    interface_sm_l1data.l1                      core_l1_if[4],
     
-    output logic                                resp_valid[4],
-    output logic [$clog2(WARP_COUNT)-1:0]      resp_warp_id[4],
-    output logic [THREAD_COUNT-1:0]             resp_mask[4],
-    output logic [31:0]                         resp_data[4][THREAD_COUNT],
-    input  logic                                resp_ready[4],
-    
-    // L1.5 Cache接口 (用于数据缓存未命中)
-    output logic                                l15_req_valid,
-    output logic [63:0]                         l15_req_paddr,
-    output logic [3:0]                          l15_req_size,
-    output logic                                l15_req_is_read,
-    output logic [511:0]                        l15_req_data,
-    output logic [63:0]                         l15_req_mask,
-    output logic [31:0]                         l15_req_id,
-    input  logic                                l15_req_ready,
-    
-    input  logic                                l15_resp_valid,
-    input  logic [511:0]                        l15_resp_data,
-    input  logic                                l15_resp_error,
-    input  logic [31:0]                         l15_resp_id,
-    output logic                                l15_resp_ready,
+    // L1.5 Cache接口 (用于数据缓存未命中) - 接口化
+    interface_sm_l15data_reqresp.requester      l15_if,
     
     // 配置接口
     input  logic [15:0]                         shared_mem_config, // 共享内存配置
@@ -144,13 +119,6 @@ module rvgpu_sm_l1_data_cache #(
     
     cache_state_t cache_state;
     
-    // 缓存访问状态机
-    cache_req_t current_processing_req;
-    logic [31:0] response_data[4][THREAD_COUNT];
-    logic [THREAD_COUNT-1:0] response_mask[4];
-    logic [$clog2(WARP_COUNT)-1:0] response_warp_id[4];
-    logic [3:0] response_valid_reg;
-    
     // 未完成请求跟踪
     logic [15:0] pending_req_mask;
     logic [3:0]  next_req_id;
@@ -188,40 +156,97 @@ module rvgpu_sm_l1_data_cache #(
     // 请求仲裁和队列管理
     // =========================================================================
     
-    // 简单轮询仲裁
+    // 简单轮询仲裁 - 使用case语句避免动态类型警告
     logic [1:0] arbiter_grant;
     logic [1:0] last_grant;
     
     always_comb begin
         arbiter_grant = 2'b00;
-        if (req_valid[(last_grant + 1 + 0) % 4] && req_ready[(last_grant + 1 + 0) % 4]) begin
-            arbiter_grant = (last_grant + 1 + 0) % 4;
-        end else if (req_valid[(last_grant + 1 + 1) % 4] && req_ready[(last_grant + 1 + 1) % 4]) begin
-            arbiter_grant = (last_grant + 1 + 1) % 4;
-        end else if (req_valid[(last_grant + 1 + 2) % 4] && req_ready[(last_grant + 1 + 2) % 4]) begin
-            arbiter_grant = (last_grant + 1 + 2) % 4;
-        end else if (req_valid[(last_grant + 1 + 3) % 4] && req_ready[(last_grant + 1 + 3) % 4]) begin
-            arbiter_grant = (last_grant + 1 + 3) % 4;
-        end
+        case (last_grant)
+            2'b00: begin
+                if (core_l1_if[1].req_valid && core_l1_if[1].req_ready) begin
+                    arbiter_grant = 2'b01;
+                end else if (core_l1_if[2].req_valid && core_l1_if[2].req_ready) begin
+                    arbiter_grant = 2'b10;
+                end else if (core_l1_if[3].req_valid && core_l1_if[3].req_ready) begin
+                    arbiter_grant = 2'b11;
+                end else if (core_l1_if[0].req_valid && core_l1_if[0].req_ready) begin
+                    arbiter_grant = 2'b00;
+                end
+            end
+            2'b01: begin
+                if (core_l1_if[2].req_valid && core_l1_if[2].req_ready) begin
+                    arbiter_grant = 2'b10;
+                end else if (core_l1_if[3].req_valid && core_l1_if[3].req_ready) begin
+                    arbiter_grant = 2'b11;
+                end else if (core_l1_if[0].req_valid && core_l1_if[0].req_ready) begin
+                    arbiter_grant = 2'b00;
+                end else if (core_l1_if[1].req_valid && core_l1_if[1].req_ready) begin
+                    arbiter_grant = 2'b01;
+                end
+            end
+            2'b10: begin
+                if (core_l1_if[3].req_valid && core_l1_if[3].req_ready) begin
+                    arbiter_grant = 2'b11;
+                end else if (core_l1_if[0].req_valid && core_l1_if[0].req_ready) begin
+                    arbiter_grant = 2'b00;
+                end else if (core_l1_if[1].req_valid && core_l1_if[1].req_ready) begin
+                    arbiter_grant = 2'b01;
+                end else if (core_l1_if[2].req_valid && core_l1_if[2].req_ready) begin
+                    arbiter_grant = 2'b10;
+                end
+            end
+            2'b11: begin
+                if (core_l1_if[0].req_valid && core_l1_if[0].req_ready) begin
+                    arbiter_grant = 2'b00;
+                end else if (core_l1_if[1].req_valid && core_l1_if[1].req_ready) begin
+                    arbiter_grant = 2'b01;
+                end else if (core_l1_if[2].req_valid && core_l1_if[2].req_ready) begin
+                    arbiter_grant = 2'b10;
+                end else if (core_l1_if[3].req_valid && core_l1_if[3].req_ready) begin
+                    arbiter_grant = 2'b11;
+                end
+            end
+        endcase
     end
     
     // 请求入队和队列管理
     always_ff @(posedge clk) begin
         if (!rst_n) begin
             last_grant <= '0;
-            req_ready[0] <= 1'b1;
-            req_ready[1] <= 1'b1;
-            req_ready[2] <= 1'b1;
-            req_ready[3] <= 1'b1;
+            core_l1_if[0].req_ready <= 1'b1;
+            core_l1_if[1].req_ready <= 1'b1;
+            core_l1_if[2].req_ready <= 1'b1;
+            core_l1_if[3].req_ready <= 1'b1;
             req_queue_size <= '0; // 初始化队列大小
         end else begin
-            // 仲裁获胜的请求入队 - 使用静态信号管理
-            if (req_valid[arbiter_grant] && req_ready[arbiter_grant] && req_queue_size < 15) begin
-                // 简化：只更新队列大小，不实际操作队列
-                // 实际实现中需要更复杂的队列管理逻辑
-                req_queue_size <= req_queue_size + 1;
-                last_grant <= arbiter_grant;
-            end
+            // 仲裁获胜的请求入队 - 使用case语句避免动态类型警告
+            case (arbiter_grant)
+                2'b00: begin
+                    if (core_l1_if[0].req_valid && core_l1_if[0].req_ready && req_queue_size < 15) begin
+                        req_queue_size <= req_queue_size + 1;
+                        last_grant <= 2'b00;
+                    end
+                end
+                2'b01: begin
+                    if (core_l1_if[1].req_valid && core_l1_if[1].req_ready && req_queue_size < 15) begin
+                        req_queue_size <= req_queue_size + 1;
+                        last_grant <= 2'b01;
+                    end
+                end
+                2'b10: begin
+                    if (core_l1_if[2].req_valid && core_l1_if[2].req_ready && req_queue_size < 15) begin
+                        req_queue_size <= req_queue_size + 1;
+                        last_grant <= 2'b10;
+                    end
+                end
+                2'b11: begin
+                    if (core_l1_if[3].req_valid && core_l1_if[3].req_ready && req_queue_size < 15) begin
+                        req_queue_size <= req_queue_size + 1;
+                        last_grant <= 2'b11;
+                    end
+                end
+            endcase
             
             // 当状态机处理请求时，减少队列大小
             if (cache_state == CACHE_IDLE && req_queue_size > 0) begin
@@ -229,10 +254,10 @@ module rvgpu_sm_l1_data_cache #(
             end
             
             // 更新ready信号
-            req_ready[0] <= (req_queue_size < 15);
-            req_ready[1] <= (req_queue_size < 15);
-            req_ready[2] <= (req_queue_size < 15);
-            req_ready[3] <= (req_queue_size < 15);
+            core_l1_if[0].req_ready <= (req_queue_size < 15);
+            core_l1_if[1].req_ready <= (req_queue_size < 15);
+            core_l1_if[2].req_ready <= (req_queue_size < 15);
+            core_l1_if[3].req_ready <= (req_queue_size < 15);
         end
     end
     
@@ -291,7 +316,7 @@ module rvgpu_sm_l1_data_cache #(
         request_is_shared = 1'b0;
         
         // 使用静态信号而不是动态队列访问
-        if (req_queue_size > 0) begin
+            if (req_queue_size > 0) begin
             has_valid_request = 1'b1;
             // 注意：这里假设队列中的第一个请求是有效的
             // 实际实现中需要更复杂的逻辑
@@ -325,7 +350,7 @@ module rvgpu_sm_l1_data_cache #(
         if (!rst_n) begin
             cache_state <= CACHE_IDLE;
             current_processing_req <= '0;
-            l15_req_valid <= 1'b0;
+            l15_if.req_valid <= 1'b0;
             response_valid_reg <= '0;
             total_requests <= '0;
             cache_hits <= '0;
@@ -407,21 +432,21 @@ module rvgpu_sm_l1_data_cache #(
                 
                 CACHE_DATA_MISS: begin
                     // 发起L1.5请求
-                    if (!l15_req_valid) begin
-                        l15_req_valid <= 1'b1;
-                        l15_req_paddr <= {current_processing_req.addr[0][63:OFFSET_WIDTH], {OFFSET_WIDTH{1'b0}}};
-                        l15_req_size <= 4'h6; // 128字节
-                        l15_req_is_read <= !current_processing_req.is_load;
-                        l15_req_id <= next_req_id;
+                    if (!l15_if.req_valid) begin
+                        l15_if.req_valid <= 1'b1;
+                    l15_if.req_paddr <= {current_processing_req.addr[0][63:OFFSET_WIDTH], {OFFSET_WIDTH{1'b0}}};
+                    l15_if.req_size <= 4'h6; // 128字节
+                    l15_if.req_is_read <= !current_processing_req.is_load;
+                    l15_if.req_id <= next_req_id;
                         next_req_id <= next_req_id + 1;
                         
                         if (!current_processing_req.is_load) begin
-                            l15_req_data <= '0;
-                            l15_req_mask <= '0;
+                            l15_if.req_data <= '0;
+                            l15_if.req_mask <= '0;
                         end else begin
                             // 构造写数据 - 简化处理
-                            l15_req_data <= '0;
-                            l15_req_mask <= '0;
+                            l15_if.req_data <= '0;
+                            l15_if.req_mask <= '0;
                         end
                         
                         cache_state <= CACHE_L15_REQ;
@@ -429,26 +454,26 @@ module rvgpu_sm_l1_data_cache #(
                 end
                 
                 CACHE_L15_REQ: begin
-                    if (l15_req_ready) begin
-                        l15_req_valid <= 1'b0;
+            if (l15_if.req_ready) begin
+                l15_if.req_valid <= 1'b0;
                         cache_state <= CACHE_L15_WAIT;
                     end
                 end
                 
                 CACHE_L15_WAIT: begin
-                    if (l15_resp_valid && l15_resp_id == (next_req_id - 1)) begin
+            if (l15_if.resp_valid && l15_if.resp_id == (next_req_id - 1)) begin
                         // 更新缓存
                         logic [1:0] replace_way = 2'b00; // 简化替换策略
                         
                         data_cache[cache_index][replace_way].valid <= 1'b1;
                         data_cache[cache_index][replace_way].tag <= cache_tag;
-                        data_cache[cache_index][replace_way].data <= l15_resp_data[511:0];
+                        data_cache[cache_index][replace_way].data <= l15_if.resp_data[511:0];
                         data_cache[cache_index][replace_way].dirty <= current_processing_req.is_load;
                         
                         // 提取响应数据 - 简化处理
                         if (!current_processing_req.is_load) begin
                             // 简化：直接使用第一个线程的数据
-                            response_data[current_processing_req.source_core][0] <= l15_resp_data[31:0];
+                            response_data[current_processing_req.source_core][0] <= l15_if.resp_data[31:0];
                         end
                         
                         response_mask[current_processing_req.source_core] <= current_processing_req.mask;
@@ -460,10 +485,33 @@ module rvgpu_sm_l1_data_cache #(
                 CACHE_RESPONSE: begin
                     response_valid_reg[current_processing_req.source_core] <= 1'b1;
                     
-                    if (resp_ready[current_processing_req.source_core]) begin
-                        response_valid_reg[current_processing_req.source_core] <= 1'b0;
-                        cache_state <= CACHE_IDLE;
-                    end
+                    // 使用case语句避免动态索引访问
+                    case (current_processing_req.source_core)
+                        2'b00: begin
+                            if (core_l1_if[0].resp_ready) begin
+                                response_valid_reg[0] <= 1'b0;
+                                cache_state <= CACHE_IDLE;
+                            end
+                        end
+                        2'b01: begin
+                            if (core_l1_if[1].resp_ready) begin
+                                response_valid_reg[1] <= 1'b0;
+                                cache_state <= CACHE_IDLE;
+                            end
+                        end
+                        2'b10: begin
+                            if (core_l1_if[2].resp_ready) begin
+                                response_valid_reg[2] <= 1'b0;
+                                cache_state <= CACHE_IDLE;
+                            end
+                        end
+                        2'b11: begin
+                            if (core_l1_if[3].resp_ready) begin
+                                response_valid_reg[3] <= 1'b0;
+                                cache_state <= CACHE_IDLE;
+                            end
+                        end
+                    endcase
                 end
                 
                 default: begin
@@ -477,31 +525,35 @@ module rvgpu_sm_l1_data_cache #(
     // 输出信号赋值
     // =========================================================================
     
-    // 响应信号
+    // 响应信号 - 展开循环以避免接口数组的变量索引问题
     always_comb begin
-        resp_valid[0] = response_valid_reg[0];
-        resp_warp_id[0] = response_warp_id[0];
-        resp_mask[0] = response_mask[0];
-        resp_data[0] = response_data[0];
+        // Core 0
+        core_l1_if[0].resp_valid   = response_valid_reg[0];
+        core_l1_if[0].resp_warp_id = response_warp_id[0];
+        core_l1_if[0].resp_mask    = response_mask[0];
+        core_l1_if[0].resp_data    = response_data[0];
         
-        resp_valid[1] = response_valid_reg[1];
-        resp_warp_id[1] = response_warp_id[1];
-        resp_mask[1] = response_mask[1];
-        resp_data[1] = response_data[1];
+        // Core 1
+        core_l1_if[1].resp_valid   = response_valid_reg[1];
+        core_l1_if[1].resp_warp_id = response_warp_id[1];
+        core_l1_if[1].resp_mask    = response_mask[1];
+        core_l1_if[1].resp_data    = response_data[1];
         
-        resp_valid[2] = response_valid_reg[2];
-        resp_warp_id[2] = response_warp_id[2];
-        resp_mask[2] = response_mask[2];
-        resp_data[2] = response_data[2];
+        // Core 2
+        core_l1_if[2].resp_valid   = response_valid_reg[2];
+        core_l1_if[2].resp_warp_id = response_warp_id[2];
+        core_l1_if[2].resp_mask    = response_mask[2];
+        core_l1_if[2].resp_data    = response_data[2];
         
-        resp_valid[3] = response_valid_reg[3];
-        resp_warp_id[3] = response_warp_id[3];
-        resp_mask[3] = response_mask[3];
-        resp_data[3] = response_data[3];
+        // Core 3
+        core_l1_if[3].resp_valid   = response_valid_reg[3];
+        core_l1_if[3].resp_warp_id = response_warp_id[3];
+        core_l1_if[3].resp_mask    = response_mask[3];
+        core_l1_if[3].resp_data    = response_data[3];
     end
     
-    // L1.5接口
-    assign l15_resp_ready = (cache_state == CACHE_L15_WAIT);
+    // L1.5接口（响应准备）
+    assign l15_if.resp_ready = (cache_state == CACHE_L15_WAIT);
     
     // 状态输出
     assign pending_requests = req_queue_size + (cache_state != CACHE_IDLE ? 1 : 0);

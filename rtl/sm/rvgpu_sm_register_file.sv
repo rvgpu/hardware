@@ -17,6 +17,8 @@
 `define RVGPU_SM_REGISTER_FILE_SV
 
 `include "rvgpu_typedef.svh"
+`include "interface_sm_regfile.svh"
+`include "interface_sm_warp_admin.svh"
 
 // SM寄存器文件
 // 支持多个warp的寄存器存储和多端口访问
@@ -30,18 +32,8 @@ module rvgpu_sm_register_file #(
     input  logic clk,
     input  logic rst_n,
     
-    // 读端口
-    input  logic [READ_PORTS-1:0]                    read_enable,
-    input  logic [$clog2(WARP_COUNT)-1:0]            read_warp_id[READ_PORTS],
-    input  logic [4:0]                               read_reg_addr[READ_PORTS],
-    output logic [31:0]                              read_data[READ_PORTS][THREAD_COUNT],
-    
-    // 写端口
-    input  logic [WRITE_PORTS-1:0]                   write_enable,
-    input  logic [$clog2(WARP_COUNT)-1:0]            write_warp_id[WRITE_PORTS],
-    input  logic [4:0]                               write_reg_addr[WRITE_PORTS],
-    input  logic [31:0]                              write_data[WRITE_PORTS][THREAD_COUNT],
-    input  logic [THREAD_COUNT-1:0]                  write_mask[WRITE_PORTS],
+    // 接口：寄存器文件读写
+    interface_sm_regfile.rf_storage                  rf_if,
     
     // Warp管理
     input  logic                                     warp_alloc_valid,
@@ -66,18 +58,17 @@ module rvgpu_sm_register_file #(
     // 读操作 - 组合逻辑
     always_comb begin
         for (int p = 0; p < READ_PORTS; p++) begin
-            if (read_enable[p] && warp_valid[read_warp_id[p]]) begin
+            if (rf_if.read_enable[p] && warp_valid[rf_if.read_warp_id[p]]) begin
                 for (int t = 0; t < THREAD_COUNT; t++) begin
-                    if (read_reg_addr[p] == 5'b00000) begin
-                        // x0寄存器总是返回0
-                        read_data[p][t] = 32'h0;
+                    if (rf_if.read_reg_addr[p] == 5'b00000) begin
+                        rf_if.read_data[p][t] = 32'h0; // x0 = 0
                     end else begin
-                        read_data[p][t] = register_memory[read_warp_id[p]][t][read_reg_addr[p]];
+                        rf_if.read_data[p][t] = register_memory[rf_if.read_warp_id[p]][t][rf_if.read_reg_addr[p]];
                     end
                 end
             end else begin
                 for (int t = 0; t < THREAD_COUNT; t++) begin
-                    read_data[p][t] = '0;
+                    rf_if.read_data[p][t] = '0;
                 end
             end
         end
@@ -116,12 +107,12 @@ module rvgpu_sm_register_file #(
             
             // 写操作
             for (int p = 0; p < WRITE_PORTS; p++) begin
-                if (write_enable[p] && warp_valid[write_warp_id[p]] && 
-                    write_reg_addr[p] != 5'b00000) begin // 不能写x0寄存器
+                if (rf_if.write_enable[p] && warp_valid[rf_if.write_warp_id[p]] && 
+                    rf_if.write_reg_addr[p] != 5'b00000) begin // 不能写x0寄存器
                     for (int t = 0; t < THREAD_COUNT; t++) begin
-                        if (write_mask[p][t]) begin
-                            register_memory[write_warp_id[p]][t][write_reg_addr[p]] <= 
-                                write_data[p][t];
+                        if (rf_if.write_mask[p][t]) begin
+                            register_memory[rf_if.write_warp_id[p]][t][rf_if.write_reg_addr[p]] <= 
+                                rf_if.write_data[p][t];
                         end
                     end
                 end
@@ -129,10 +120,8 @@ module rvgpu_sm_register_file #(
         end
     end
     
-    // Warp分配准备信号
+    // Warp分配准备信号/状态输出
     assign warp_alloc_ready = ~warp_valid[warp_alloc_id];
-    
-    // 状态输出
     assign warp_allocated = warp_valid;
     
     // 计算已分配的warp数量

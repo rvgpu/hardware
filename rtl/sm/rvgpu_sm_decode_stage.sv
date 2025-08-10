@@ -17,6 +17,8 @@
 `define RVGPU_SM_DECODE_STAGE_SV
 
 `include "rvgpu_typedef.svh"
+`include "interface_sm_fetch_decode.svh"
+`include "interface_sm_decode_exec.svh"
 
 // SM解码阶段
 // 负责指令解码、寄存器地址提取和控制信号生成
@@ -27,50 +29,10 @@ module rvgpu_sm_decode_stage #(
     input  logic clk,
     input  logic rst_n,
     
-    // 从取指阶段的输入
-    input  logic                                fetch_decode_valid,
-    input  logic [31:0]                         fetch_decode_inst,
-    input  logic [63:0]                         fetch_decode_pc,
-    input  logic [$clog2(WARP_COUNT)-1:0]      fetch_decode_warp_id,
-    input  logic [THREAD_COUNT-1:0]             fetch_decode_active_mask,
-    output logic                                fetch_decode_ready,
-    
-    // 到执行阶段的输出
-    output logic                                decode_exec_valid,
-    output logic [31:0]                         decode_exec_inst,
-    output logic [63:0]                         decode_exec_pc,
-    output logic [$clog2(WARP_COUNT)-1:0]      decode_exec_warp_id,
-    output logic [THREAD_COUNT-1:0]             decode_exec_active_mask,
-    
-    // 解码控制信号
-    output logic [4:0]                          decode_exec_rs1,
-    output logic [4:0]                          decode_exec_rs2,
-    output logic [4:0]                          decode_exec_rs3,
-    output logic [4:0]                          decode_exec_rd,
-    output logic [31:0]                         decode_exec_imm,
-    
-    // 指令类型信号
-    output logic                                decode_exec_is_alu,
-    output logic                                decode_exec_is_fpu,
-    output logic                                decode_exec_is_tensor,
-    output logic                                decode_exec_is_branch,
-    output logic                                decode_exec_is_jump,
-    output logic                                decode_exec_is_load,
-    output logic                                decode_exec_is_store,
-    output logic                                decode_exec_is_barrier,
-    
-    // ALU操作码
-    output logic [3:0]                          decode_exec_alu_op,
-    output logic [2:0]                          decode_exec_fpu_op,
-    output logic [2:0]                          decode_exec_tensor_op,
-    output logic [2:0]                          decode_exec_branch_op,
-    
-    // 控制信号
-    output logic                                decode_exec_reg_write,
-    output logic                                decode_exec_use_imm,
-    output logic                                decode_exec_is_32bit,
-    
-    input  logic                                decode_exec_ready,
+    // 从取指阶段的输入（接口）
+    interface_sm_fetch_decode.decode_sink       fd_if,
+    // 到执行阶段的输出（接口）
+    interface_sm_decode_exec.decode_source      de_if,
     
     // 流水线控制
     input  logic                                pipeline_stall,
@@ -121,22 +83,22 @@ module rvgpu_sm_decode_stage #(
     logic                               de_reg_write_reg, de_use_imm_reg, de_is_32bit_reg;
     
     // 指令字段提取
-    assign opcode = fetch_decode_inst[6:0];
-    assign rd = fetch_decode_inst[11:7];
-    assign funct3 = fetch_decode_inst[14:12];
-    assign rs1 = fetch_decode_inst[19:15];
-    assign rs2 = fetch_decode_inst[24:20];
-    assign rs3 = fetch_decode_inst[31:27];  // 用于Tensor指令
-    assign funct7 = fetch_decode_inst[31:25];
+    assign opcode = fd_if.inst[6:0];
+    assign rd = fd_if.inst[11:7];
+    assign funct3 = fd_if.inst[14:12];
+    assign rs1 = fd_if.inst[19:15];
+    assign rs2 = fd_if.inst[24:20];
+    assign rs3 = fd_if.inst[31:27];  // 用于Tensor指令
+    assign funct7 = fd_if.inst[31:25];
     
     // 立即数提取
-    assign imm_i = {{20{fetch_decode_inst[31]}}, fetch_decode_inst[31:20]};
-    assign imm_s = {{20{fetch_decode_inst[31]}}, fetch_decode_inst[31:25], fetch_decode_inst[11:7]};
-    assign imm_b = {{19{fetch_decode_inst[31]}}, fetch_decode_inst[31], fetch_decode_inst[7], 
-                    fetch_decode_inst[30:25], fetch_decode_inst[11:8], 1'b0};
-    assign imm_u = {fetch_decode_inst[31:12], 12'b0};
-    assign imm_j = {{11{fetch_decode_inst[31]}}, fetch_decode_inst[31], fetch_decode_inst[19:12], 
-                    fetch_decode_inst[20], fetch_decode_inst[30:21], 1'b0};
+    assign imm_i = {{20{fd_if.inst[31]}}, fd_if.inst[31:20]};
+    assign imm_s = {{20{fd_if.inst[31]}}, fd_if.inst[31:25], fd_if.inst[11:7]};
+    assign imm_b = {{19{fd_if.inst[31]}}, fd_if.inst[31], fd_if.inst[7], 
+                    fd_if.inst[30:25], fd_if.inst[11:8], 1'b0};
+    assign imm_u = {fd_if.inst[31:12], 12'b0};
+    assign imm_j = {{11{fd_if.inst[31]}}, fd_if.inst[31], fd_if.inst[19:12], 
+                    fd_if.inst[20], fd_if.inst[30:21], 1'b0};
     
     // 指令格式识别
     always_comb begin
@@ -334,12 +296,12 @@ module rvgpu_sm_decode_stage #(
         end else if (pipeline_flush) begin
             de_valid_reg <= 1'b0;
         end else if (!pipeline_stall) begin
-            if (fetch_decode_valid && decode_exec_ready) begin
+            if (fd_if.valid && de_if.ready) begin
                 de_valid_reg <= 1'b1;
-                de_inst_reg <= fetch_decode_inst;
-                de_pc_reg <= fetch_decode_pc;
-                de_warp_id_reg <= fetch_decode_warp_id;
-                de_active_mask_reg <= fetch_decode_active_mask;
+                de_inst_reg <= fd_if.inst;
+                de_pc_reg <= fd_if.pc;
+                de_warp_id_reg <= fd_if.warp_id;
+                de_active_mask_reg <= fd_if.active_mask;
                 de_rs1_reg <= rs1;
                 de_rs2_reg <= rs2;
                 de_rs3_reg <= rs3;
@@ -360,41 +322,41 @@ module rvgpu_sm_decode_stage #(
                 de_reg_write_reg <= reg_write;
                 de_use_imm_reg <= use_imm;
                 de_is_32bit_reg <= is_32bit;
-            end else if (decode_exec_ready) begin
+            end else if (de_if.ready) begin
                 de_valid_reg <= 1'b0;
             end
         end
     end
     
     // 输出信号
-    assign decode_exec_valid = de_valid_reg;
-    assign decode_exec_inst = de_inst_reg;
-    assign decode_exec_pc = de_pc_reg;
-    assign decode_exec_warp_id = de_warp_id_reg;
-    assign decode_exec_active_mask = de_active_mask_reg;
-    assign decode_exec_rs1 = de_rs1_reg;
-    assign decode_exec_rs2 = de_rs2_reg;
-    assign decode_exec_rs3 = de_rs3_reg;
-    assign decode_exec_rd = de_rd_reg;
-    assign decode_exec_imm = de_imm_reg;
-    assign decode_exec_is_alu = de_is_alu_reg;
-    assign decode_exec_is_fpu = de_is_fpu_reg;
-    assign decode_exec_is_tensor = de_is_tensor_reg;
-    assign decode_exec_is_branch = de_is_branch_reg;
-    assign decode_exec_is_jump = de_is_jump_reg;
-    assign decode_exec_is_load = de_is_load_reg;
-    assign decode_exec_is_store = de_is_store_reg;
-    assign decode_exec_is_barrier = de_is_barrier_reg;
-    assign decode_exec_alu_op = de_alu_op_reg;
-    assign decode_exec_fpu_op = de_fpu_op_reg;
-    assign decode_exec_tensor_op = de_tensor_op_reg;
-    assign decode_exec_branch_op = de_branch_op_reg;
-    assign decode_exec_reg_write = de_reg_write_reg;
-    assign decode_exec_use_imm = de_use_imm_reg;
-    assign decode_exec_is_32bit = de_is_32bit_reg;
-    
+    assign de_if.valid        = de_valid_reg;
+    assign de_if.inst         = de_inst_reg;
+    assign de_if.pc           = de_pc_reg;
+    assign de_if.warp_id      = de_warp_id_reg;
+    assign de_if.active_mask  = de_active_mask_reg;
+    assign de_if.rs1          = de_rs1_reg;
+    assign de_if.rs2          = de_rs2_reg;
+    assign de_if.rs3          = de_rs3_reg;
+    assign de_if.rd           = de_rd_reg;
+    assign de_if.imm          = de_imm_reg;
+    assign de_if.is_alu       = de_is_alu_reg;
+    assign de_if.is_fpu       = de_is_fpu_reg;
+    assign de_if.is_tensor    = de_is_tensor_reg;
+    assign de_if.is_branch    = de_is_branch_reg;
+    assign de_if.is_jump      = de_is_jump_reg;
+    assign de_if.is_load      = de_is_load_reg;
+    assign de_if.is_store     = de_is_store_reg;
+    assign de_if.is_barrier   = de_is_barrier_reg;
+    assign de_if.alu_op       = de_alu_op_reg;
+    assign de_if.fpu_op       = de_fpu_op_reg;
+    assign de_if.tensor_op    = de_tensor_op_reg;
+    assign de_if.branch_op    = de_branch_op_reg;
+    assign de_if.reg_write    = de_reg_write_reg;
+    assign de_if.use_imm      = de_use_imm_reg;
+    assign de_if.is_32bit     = de_is_32bit_reg;
+
     // 准备信号
-    assign fetch_decode_ready = decode_exec_ready || !de_valid_reg;
+    assign fd_if.ready = de_if.ready || !de_valid_reg;
 
 endmodule : rvgpu_sm_decode_stage
 

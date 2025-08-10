@@ -17,9 +17,9 @@
 `define RVGPU_SM_WARP_SCHEDULER_SV
 
 `include "rvgpu_typedef.svh"
+`include "interface_sm_warp_state.svh"
+`include "interface_sm_warp_schedule.svh"
 
-// SM Warp调度器
-// 负责选择和调度warp执行
 module rvgpu_sm_warp_scheduler #(
     parameter int WARP_COUNT = 32,          // 每个SM支持的warp数量
     parameter int MAX_ACTIVE_WARPS = 16,    // 同时活跃的最大warp数量
@@ -28,20 +28,16 @@ module rvgpu_sm_warp_scheduler #(
     input  logic clk,
     input  logic rst_n,
     
-    // Warp状态输入
-    input  logic [WARP_COUNT-1:0] warp_valid,      // warp有效标志
-    input  logic [WARP_COUNT-1:0] warp_stalled,    // warp暂停标志
-    input  logic [WARP_COUNT-1:0] warp_barrier,    // warp处于屏障状态
-    input  logic [WARP_COUNT-1:0] warp_waiting,    // warp等待内存访问
+    // Warp状态输入（接口化）
+    interface_sm_warp_state.fetch_view warp_state_if,
     
     // 调度器控制
     input  logic scheduler_stall,           // 调度器暂停信号
     input  logic [$clog2(WARP_COUNT)-1:0] new_warp_id,  // 新warp的ID
     input  logic new_warp_valid,            // 新warp有效
     
-    // 调度输出
-    output logic warp_schedule_valid,       // 调度有效
-    output logic [$clog2(WARP_COUNT)-1:0] scheduled_warp_id, // 被调度的warp ID
+    // 调度输出（接口化）
+    interface_sm_warp_schedule.scheduler_source sched_if,
     
     // 资源使用情况
     output logic [$clog2(WARP_COUNT):0] active_warp_count, // 活跃warp数量
@@ -70,7 +66,7 @@ module rvgpu_sm_warp_scheduler #(
     
     // 计算可调度的warp
     always_comb begin
-        warp_ready = warp_valid & ~warp_stalled & ~warp_barrier & ~warp_waiting;
+        warp_ready = warp_state_if.warp_valid & ~warp_state_if.warp_stalled & ~warp_state_if.warp_barrier & ~warp_state_if.warp_waiting;
         
         // 检查流水线冲突
         for (int i = 0; i < PIPELINE_DEPTH; i++) begin
@@ -89,7 +85,7 @@ module rvgpu_sm_warp_scheduler #(
             if (warp_active[i]) begin
                 active_warp_count = active_warp_count + 1;
                 
-                if (warp_stalled[i] || warp_barrier[i] || warp_waiting[i]) begin
+                if (warp_state_if.warp_stalled[i] || warp_state_if.warp_barrier[i] || warp_state_if.warp_waiting[i]) begin
                     stalled_warp_count = stalled_warp_count + 1;
                 end
             end
@@ -148,8 +144,8 @@ module rvgpu_sm_warp_scheduler #(
     // 主调度逻辑
     always_ff @(posedge clk) begin
         if (!rst_n) begin
-            warp_schedule_valid <= 1'b0;
-            scheduled_warp_id <= '0;
+            sched_if.valid <= 1'b0;
+            sched_if.scheduled_warp_id <= '0;
             last_scheduled_warp <= '0;
             current_policy <= ROUND_ROBIN;
             
@@ -194,8 +190,8 @@ module rvgpu_sm_warp_scheduler #(
                 endcase
                 
                 // 输出调度结果
-                warp_schedule_valid <= 1'b1;
-                scheduled_warp_id <= selected_warp;
+                sched_if.valid <= 1'b1;
+                sched_if.scheduled_warp_id <= selected_warp;
                 last_scheduled_warp <= selected_warp;
                 
                 // 更新流水线第一阶段
@@ -206,7 +202,7 @@ module rvgpu_sm_warp_scheduler #(
                 // 重置被调度warp的年龄计数器
                 warp_age_counter[selected_warp] <= '0;
             end else begin
-                warp_schedule_valid <= 1'b0;
+                sched_if.valid <= 1'b0;
                 pipeline_valid[0] <= 1'b0;
             end
         end

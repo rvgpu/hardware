@@ -132,8 +132,8 @@ module rvgpu_sm_tensor_core #(
                         // 执行矩阵乘法累加
                         for (k = 0; k < MATRIX_SIZE; k++) begin
                             // FP16乘法转换为FP32
-                            logic [31:0] a_fp32 = {16'b0, matrix_a[t][i][k]};
-                            logic [31:0] b_fp32 = {16'b0, matrix_b[t][k][j]};
+                            logic [31:0] a_fp32 = {16'b0, matrix_a[t][i][j]};
+                            logic [31:0] b_fp32 = {16'b0, matrix_b[t][j][k]};
                             mmad_result[t][i][j] = mmad_result[t][i][j] + a_fp32 * b_fp32;
                         end
                     end

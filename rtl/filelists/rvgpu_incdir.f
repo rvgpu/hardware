@@ -3,6 +3,7 @@
 +incdir+$RVGPU_HARDWARE/rtl/core/ifu/icache
 +incdir+$RVGPU_HARDWARE/rtl/clk
 +incdir+$RVGPU_HARDWARE/rtl/common
++incdir+$RVGPU_HARDWARE/rtl/common/sm
 +incdir+$RVGPU_HARDWARE/rtl/common/cache
 +incdir+$RVGPU_HARDWARE/rtl/common/command
 +incdir+$RVGPU_HARDWARE/rtl/common/config

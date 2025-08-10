@@ -17,10 +17,13 @@
 `define RVGPU_SM_CUDA_CORE_UNIT_SV
 
 `include "rvgpu_typedef.svh"
+`include "interface_sm_core_exec.svh"
+`include "interface_sm_cuda_core.svh"
+`include "interface_sm_tensor_exec.svh"
+`include "interface_sm_l1data.svh"
+`include "interface_sm_warp_dispatch.svh"
+`include "interface_sm_regfile_access.svh"
 
-// SM CUDA Core单元
-// 作为SM的子处理单元，执行单个warp的指令
-// 不包含warp调度，由SM级调度器统一调度
 module rvgpu_sm_cuda_core_unit #(
     parameter int CORE_ID = 0,          // CUDA Core ID
     parameter int WARP_COUNT = 32,      // 支持的warp数量  
@@ -29,67 +32,18 @@ module rvgpu_sm_cuda_core_unit #(
     input  logic clk,
     input  logic rst_n,
     
-    // 来自SM Warp Scheduler的warp分发
-    input  logic                                warp_dispatch_valid,
-    input  logic [31:0]                         warp_dispatch_inst,
-    input  logic [63:0]                         warp_dispatch_pc,
-    input  logic [$clog2(WARP_COUNT)-1:0]      warp_dispatch_warp_id,
-    input  logic [THREAD_COUNT-1:0]             warp_dispatch_active_mask,
-    input  logic [4:0]                          warp_dispatch_rs1,
-    input  logic [4:0]                          warp_dispatch_rs2,
-    input  logic [4:0]                          warp_dispatch_rs3,
-    input  logic [4:0]                          warp_dispatch_rd,
-    input  logic [31:0]                         warp_dispatch_imm,
-    input  logic                                warp_dispatch_is_alu,
-    input  logic                                warp_dispatch_is_fpu,
-    input  logic                                warp_dispatch_is_tensor,
-    input  logic                                warp_dispatch_is_branch,
-    input  logic                                warp_dispatch_is_jump,
-    input  logic                                warp_dispatch_is_load,
-    input  logic                                warp_dispatch_is_store,
-    input  logic                                warp_dispatch_is_barrier,
-    input  logic [3:0]                          warp_dispatch_alu_op,
-    input  logic [2:0]                          warp_dispatch_fpu_op,
-    input  logic [2:0]                          warp_dispatch_tensor_op,
-    input  logic [2:0]                          warp_dispatch_branch_op,
-    input  logic                                warp_dispatch_reg_write,
-    input  logic                                warp_dispatch_use_imm,
-    input  logic                                warp_dispatch_is_32bit,
-    output logic                                warp_dispatch_ready,
+    // 来自SM Warp Scheduler的warp分发（接口）
+    interface_sm_warp_dispatch.core_sink        disp_if,
     
-    // 寄存器文件读接口
-    output logic                                reg_read_enable[3],
-    output logic [$clog2(WARP_COUNT)-1:0]      reg_read_warp_id[3],
-    output logic [4:0]                          reg_read_addr[3],
-    input  logic [31:0]                         reg_read_data[3][THREAD_COUNT],
+    // 寄存器文件接口（单Core接口）
+    interface_sm_regfile_access.core            rf_if,
     
-    // 寄存器文件写接口
-    output logic                                reg_write_enable,
-    output logic [$clog2(WARP_COUNT)-1:0]      reg_write_warp_id,
-    output logic [4:0]                          reg_write_addr,
-    output logic [31:0]                         reg_write_data[THREAD_COUNT],
-    output logic [THREAD_COUNT-1:0]             reg_write_mask,
-    
-    // L1 Data Cache接口
-    output logic                                l1_data_req_valid,
-    output logic [$clog2(WARP_COUNT)-1:0]      l1_data_req_warp_id,
-    output logic [THREAD_COUNT-1:0]             l1_data_req_mask,
-    output logic [63:0]                         l1_data_req_addr[THREAD_COUNT],
-    output logic [31:0]                         l1_data_req_data[THREAD_COUNT],
-    output logic [2:0]                          l1_data_req_size,
-    output logic                                l1_data_req_is_load,
-    output logic                                l1_data_req_is_shared,
-    input  logic                                l1_data_req_ready,
-    
-    input  logic                                l1_data_resp_valid,
-    input  logic [$clog2(WARP_COUNT)-1:0]      l1_data_resp_warp_id,
-    input  logic [THREAD_COUNT-1:0]             l1_data_resp_mask,
-    input  logic [31:0]                         l1_data_resp_data[THREAD_COUNT],
-    output logic                                l1_data_resp_ready,
+    // L1 Data Cache接口（接口化）
+    interface_sm_l1data.core                    l1_if,
     
     // 完成信号
     output logic                                warp_complete,
-    output logic [$clog2(WARP_COUNT)-1:0]      warp_complete_id,
+    output logic [$clog2(WARP_COUNT)-1:0]       warp_complete_id,
     
     // 分支反馈
     output logic                                branch_feedback_valid,
@@ -140,54 +94,53 @@ module rvgpu_sm_cuda_core_unit #(
     
     // CUDA核心和Tensor核心接口
     logic        cuda_inst_valid;
-    logic        cuda_result_valid;
-    logic [31:0] cuda_result_data[THREAD_COUNT];
-    logic        cuda_result_is_branch;
-    logic [31:0] cuda_result_branch_target;
-    logic [31:0] cuda_result_branch_mask;
-    logic        cuda_ready;
+    interface_sm_cuda_core   #(.THREAD_COUNT(THREAD_COUNT)) cuda_core_if();
     
     logic        tensor_inst_valid;
-    logic        tensor_result_valid;
-    logic [31:0] tensor_result_data[THREAD_COUNT][4][4];
-    logic [31:0] tensor_flattened_result[THREAD_COUNT];
-    logic        tensor_ready;
+    interface_sm_tensor_exec #(.THREAD_COUNT(THREAD_COUNT), .MATRIX_SIZE(4)) tensor_exec_if();
     
     // 矩阵数据准备 (简化)
     logic [15:0] matrix_a[THREAD_COUNT][4][4];
     logic [15:0] matrix_b[THREAD_COUNT][4][4];
     logic [31:0] matrix_c[THREAD_COUNT][4][4];
+    logic [31:0] tensor_result_data[THREAD_COUNT][4][4];
+    logic        tensor_result_valid;
+    logic [4:0]  tensor_result_rd;
+    logic [31:0] tensor_result_pc;
+    logic [31:0] tensor_result_warp_id;
+    logic [31:0] tensor_result_active_mask;
+    logic        tensor_ready;
     
     // 寄存器读取控制
     always_comb begin
         // 读取rs1
-        reg_read_enable[0] = (state == EXECUTE);
-        reg_read_warp_id[0] = current_warp_id;
-        reg_read_addr[0] = current_rs1;
+        rf_if.read_enable[0] = (state == EXECUTE);
+        rf_if.read_warp_id[0] = current_warp_id;
+        rf_if.read_reg_addr[0] = current_rs1;
         
         // 读取rs2 (如果不使用立即数)
-        reg_read_enable[1] = (state == EXECUTE) && !current_use_imm;
-        reg_read_warp_id[1] = current_warp_id;
-        reg_read_addr[1] = current_rs2;
+        rf_if.read_enable[1] = (state == EXECUTE) && !current_use_imm;
+        rf_if.read_warp_id[1] = current_warp_id;
+        rf_if.read_reg_addr[1] = current_rs2;
         
         // 读取rs3 (用于Tensor指令)
-        reg_read_enable[2] = (state == EXECUTE) && current_is_tensor;
-        reg_read_warp_id[2] = current_warp_id;
-        reg_read_addr[2] = current_rs3;
+        rf_if.read_enable[2] = (state == EXECUTE) && current_is_tensor;
+        rf_if.read_warp_id[2] = current_warp_id;
+        rf_if.read_reg_addr[2] = current_rs3;
     end
     
     // 操作数准备
     always_comb begin
         for (int t = 0; t < THREAD_COUNT; t++) begin
-            src1_data[t] = reg_read_data[0][t];
+            src1_data[t] = rf_if.read_data[0][t];
             
             if (current_use_imm) begin
                 src2_data[t] = current_imm;
             end else begin
-                src2_data[t] = reg_read_data[1][t];
+                src2_data[t] = rf_if.read_data[1][t];
             end
             
-            src3_data[t] = reg_read_data[2][t];
+            src3_data[t] = rf_if.read_data[2][t];
         end
     end
     
@@ -205,6 +158,7 @@ module rvgpu_sm_cuda_core_unit #(
     end
     
     // Tensor结果展平
+    logic [31:0] tensor_flattened_result[THREAD_COUNT];
     always_comb begin
         for (int t = 0; t < THREAD_COUNT; t++) begin
             tensor_flattened_result[t] = tensor_result_data[t][0][0];
@@ -212,35 +166,27 @@ module rvgpu_sm_cuda_core_unit #(
     end
     
     // CUDA核心实例化
+    // 准备CUDA执行接口输入
+    assign cuda_core_if.inst_valid  = cuda_inst_valid;
+    assign cuda_core_if.inst        = current_inst;
+    assign cuda_core_if.pc          = current_pc[31:0];
+    assign cuda_core_if.warp_id     = {27'b0, current_warp_id};
+    assign cuda_core_if.active_mask = current_active_mask;
+    assign cuda_core_if.src1_data   = src1_data;
+    assign cuda_core_if.src2_data   = src2_data;
+    assign cuda_core_if.src3_data   = src3_data;
+    assign cuda_core_if.imm_data    = current_imm;
+    assign cuda_core_if.stall       = pipeline_stall;
+
     rvgpu_sm_cuda_core #(
         .THREAD_COUNT(THREAD_COUNT),
         .SIMD_WIDTH(8)
     ) u_cuda_core (
-        .clk(clk),
-        .rst_n(rst_n),
-        .inst_valid(cuda_inst_valid),
-        .inst(current_inst),
-        .pc(current_pc[31:0]),
-        .warp_id({27'b0, current_warp_id}),
-        .active_mask(current_active_mask),
-        .src1_data(src1_data),
-        .src2_data(src2_data),
-        .src3_data(src3_data),
-        .imm_data(current_imm),
-        .result_valid(cuda_result_valid),
-        .result_data(cuda_result_data),
-        .result_rd(),
-        .result_pc(),
-        .result_warp_id(),
-        .result_active_mask(),
-        .result_is_branch(cuda_result_is_branch),
-        .result_branch_target(cuda_result_branch_target),
-        .result_branch_mask(cuda_result_branch_mask),
-        .stall(pipeline_stall),
-        .ready(cuda_ready)
+        .cuda_if(cuda_core_if.core)
     );
     
     // Tensor核心实例化
+
     rvgpu_sm_tensor_core #(
         .THREAD_COUNT(THREAD_COUNT),
         .MATRIX_SIZE(4)
@@ -255,14 +201,14 @@ module rvgpu_sm_cuda_core_unit #(
         .matrix_a(matrix_a),
         .matrix_b(matrix_b),
         .matrix_c(matrix_c),
+        .stall(pipeline_stall),
+        .ready(tensor_ready),
         .result_valid(tensor_result_valid),
         .result_data(tensor_result_data),
-        .result_rd(),
-        .result_pc(),
-        .result_warp_id(),
-        .result_active_mask(),
-        .stall(pipeline_stall),
-        .ready(tensor_ready)
+        .result_rd(tensor_result_rd),
+        .result_pc(tensor_result_pc),
+        .result_warp_id(tensor_result_warp_id),
+        .result_active_mask(tensor_result_active_mask)
     );
     
     // 执行单元选择
@@ -273,6 +219,10 @@ module rvgpu_sm_cuda_core_unit #(
         
         tensor_inst_valid = (state == EXECUTE) && current_is_tensor;
     end
+    
+    // 连接时钟和复位到CUDA核心接口
+    assign cuda_core_if.clk = clk;
+    assign cuda_core_if.rst_n = rst_n;
     
     // 主状态机
     always_ff @(posedge clk) begin
@@ -314,32 +264,32 @@ module rvgpu_sm_cuda_core_unit #(
         end else if (!pipeline_stall) begin
             case (state)
                 IDLE: begin
-                    if (warp_dispatch_valid) begin
+                    if (disp_if.valid) begin
                         // 接收新的warp指令
-                        current_inst <= warp_dispatch_inst;
-                        current_pc <= warp_dispatch_pc;
-                        current_warp_id <= warp_dispatch_warp_id;
-                        current_active_mask <= warp_dispatch_active_mask;
-                        current_rs1 <= warp_dispatch_rs1;
-                        current_rs2 <= warp_dispatch_rs2;
-                        current_rs3 <= warp_dispatch_rs3;
-                        current_rd <= warp_dispatch_rd;
-                        current_imm <= warp_dispatch_imm;
-                        current_is_alu <= warp_dispatch_is_alu;
-                        current_is_fpu <= warp_dispatch_is_fpu;
-                        current_is_tensor <= warp_dispatch_is_tensor;
-                        current_is_branch <= warp_dispatch_is_branch;
-                        current_is_jump <= warp_dispatch_is_jump;
-                        current_is_load <= warp_dispatch_is_load;
-                        current_is_store <= warp_dispatch_is_store;
-                        current_is_barrier <= warp_dispatch_is_barrier;
-                        current_alu_op <= warp_dispatch_alu_op;
-                        current_fpu_op <= warp_dispatch_fpu_op;
-                        current_tensor_op <= warp_dispatch_tensor_op;
-                        current_branch_op <= warp_dispatch_branch_op;
-                        current_reg_write <= warp_dispatch_reg_write;
-                        current_use_imm <= warp_dispatch_use_imm;
-                        current_is_32bit <= warp_dispatch_is_32bit;
+                        current_inst <= disp_if.inst;
+                        current_pc <= disp_if.pc;
+                        current_warp_id <= disp_if.warp_id;
+                        current_active_mask <= disp_if.active_mask;
+                        current_rs1 <= disp_if.rs1;
+                        current_rs2 <= disp_if.rs2;
+                        current_rs3 <= disp_if.rs3;
+                        current_rd <= disp_if.rd;
+                        current_imm <= disp_if.imm;
+                        current_is_alu <= disp_if.is_alu;
+                        current_is_fpu <= disp_if.is_fpu;
+                        current_is_tensor <= disp_if.is_tensor;
+                        current_is_branch <= disp_if.is_branch;
+                        current_is_jump <= disp_if.is_jump;
+                        current_is_load <= disp_if.is_load;
+                        current_is_store <= disp_if.is_store;
+                        current_is_barrier <= disp_if.is_barrier;
+                        current_alu_op <= disp_if.alu_op;
+                        current_fpu_op <= disp_if.fpu_op;
+                        current_tensor_op <= disp_if.tensor_op;
+                        current_branch_op <= disp_if.branch_op;
+                        current_reg_write <= disp_if.reg_write;
+                        current_use_imm <= disp_if.use_imm;
+                        current_is_32bit <= disp_if.is_32bit;
                         
                         state <= EXECUTE;
                     end
@@ -347,7 +297,7 @@ module rvgpu_sm_cuda_core_unit #(
                 
                 EXECUTE: begin
                     // 等待执行单元完成
-                    if (cuda_result_valid || tensor_result_valid || 
+                    if (cuda_core_if.result_valid || tensor_result_valid || 
                         current_is_load || current_is_store || current_is_barrier) begin
                         
                         // 保存执行结果
@@ -355,13 +305,13 @@ module rvgpu_sm_cuda_core_unit #(
                             for (int t = 0; t < THREAD_COUNT; t++) begin
                                 exec_result[t] <= tensor_flattened_result[t];
                             end
-                        end else if (cuda_result_valid) begin
+                        end else if (cuda_core_if.result_valid) begin
                             for (int t = 0; t < THREAD_COUNT; t++) begin
-                                exec_result[t] <= cuda_result_data[t];
+                                exec_result[t] <= cuda_core_if.result_data[t];
                             end
-                            exec_is_branch <= cuda_result_is_branch;
-                            exec_branch_target <= cuda_result_branch_target;
-                            exec_branch_mask <= cuda_result_branch_mask;
+                            exec_is_branch <= cuda_core_if.result_is_branch;
+                            exec_branch_target <= cuda_core_if.result_branch_target;
+                            exec_branch_mask <= cuda_core_if.result_branch_mask;
                         end
                         
                         if (current_is_load || current_is_store) begin
@@ -376,19 +326,22 @@ module rvgpu_sm_cuda_core_unit #(
                     // 处理内存访问
                     if (current_is_load) begin
                         // 等待LDST响应
-                        if (l1_data_resp_valid && l1_data_resp_warp_id == current_warp_id) begin
+                        if (l1_if.resp_valid && l1_if.resp_warp_id == current_warp_id) begin
                             for (int t = 0; t < THREAD_COUNT; t++) begin
-                                if (l1_data_resp_mask[t]) begin
-                                    exec_result[t] <= l1_data_resp_data[t];
+                                if (l1_if.resp_mask[t]) begin
+                                    exec_result[t] <= l1_if.resp_data[t];
                                 end
                             end
                             state <= WRITEBACK;
                         end
-                    end else begin
+                    end else if (current_is_store) begin
                         // Store指令，等待LDST接受
-                        if (l1_data_req_ready) begin
+                        if (l1_if.req_ready) begin
                             state <= WRITEBACK;
                         end
+                    end else begin
+                        // 非内存指令，直接进入写回
+                        state <= WRITEBACK;
                     end
                 end
                 
@@ -410,30 +363,32 @@ module rvgpu_sm_cuda_core_unit #(
     end
     
     // 输出信号赋值
-    assign warp_dispatch_ready = (state == IDLE);
+    assign disp_if.ready = (state == IDLE);
     
     // 寄存器写回
-    assign reg_write_enable = (state == WRITEBACK) && current_reg_write;
-    assign reg_write_warp_id = current_warp_id;
-    assign reg_write_addr = current_rd;
-    assign reg_write_data = exec_result;
-    assign reg_write_mask = current_active_mask;
+    assign rf_if.write_enable = (state == WRITEBACK) && current_reg_write;
+    assign rf_if.write_warp_id = current_warp_id;
+    assign rf_if.write_reg_addr = current_rd;
+    assign rf_if.write_data = exec_result;
+    assign rf_if.write_mask = current_active_mask;
     
     // L1 Data Cache请求
-    assign l1_data_req_valid = (state == MEMORY) && (current_is_load || current_is_store);
-    assign l1_data_req_warp_id = current_warp_id;
-    assign l1_data_req_mask = current_active_mask;
+    assign l1_if.req_valid   = (state == MEMORY) && (current_is_load || current_is_store);
+    assign l1_if.req_warp_id = current_warp_id;
+    assign l1_if.req_mask    = current_active_mask;
     // 简化地址计算
     always_comb begin
         for (int t = 0; t < THREAD_COUNT; t++) begin
-            l1_data_req_addr[t] = exec_result[t]; // 执行阶段已计算地址
-            l1_data_req_data[t] = src2_data[t];   // Store数据
+            l1_if.req_addr[t] = exec_result[t]; // 执行阶段已计算地址
+            l1_if.req_data[t] = src2_data[t];   // Store数据
         end
     end
-    assign l1_data_req_size = 3'b010; // 32位
-    assign l1_data_req_is_load = current_is_store;
-    assign l1_data_req_is_shared = 1'b0; // 简化，非共享
-    assign l1_data_resp_ready = (state == MEMORY);
+    assign l1_if.req_size     = 3'b010; // 32位
+    assign l1_if.req_is_load  = current_is_load;  // 修复：应该是current_is_load，不是current_is_store
+    assign l1_if.req_is_shared= 1'b0; // 简化，非共享
+    // 注意：l1_if.req_ready 是输入端口，不能驱动
+    // 它由 L1 cache 驱动，表示 cache 是否准备好接受请求
+    assign l1_if.resp_ready   = (state == MEMORY);
     
     // 完成信号
     assign warp_complete = (state == COMPLETE);

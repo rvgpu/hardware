@@ -17,8 +17,9 @@
 `define RVGPU_SM_L0_ICACHE_SV
 
 `include "rvgpu_typedef.svh"
-`include "rvgpu_mmu_if.svh"
+`include "interface_sm_icache_fetch.svh"
 `include "interface_l15cache.svh"
+`include "interface_sm_tlb.svh"
 
 // SM L0 ICache模块
 // 提供快速的指令获取，减少指令获取延迟
@@ -30,33 +31,14 @@ module rvgpu_sm_l0_icache #(
     input  logic clk,
     input  logic rst_n,
     
-    // Fetch接口
-    input  logic        fetch_req_valid,
-    input  logic [63:0] fetch_req_vaddr,
-    output logic        fetch_req_ready,
-    output logic        fetch_resp_valid,
-    output logic [31:0] fetch_resp_inst,
+    // Fetch接口（接口化）
+    interface_sm_icache_fetch.icache           fetch_if,
     
-    // L1 Cache接口
-    output logic        l1_req_valid,
-    output logic [63:0] l1_req_paddr,
-    output logic [3:0]  l1_req_size,
-    input  logic        l1_req_ready,
-    input  logic        l1_resp_valid,
-    input  logic [255:0] l1_resp_data,
-    output logic        l1_resp_ready,
+    // L1.5 Cache接口（接口化，对齐统一interface_l15cache）
+    interface_l15cache.requester                l15_if,
     
-    // TLB接口
-    output logic        tlb_req_valid,
-    output logic [38:0] tlb_req_vaddr,
-    output mmu_access_type_e tlb_req_type,
-    output logic [31:0] tlb_req_warp_id,
-    input  logic        tlb_req_ready,
-    input  logic        tlb_resp_valid,
-    input  logic        tlb_resp_hit,
-    input  logic [26:0] tlb_resp_ppn,
-    input  logic        tlb_resp_fault,
-    input  logic [31:0] tlb_resp_warp_id
+    // TLB接口（接口化）
+    interface_sm_tlb.requester                  tlb_if
 );
     // 缓存参数计算
     localparam int SETS = (CACHE_SIZE / LINE_SIZE) / ASSOCIATIVITY;
@@ -100,11 +82,11 @@ module rvgpu_sm_l0_icache #(
     logic [$clog2(ASSOCIATIVITY)-1:0] replace_way;
     logic cache_hit;
     
-    // 地址解析
+    // 地址解析（基于当前请求的VA）
     always_comb begin
-        current_tag = fetch_req_vaddr[38:12];
-        current_set = fetch_req_vaddr[LINE_BITS+SET_BITS-1:LINE_BITS];
-        current_offset = fetch_req_vaddr[LINE_BITS-1:0];
+        current_tag = current_vaddr[38:12];
+        current_set = current_vaddr[LINE_BITS+SET_BITS-1:LINE_BITS];
+        current_offset = current_vaddr[LINE_BITS-1:0];
     end
     
     // 缓存查找逻辑
@@ -145,19 +127,19 @@ module rvgpu_sm_l0_icache #(
     always_ff @(posedge clk) begin
         if (!rst_n) begin
             state <= IDLE;
-            fetch_req_ready <= 1'b0;
-            fetch_resp_valid <= 1'b0;
-            fetch_resp_inst <= '0;
+            fetch_if.req_ready <= 1'b0;
+            fetch_if.resp_valid <= 1'b0;
+            fetch_if.resp_inst <= '0;
             
-            l1_req_valid <= 1'b0;
-            l1_req_paddr <= '0;
-            l1_req_size <= '0;
-            l1_resp_ready <= 1'b0;
+            l15_if.req_valid <= 1'b0;
+            l15_if.req_paddr <= '0;
+            l15_if.req_size <= '0;
+            l15_if.resp_ready <= 1'b0;
             
-            tlb_req_valid <= 1'b0;
-            tlb_req_vaddr <= '0;
-            tlb_req_type <= '0;
-            tlb_req_warp_id <= '0;
+            tlb_if.req_valid <= 1'b0;
+            tlb_if.req_vaddr <= '0;
+            tlb_if.req_type <= '0;
+            tlb_if.req_warp_id <= '0;
             
             current_vaddr <= '0;
             current_paddr <= '0;
@@ -176,12 +158,12 @@ module rvgpu_sm_l0_icache #(
         end else begin
             case (state)
                 IDLE: begin
-                    fetch_resp_valid <= 1'b0;
-                    fetch_req_ready <= 1'b1;
+                    fetch_if.resp_valid <= 1'b0;
+                    fetch_if.req_ready <= 1'b1;
                     
-                    if (fetch_req_valid) begin
-                        fetch_req_ready <= 1'b0;
-                        current_vaddr <= fetch_req_vaddr;
+                    if (fetch_if.req_valid) begin
+                        fetch_if.req_ready <= 1'b0;
+                        current_vaddr <= fetch_if.req_vaddr;
                         current_warp_id <= 32'h0; // 简化实现，实际应传入warp_id
                         state <= TRANSLATE;
                     end
@@ -189,28 +171,28 @@ module rvgpu_sm_l0_icache #(
                 
                 TRANSLATE: begin
                     // 请求TLB进行地址转换
-                    tlb_req_valid <= 1'b1;
-                    tlb_req_vaddr <= current_vaddr[38:0];
-                    tlb_req_type <= MMU_EXECUTE;
-                    tlb_req_warp_id <= current_warp_id;
+                    tlb_if.req_valid <= 1'b1;
+                    tlb_if.req_vaddr <= current_vaddr[38:0];
+                    tlb_if.req_type <= MMU_EXECUTE;
+                    tlb_if.req_warp_id <= current_warp_id;
                     
-                    if (tlb_req_ready) begin
-                        tlb_req_valid <= 1'b0;
+                    if (tlb_if.req_ready) begin
+                        tlb_if.req_valid <= 1'b0;
                         state <= WAIT_TLB;
                     end
                 end
                 
                 WAIT_TLB: begin
                     // 等待TLB响应
-                    if (tlb_resp_valid) begin
-                        if (tlb_resp_hit && !tlb_resp_fault) begin
+                    if (tlb_if.resp_valid) begin
+                        if (tlb_if.resp_hit && !tlb_if.resp_fault) begin
                             // 地址转换成功
-                            current_paddr <= {tlb_resp_ppn, current_vaddr[11:0]};
+                            current_paddr <= {tlb_if.resp_ppn, current_vaddr[11:0]};
                             state <= CACHE_LOOKUP;
                         end else begin
                             // 地址转换失败，返回错误指令
-                            fetch_resp_valid <= 1'b1;
-                            fetch_resp_inst <= 32'h00000000; // 返回NOP或错误指令
+                            fetch_if.resp_valid <= 1'b1;
+                            fetch_if.resp_inst <= 32'h00000000; // 返回NOP或错误指令
                             state <= IDLE;
                         end
                     end
@@ -220,11 +202,11 @@ module rvgpu_sm_l0_icache #(
                     // 缓存查找
                     if (cache_hit) begin
                         // 缓存命中，返回指令
-                        fetch_resp_valid <= 1'b1;
+                        fetch_if.resp_valid <= 1'b1;
                         
                         // 根据偏移量提取指令
                         // 假设指令是32位的，每个缓存行可以存储多条指令
-                        fetch_resp_inst <= cache[current_set][hit_way].data[(current_offset*8) +: 32];
+                        fetch_if.resp_inst <= cache[current_set][hit_way].data[(current_offset*8) +: 32];
                         
                         // 更新LRU
                         for (int i = 0; i < ASSOCIATIVITY; i++) begin
@@ -246,22 +228,24 @@ module rvgpu_sm_l0_icache #(
                 
                 MEMORY_ACCESS: begin
                     // 请求L1 Cache
-                    l1_req_valid <= 1'b1;
-                    l1_req_paddr <= {current_paddr[63:LINE_BITS], {LINE_BITS{1'b0}}}; // 对齐到缓存行边界
-                    l1_req_size <= 4'h5; // 请求整个缓存行，32字节 = 2^5
+                    l15_if.req_valid <= 1'b1;
+                    l15_if.req_is_read <= 1'b1;
+                    l15_if.req_type  <= CACHE_OP_READ;
+                    l15_if.req_paddr <= {current_paddr[63:LINE_BITS], {LINE_BITS{1'b0}}}; // 对齐到缓存行边界
+                    l15_if.req_size  <= 4'h5; // 请求整个缓存行，32字节 = 2^5
                     
-                    if (l1_req_ready) begin
-                        l1_req_valid <= 1'b0;
+                    if (l15_if.req_ready) begin
+                        l15_if.req_valid <= 1'b0;
                         state <= WAIT_MEMORY;
                     end
                 end
                 
                 WAIT_MEMORY: begin
                     // 等待L1 Cache响应
-                    l1_resp_ready <= 1'b1;
+                        l15_if.resp_ready <= 1'b1;
                     
-                    if (l1_resp_valid) begin
-                        l1_resp_ready <= 1'b0;
+                    if (l15_if.resp_valid) begin
+                        l15_if.resp_ready <= 1'b0;
                         state <= CACHE_UPDATE;
                     end
                 end
@@ -270,7 +254,7 @@ module rvgpu_sm_l0_icache #(
                     // 更新缓存
                     cache[current_set][replace_way].valid <= 1'b1;
                     cache[current_set][replace_way].tag <= current_tag;
-                    cache[current_set][replace_way].data <= l1_resp_data;
+                    cache[current_set][replace_way].data <= l15_if.resp_data;
                     cache[current_set][replace_way].lru <= '1; // 最近使用
                     
                     // 更新其他路的LRU值
@@ -281,8 +265,8 @@ module rvgpu_sm_l0_icache #(
                     end
                     
                     // 返回请求的指令
-                    fetch_resp_valid <= 1'b1;
-                    fetch_resp_inst <= l1_resp_data[(current_offset*8) +: 32];
+                    fetch_if.resp_valid <= 1'b1;
+                    fetch_if.resp_inst <= l15_if.resp_data[(current_offset*8) +: 32];
                     
                     state <= IDLE;
                 end

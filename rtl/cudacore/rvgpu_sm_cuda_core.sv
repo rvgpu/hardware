@@ -17,6 +17,7 @@
 `define RVGPU_SM_CUDA_CORE_SV
 
 `include "rvgpu_typedef.svh"
+`include "interface_sm_cuda_core.svh"
 
 // SM CUDA核心
 // 负责执行整数和浮点运算指令
@@ -24,36 +25,7 @@ module rvgpu_sm_cuda_core #(
     parameter int THREAD_COUNT = 32,    // 每个warp的线程数
     parameter int SIMD_WIDTH = 8        // SIMD宽度（每个周期处理的线程数）
 ) (
-    input  logic clk,
-    input  logic rst_n,
-    
-    // 指令输入
-    input  logic        inst_valid,
-    input  logic [31:0] inst,
-    input  logic [31:0] pc,
-    input  logic [31:0] warp_id,
-    input  logic [31:0] active_mask,
-    
-    // 操作数输入
-    input  logic [31:0] src1_data[THREAD_COUNT],
-    input  logic [31:0] src2_data[THREAD_COUNT],
-    input  logic [31:0] src3_data[THREAD_COUNT],
-    input  logic [31:0] imm_data,
-    
-    // 执行结果输出
-    output logic        result_valid,
-    output logic [31:0] result_data[THREAD_COUNT],
-    output logic [4:0]  result_rd,
-    output logic [31:0] result_pc,
-    output logic [31:0] result_warp_id,
-    output logic [31:0] result_active_mask,
-    output logic        result_is_branch,
-    output logic [31:0] result_branch_target,
-    output logic [31:0] result_branch_mask,
-    
-    // 控制信号
-    input  logic        stall,
-    output logic        ready
+    interface_sm_cuda_core.core cuda_if
 );
     // 指令类型定义
     typedef enum logic [3:0] {
@@ -122,14 +94,14 @@ module rvgpu_sm_cuda_core #(
         is_branch_op = 1'b0;
         alu_op = ALU_ADD;
         fpu_op = FPU_ADD;
-        rd_addr = inst[11:7];
+        rd_addr = cuda_if.inst[11:7];
         uses_rd = (rd_addr != 5'b00000);
         
         // 根据RISC-V指令格式解码
-        case (inst[6:0])
+        case (cuda_if.inst[6:0])
             7'b0110011: begin // R-type
                 is_int_op = 1'b1;
-                case ({inst[31:25], inst[14:12]})
+                case ({cuda_if.inst[31:25], cuda_if.inst[14:12]})
                     10'b0000000000: alu_op = ALU_ADD;  // ADD
                     10'b0100000000: alu_op = ALU_SUB;  // SUB
                     10'b0000000111: alu_op = ALU_AND;  // AND
@@ -149,13 +121,13 @@ module rvgpu_sm_cuda_core #(
             
             7'b0010011: begin // I-type
                 is_int_op = 1'b1;
-                case (inst[14:12])
+                case (cuda_if.inst[14:12])
                     3'b000: alu_op = ALU_ADD;  // ADDI
                     3'b111: alu_op = ALU_AND;  // ANDI
                     3'b110: alu_op = ALU_OR;   // ORI
                     3'b100: alu_op = ALU_XOR;  // XORI
                     3'b001: alu_op = ALU_SLL;  // SLLI
-                    3'b101: alu_op = inst[30] ? ALU_SRA : ALU_SRL; // SRAI/SRLI
+                    3'b101: alu_op = cuda_if.inst[30] ? ALU_SRA : ALU_SRL; // SRAI/SRLI
                     3'b010: alu_op = ALU_SLT;  // SLTI
                     3'b011: alu_op = ALU_SLTU; // SLTIU
                     default: alu_op = ALU_ADD;
@@ -169,7 +141,7 @@ module rvgpu_sm_cuda_core #(
             
             7'b1010011: begin // F-type
                 is_float_op = 1'b1;
-                case (inst[31:25])
+                case (cuda_if.inst[31:25])
                     7'b0000000: fpu_op = FPU_ADD;   // FADD.S
                     7'b0000100: fpu_op = FPU_SUB;   // FSUB.S
                     7'b0001000: fpu_op = FPU_MUL;   // FMUL.S
@@ -195,24 +167,24 @@ module rvgpu_sm_cuda_core #(
             int_result[t] = '0;
             
             // 只处理活跃线程
-            if (active_mask[t]) begin
-                case (alu_op)
-                    ALU_ADD:  int_result[t] = src1_data[t] + src2_data[t];
-                    ALU_SUB:  int_result[t] = src1_data[t] - src2_data[t];
-                    ALU_AND:  int_result[t] = src1_data[t] & src2_data[t];
-                    ALU_OR:   int_result[t] = src1_data[t] | src2_data[t];
-                    ALU_XOR:  int_result[t] = src1_data[t] ^ src2_data[t];
-                    ALU_SLL:  int_result[t] = src1_data[t] << src2_data[t][4:0];
-                    ALU_SRL:  int_result[t] = src1_data[t] >> src2_data[t][4:0];
-                    ALU_SRA:  int_result[t] = $signed(src1_data[t]) >>> src2_data[t][4:0];
-                    ALU_SLT:  int_result[t] = ($signed(src1_data[t]) < $signed(src2_data[t])) ? 32'h1 : 32'h0;
-                    ALU_SLTU: int_result[t] = (src1_data[t] < src2_data[t]) ? 32'h1 : 32'h0;
-                    ALU_MUL:  int_result[t] = src1_data[t] * src2_data[t];
-                    ALU_DIV:  int_result[t] = (src2_data[t] == '0) ? '1 : (src1_data[t] / src2_data[t]);
-                    ALU_REM:  int_result[t] = (src2_data[t] == '0) ? src1_data[t] : (src1_data[t] % src2_data[t]);
-                    default:  int_result[t] = src1_data[t] + src2_data[t];
-                endcase
-            end
+                    if (cuda_if.active_mask[t]) begin
+            case (alu_op)
+                ALU_ADD:  int_result[t] = cuda_if.src1_data[t] + cuda_if.src2_data[t];
+                ALU_SUB:  int_result[t] = cuda_if.src1_data[t] - cuda_if.src2_data[t];
+                ALU_AND:  int_result[t] = cuda_if.src1_data[t] & cuda_if.src2_data[t];
+                ALU_OR:   int_result[t] = cuda_if.src1_data[t] | cuda_if.src2_data[t];
+                ALU_XOR:  int_result[t] = cuda_if.src1_data[t] ^ cuda_if.src2_data[t];
+                ALU_SLL:  int_result[t] = cuda_if.src1_data[t] << cuda_if.src2_data[t][4:0];
+                ALU_SRL:  int_result[t] = cuda_if.src1_data[t] >> cuda_if.src2_data[t][4:0];
+                ALU_SRA:  int_result[t] = $signed(cuda_if.src1_data[t]) >>> cuda_if.src2_data[t][4:0];
+                ALU_SLT:  int_result[t] = ($signed(cuda_if.src1_data[t]) < $signed(cuda_if.src2_data[t])) ? 32'h1 : 32'h0;
+                ALU_SLTU: int_result[t] = (cuda_if.src1_data[t] < cuda_if.src2_data[t]) ? 32'h1 : 32'h0;
+                ALU_MUL:  int_result[t] = cuda_if.src1_data[t] * cuda_if.src2_data[t];
+                ALU_DIV:  int_result[t] = (cuda_if.src2_data[t] == '0) ? '1 : (cuda_if.src1_data[t] / cuda_if.src2_data[t]);
+                ALU_REM:  int_result[t] = (cuda_if.src2_data[t] == '0) ? cuda_if.src1_data[t] : (cuda_if.src1_data[t] % cuda_if.src2_data[t]);
+                default:  int_result[t] = cuda_if.src1_data[t] + cuda_if.src2_data[t];
+            endcase
+        end
         end
     end
     
@@ -223,17 +195,17 @@ module rvgpu_sm_cuda_core #(
             float_result[t] = '0;
             
             // 只处理活跃线程
-            if (active_mask[t]) begin
+            if (cuda_if.active_mask[t]) begin
                 // 简化实现：实际应使用IEEE-754浮点运算
                 case (fpu_op)
-                    FPU_ADD:   float_result[t] = src1_data[t] + src2_data[t];
-                    FPU_SUB:   float_result[t] = src1_data[t] - src2_data[t];
-                    FPU_MUL:   float_result[t] = src1_data[t] * src2_data[t];
-                    FPU_DIV:   float_result[t] = (src2_data[t] == '0) ? '1 : (src1_data[t] / src2_data[t]);
-                    FPU_SQRT:  float_result[t] = src1_data[t]; // 简化实现，实际需要平方根计算
-                    FPU_FMADD: float_result[t] = src1_data[t] * src2_data[t] + src3_data[t];
-                    FPU_FMSUB: float_result[t] = src1_data[t] * src2_data[t] - src3_data[t];
-                    default:   float_result[t] = src1_data[t];
+                    FPU_ADD:   float_result[t] = cuda_if.src1_data[t] + cuda_if.src2_data[t];
+                    FPU_SUB:   float_result[t] = cuda_if.src1_data[t] - cuda_if.src2_data[t];
+                    FPU_MUL:   float_result[t] = cuda_if.src1_data[t] * cuda_if.src2_data[t];
+                    FPU_DIV:   float_result[t] = (cuda_if.src2_data[t] == '0) ? '1 : (cuda_if.src1_data[t] / cuda_if.src2_data[t]);
+                    FPU_SQRT:  float_result[t] = cuda_if.src1_data[t]; // 简化实现，实际需要平方根计算
+                    FPU_FMADD: float_result[t] = cuda_if.src1_data[t] * cuda_if.src2_data[t] + cuda_if.src3_data[t];
+                    FPU_FMSUB: float_result[t] = cuda_if.src1_data[t] * cuda_if.src2_data[t] - cuda_if.src3_data[t];
+                    default:   float_result[t] = cuda_if.src1_data[t];
                 endcase
             end
         end
@@ -241,18 +213,18 @@ module rvgpu_sm_cuda_core #(
     
     // 分支处理
     always_comb begin
-        branch_target = pc + imm_data; // 简化实现，实际需要根据指令类型计算目标地址
+        branch_target = cuda_if.pc + cuda_if.imm_data; // 简化实现，实际需要根据指令类型计算目标地址
         branch_mask = '0;
         
         for (int t = 0; t < THREAD_COUNT; t++) begin
-            if (active_mask[t]) begin
-                case (inst[14:12])
-                    3'b000: branch_mask[t] = (src1_data[t] == src2_data[t]); // BEQ
-                    3'b001: branch_mask[t] = (src1_data[t] != src2_data[t]); // BNE
-                    3'b100: branch_mask[t] = ($signed(src1_data[t]) < $signed(src2_data[t])); // BLT
-                    3'b101: branch_mask[t] = ($signed(src1_data[t]) >= $signed(src2_data[t])); // BGE
-                    3'b110: branch_mask[t] = (src1_data[t] < src2_data[t]); // BLTU
-                    3'b111: branch_mask[t] = (src1_data[t] >= src2_data[t]); // BGEU
+            if (cuda_if.active_mask[t]) begin
+                case (cuda_if.inst[14:12])
+                    3'b000: branch_mask[t] = (cuda_if.src1_data[t] == cuda_if.src2_data[t]); // BEQ
+                    3'b001: branch_mask[t] = (cuda_if.src1_data[t] != cuda_if.src2_data[t]); // BNE
+                    3'b100: branch_mask[t] = ($signed(cuda_if.src1_data[t]) < $signed(cuda_if.src2_data[t])); // BLT
+                    3'b101: branch_mask[t] = ($signed(cuda_if.src1_data[t]) >= $signed(cuda_if.src2_data[t])); // BGE
+                    3'b110: branch_mask[t] = (cuda_if.src1_data[t] < cuda_if.src2_data[t]); // BLTU
+                    3'b111: branch_mask[t] = (cuda_if.src1_data[t] >= cuda_if.src2_data[t]); // BGEU
                     default: branch_mask[t] = 1'b0;
                 endcase
             end
@@ -260,8 +232,8 @@ module rvgpu_sm_cuda_core #(
     end
     
     // 流水线阶段1 (执行)
-    always_ff @(posedge clk) begin
-        if (!rst_n) begin
+    always_ff @(posedge cuda_if.clk) begin
+        if (!cuda_if.rst_n) begin
             exec1_valid <= 1'b0;
             exec1_pc <= '0;
             exec1_warp_id <= '0;
@@ -269,11 +241,11 @@ module rvgpu_sm_cuda_core #(
             exec1_rd_addr <= '0;
             exec1_uses_rd <= 1'b0;
             exec1_is_branch <= 1'b0;
-        end else if (!stall) begin
-            exec1_valid <= inst_valid;
-            exec1_pc <= pc;
-            exec1_warp_id <= warp_id;
-            exec1_active_mask <= active_mask;
+        end else if (!cuda_if.stall) begin
+            exec1_valid <= cuda_if.inst_valid;
+            exec1_pc <= cuda_if.pc;
+            exec1_warp_id <= cuda_if.warp_id;
+            exec1_active_mask <= cuda_if.active_mask;
             exec1_rd_addr <= rd_addr;
             exec1_uses_rd <= uses_rd;
             exec1_is_branch <= is_branch_op;
@@ -281,8 +253,8 @@ module rvgpu_sm_cuda_core #(
     end
     
     // 流水线阶段2 (写回)
-    always_ff @(posedge clk) begin
-        if (!rst_n) begin
+    always_ff @(posedge cuda_if.clk) begin
+        if (!cuda_if.rst_n) begin
             exec2_valid <= 1'b0;
             exec2_pc <= '0;
             exec2_warp_id <= '0;
@@ -292,12 +264,12 @@ module rvgpu_sm_cuda_core #(
             exec2_is_branch <= 1'b0;
             
             for (int t = 0; t < THREAD_COUNT; t++) begin
-                result_data[t] <= '0;
+                cuda_if.result_data[t] <= '0;
             end
             
-            result_branch_target <= '0;
-            result_branch_mask <= '0;
-        end else if (!stall) begin
+            cuda_if.result_branch_target <= '0;
+            cuda_if.result_branch_mask <= '0;
+        end else if (!cuda_if.stall) begin
             exec2_valid <= exec1_valid;
             exec2_pc <= exec1_pc;
             exec2_warp_id <= exec1_warp_id;
@@ -309,34 +281,34 @@ module rvgpu_sm_cuda_core #(
             // 选择结果
             for (int t = 0; t < THREAD_COUNT; t++) begin
                 if (is_int_op) begin
-                    result_data[t] <= int_result[t];
+                    cuda_if.result_data[t] <= int_result[t];
                 end else if (is_float_op) begin
-                    result_data[t] <= float_result[t];
+                    cuda_if.result_data[t] <= float_result[t];
                 end else begin
-                    result_data[t] <= '0;
+                    cuda_if.result_data[t] <= '0;
                 end
             end
             
             if (is_branch_op) begin
-                result_branch_target <= branch_target;
-                result_branch_mask <= branch_mask;
+                cuda_if.result_branch_target <= branch_target;
+                cuda_if.result_branch_mask <= branch_mask;
             end else begin
-                result_branch_target <= '0;
-                result_branch_mask <= '0;
+                cuda_if.result_branch_target <= '0;
+                cuda_if.result_branch_mask <= '0;
             end
         end
     end
     
     // 输出赋值
-    assign result_valid = exec2_valid;
-    assign result_rd = exec2_rd_addr;
-    assign result_pc = exec2_pc;
-    assign result_warp_id = exec2_warp_id;
-    assign result_active_mask = exec2_active_mask;
-    assign result_is_branch = exec2_is_branch;
+    assign cuda_if.result_valid = exec2_valid;
+    assign cuda_if.result_rd = exec2_rd_addr;
+    assign cuda_if.result_pc = exec2_pc;
+    assign cuda_if.result_warp_id = exec2_warp_id;
+    assign cuda_if.result_active_mask = exec2_active_mask;
+    assign cuda_if.result_is_branch = exec2_is_branch;
     
     // 总是准备好接收新指令
-    assign ready = 1'b1;
+    assign cuda_if.ready = 1'b1;
 
 endmodule : rvgpu_sm_cuda_core
 

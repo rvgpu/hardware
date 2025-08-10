@@ -368,7 +368,7 @@ module rvgpu_tpc_top #(
                 .ldst_if(sm_ldst_if[i].sm),
                 
                 // L1.5 Cache接口（指令获取）
-                .l15_if(sm_l15_if[i].requester),
+                .l15_icache_if(sm_l15_if[i].requester),
                 
                 // TLB接口
                 .tlb_if(sm_tlb_if[i]),

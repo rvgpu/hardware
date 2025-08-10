@@ -17,6 +17,9 @@
 `define RVGPU_SM_MEMORY_STAGE_SV
 
 `include "rvgpu_typedef.svh"
+`include "interface_sm_exec_mem.svh"
+`include "interface_sm_mem_wb.svh"
+`include "interface_sm_ldst.svh"
 
 // SM访存阶段
 // 处理load/store指令和与LDST单元的通信
@@ -27,51 +30,14 @@ module rvgpu_sm_memory_stage #(
     input  logic clk,
     input  logic rst_n,
     
-    // 从执行阶段的输入
-    input  logic                                exec_mem_valid,
-    input  logic [31:0]                         exec_mem_inst,
-    input  logic [63:0]                         exec_mem_pc,
-    input  logic [$clog2(WARP_COUNT)-1:0]      exec_mem_warp_id,
-    input  logic [THREAD_COUNT-1:0]             exec_mem_active_mask,
-    input  logic [4:0]                          exec_mem_rd,
-    input  logic [31:0]                         exec_mem_result[THREAD_COUNT],
-    input  logic                                exec_mem_is_load,
-    input  logic                                exec_mem_is_store,
-    input  logic                                exec_mem_is_branch,
-    input  logic                                exec_mem_reg_write,
-    input  logic [31:0]                         exec_mem_branch_target,
-    input  logic [THREAD_COUNT-1:0]             exec_mem_branch_mask,
-    output logic                                exec_mem_ready,
+    // 从执行阶段的输入（接口）
+    interface_sm_exec_mem.mem_sink              em_if,
     
-    // LDST单元接口
-    output logic                                ldst_req_valid,
-    output logic [$clog2(WARP_COUNT)-1:0]      ldst_req_warp_id,
-    output logic [THREAD_COUNT-1:0]             ldst_req_mask,
-    output logic [63:0]                         ldst_req_addr[THREAD_COUNT],
-    output logic [31:0]                         ldst_req_data[THREAD_COUNT],
-    output logic [2:0]                          ldst_req_size,
-    output logic                                ldst_req_is_load,
-    input  logic                                ldst_req_ready,
+    // LDST单元接口（统一接口）
+    interface_sm_ldst.sm                        ldst_if,
     
-    input  logic                                ldst_resp_valid,
-    input  logic [$clog2(WARP_COUNT)-1:0]      ldst_resp_warp_id,
-    input  logic [THREAD_COUNT-1:0]             ldst_resp_mask,
-    input  logic [31:0]                         ldst_resp_data[THREAD_COUNT],
-    output logic                                ldst_resp_ready,
-    
-    // 到写回阶段的输出
-    output logic                                mem_wb_valid,
-    output logic [31:0]                         mem_wb_inst,
-    output logic [63:0]                         mem_wb_pc,
-    output logic [$clog2(WARP_COUNT)-1:0]      mem_wb_warp_id,
-    output logic [THREAD_COUNT-1:0]             mem_wb_active_mask,
-    output logic [4:0]                          mem_wb_rd,
-    output logic [31:0]                         mem_wb_result[THREAD_COUNT],
-    output logic                                mem_wb_reg_write,
-    output logic                                mem_wb_is_branch,
-    output logic [31:0]                         mem_wb_branch_target,
-    output logic [THREAD_COUNT-1:0]             mem_wb_branch_mask,
-    input  logic                                mem_wb_ready,
+    // 到写回阶段的输出（接口）
+    interface_sm_mem_wb.mem_source              mw_if,
     
     // 流水线控制
     input  logic                                pipeline_stall,
@@ -121,12 +87,12 @@ module rvgpu_sm_memory_stage #(
     always_comb begin
         for (int t = 0; t < THREAD_COUNT; t++) begin
             // 简化地址计算：基地址 + 偏移
-            mem_addr[t] = exec_mem_result[t]; // 执行阶段已计算好地址
-            store_data[t] = exec_mem_result[t]; // 简化：使用结果作为存储数据
+            mem_addr[t] = em_if.result[t]; // 执行阶段已计算好地址
+            store_data[t] = em_if.result[t]; // 简化：使用结果作为存储数据
         end
         
         // 根据指令确定访存大小
-        case (exec_mem_inst[14:12])
+        case (em_if.inst[14:12])
             3'b000: mem_size = 3'b000; // LB/SB - 8位
             3'b001: mem_size = 3'b001; // LH/SH - 16位
             3'b010: mem_size = 3'b010; // LW/SW - 32位
@@ -160,22 +126,22 @@ module rvgpu_sm_memory_stage #(
         end else if (!pipeline_stall) begin
             case (state)
                 IDLE: begin
-                    if (exec_mem_valid) begin
-                        current_warp_id <= exec_mem_warp_id;
-                        current_active_mask <= exec_mem_active_mask;
-                        current_rd <= exec_mem_rd;
-                        current_reg_write <= exec_mem_reg_write;
-                        current_is_branch <= exec_mem_is_branch;
-                        current_branch_target <= exec_mem_branch_target;
-                        current_branch_mask <= exec_mem_branch_mask;
-                        current_inst <= exec_mem_inst;
-                        current_pc <= exec_mem_pc;
+            if (em_if.valid) begin
+                current_warp_id <= em_if.warp_id;
+                current_active_mask <= em_if.active_mask;
+                current_rd <= em_if.rd;
+                current_reg_write <= em_if.reg_write;
+                current_is_branch <= em_if.is_branch;
+                current_branch_target <= em_if.branch_target;
+                current_branch_mask <= em_if.branch_mask;
+                current_inst <= em_if.inst;
+                current_pc <= em_if.pc;
                         
                         for (int t = 0; t < THREAD_COUNT; t++) begin
-                            current_result[t] <= exec_mem_result[t];
+                    current_result[t] <= em_if.result[t];
                         end
                         
-                        if (exec_mem_is_load || exec_mem_is_store) begin
+                if (em_if.is_load || em_if.is_store) begin
                             state <= SEND_REQ;
                         end else begin
                             state <= FORWARD;
@@ -184,18 +150,18 @@ module rvgpu_sm_memory_stage #(
                 end
                 
                 SEND_REQ: begin
-                    if (ldst_req_ready) begin
+                    if (ldst_if.req_ready) begin
                         state <= WAIT_RESP;
                     end
                 end
                 
                 WAIT_RESP: begin
-                    if (ldst_resp_valid && ldst_resp_warp_id == current_warp_id) begin
+                    if (ldst_if.resp_valid && ldst_if.resp_warp_id == current_warp_id) begin
                         // 更新Load结果
-                        if (!exec_mem_is_store) begin
+                        if (!em_if.is_store) begin
                             for (int t = 0; t < THREAD_COUNT; t++) begin
-                                if (ldst_resp_mask[t]) begin
-                                    current_result[t] <= ldst_resp_data[t];
+                                if (ldst_if.resp_mask[t]) begin
+                                    current_result[t] <= ldst_if.resp_data[t];
                                 end
                             end
                         end
@@ -204,7 +170,7 @@ module rvgpu_sm_memory_stage #(
                 end
                 
                 FORWARD: begin
-                    if (mem_wb_ready) begin
+                    if (mw_if.ready) begin
                         state <= IDLE;
                     end
                 end
@@ -216,17 +182,17 @@ module rvgpu_sm_memory_stage #(
         end
     end
     
-    // LDST请求信号
-    assign ldst_req_valid = (state == SEND_REQ);
-    assign ldst_req_warp_id = current_warp_id;
-    assign ldst_req_mask = current_active_mask;
-    assign ldst_req_addr = mem_addr;
-    assign ldst_req_data = store_data;
-    assign ldst_req_size = mem_size;
-    assign ldst_req_is_load = exec_mem_is_load;
+    // LDST请求信号 - 通过内部if_ldst接口
+    assign ldst_if.req_valid   = (state == SEND_REQ);
+    assign ldst_if.req_warp_id = current_warp_id;
+    assign ldst_if.req_mask    = current_active_mask;
+    assign ldst_if.req_addr    = mem_addr;
+    assign ldst_if.req_data    = store_data;
+    assign ldst_if.req_size    = mem_size;
+    assign ldst_if.req_is_load = em_if.is_load;
     
-    // LDST响应准备信号
-    assign ldst_resp_ready = (state == WAIT_RESP);
+    // LDST响应准备信号 - 通过内部if_ldst接口
+    assign ldst_if.resp_ready = (state == WAIT_RESP);
     
     // 流水线寄存器更新
     always_ff @(posedge clk) begin
@@ -248,7 +214,7 @@ module rvgpu_sm_memory_stage #(
         end else if (pipeline_flush) begin
             mw_valid_reg <= 1'b0;
         end else if (!pipeline_stall) begin
-            if (state == FORWARD && mem_wb_ready) begin
+            if (state == FORWARD && mw_if.ready) begin
                 mw_valid_reg <= 1'b1;
                 mw_inst_reg <= current_inst;
                 mw_pc_reg <= current_pc;
@@ -263,27 +229,27 @@ module rvgpu_sm_memory_stage #(
                 for (int t = 0; t < THREAD_COUNT; t++) begin
                     mw_result_reg[t] <= current_result[t];
                 end
-            end else if (mem_wb_ready) begin
+            end else if (mw_if.ready) begin
                 mw_valid_reg <= 1'b0;
             end
         end
     end
     
     // 输出信号
-    assign mem_wb_valid = mw_valid_reg;
-    assign mem_wb_inst = mw_inst_reg;
-    assign mem_wb_pc = mw_pc_reg;
-    assign mem_wb_warp_id = mw_warp_id_reg;
-    assign mem_wb_active_mask = mw_active_mask_reg;
-    assign mem_wb_rd = mw_rd_reg;
-    assign mem_wb_result = mw_result_reg;
-    assign mem_wb_reg_write = mw_reg_write_reg;
-    assign mem_wb_is_branch = mw_is_branch_reg;
-    assign mem_wb_branch_target = mw_branch_target_reg;
-    assign mem_wb_branch_mask = mw_branch_mask_reg;
+    assign mw_if.valid         = mw_valid_reg;
+    assign mw_if.inst          = mw_inst_reg;
+    assign mw_if.pc            = mw_pc_reg;
+    assign mw_if.warp_id       = mw_warp_id_reg;
+    assign mw_if.active_mask   = mw_active_mask_reg;
+    assign mw_if.rd            = mw_rd_reg;
+    assign mw_if.result        = mw_result_reg;
+    assign mw_if.reg_write     = mw_reg_write_reg;
+    assign mw_if.is_branch     = mw_is_branch_reg;
+    assign mw_if.branch_target = mw_branch_target_reg;
+    assign mw_if.branch_mask   = mw_branch_mask_reg;
     
     // 准备信号
-    assign exec_mem_ready = (state == IDLE) || (state == FORWARD && mem_wb_ready);
+    assign em_if.ready = (state == IDLE) || (state == FORWARD && mw_if.ready);
 
 endmodule : rvgpu_sm_memory_stage
 

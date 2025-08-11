@@ -39,78 +39,32 @@ module rvgpu_gpc_top #(
     input  logic rst_n,
     rvgpu_internal_noc_if.device noc_if
 );
+    
     // 内部接口声明
     gpc_block_raster_if      block_raster_if();
     gpc_block_tpc_if         block_tpc_if[GPC_CONFIG.num_tpc]();
     interface_l15cache         l15_cache_if[GPC_CONFIG.num_tpc+2]();  // NUM_TPC个TPC + Block Scheduler + Raster
-    rvgpu_internal_noc_if    l15_noc_if();                          // L1.5缓存NOC接口
-    // GPC MMU接口
     mmu_if                   gpc_mmu_if[GPC_CONFIG.num_tpc+1]();    // NUM_TPC个TPC + Block Scheduler
-    rvgpu_internal_noc_if    mmu_noc_if();                          // MMU NOC接口
-    rvgpu_internal_noc_if    scheduler_noc_if();                    // Scheduler NOC接口
-    // L0 TLB更新接口
-    gpc_tlb_update_if        l0_tlb_if[GPC_CONFIG.num_tpc]();
+    gpc_tlb_update_if        l0_tlb_if[GPC_CONFIG.num_tpc]();       // L0 TLB更新接口
+    
+    // GPC前端实例 - 整合所有GPC功能模块
+    rvgpu_gpc_frontend #(
+        .GPC_CONFIG(GPC_CONFIG),
+        .GPC_ID(GPC_ID)
+    ) u_gpc_frontend (
+        .clk(clk),
+        .rst_n(rst_n),
+        .noc_if(noc_if),
+        .block_raster_if(block_raster_if),
+        .block_tpc_if(block_tpc_if),
+        .l15_cache_if(l15_cache_if),
+        .gpc_mmu_if(gpc_mmu_if),
+        .l0_tlb_if(l0_tlb_if)
+    );
     
     // 内部信号
     logic [7:0] active_warps_count[GPC_CONFIG.num_tpc];  // 每个TPC的活跃warp数量
     logic [7:0] sm_utilization[GPC_CONFIG.num_tpc];      // 每个TPC的SM利用率
-    
-    // NOC Adapter实例化
-    rvgpu_gpc_noc_adapter #(.GPC_ID(GPC_ID)) u_noc_adapter (
-        .clk(clk),
-        .rst_n(rst_n),
-        .noc_external_if(noc_if),
-        .l15_cache_if(l15_noc_if.noc),
-        .mmu_if(mmu_noc_if.noc),
-        .scheduler_if(scheduler_noc_if.noc)
-    );
-    
-    // GPC MMU实例
-    rvgpu_gpc_mmu #(
-        .MAX_REQUESTS(16),  // 使用固定值
-        .GPC_ID(GPC_ID)
-    ) u_gpc_mmu (
-        .clk(clk),
-        .rst_n(rst_n),
-        .bs_if(gpc_mmu_if[GPC_CONFIG.num_tpc].mmu_port),
-        .tpc_if(gpc_mmu_if[0:GPC_CONFIG.num_tpc-1]),
-        .l0_tlb_if(l0_tlb_if),
-        .noc_if(mmu_noc_if.device)
-    );
-
-    // GPC Block Scheduler实例
-    rvgpu_gpc_block_scheduler #(
-        .GPC_ID(GPC_ID),
-        .NUM_TPC(GPC_CONFIG.num_tpc),
-        .MAX_WARPS_PER_BLOCK(32),  // 使用固定值
-        .ADDR_WIDTH(40)
-    ) u_gpc_block_scheduler (
-        .clk(clk),
-        .rst_n(rst_n),
-        .noc_if(scheduler_noc_if.device),
-        .tpc_if(block_tpc_if),
-        .raster_if(block_raster_if),
-        .l15_if(l15_cache_if[GPC_CONFIG.num_tpc].requester),
-        .mmu_if(gpc_mmu_if[GPC_CONFIG.num_tpc].requester_port)
-    );
-    
-    // L1.5 Cache实例化
-    rvgpu_gpc_l15cache #(
-        .GPC_ID(GPC_ID)
-    ) u_l15_cache (
-        .clk(clk),
-        .rst_n(rst_n),
-        .noc_if(l15_noc_if.device),
-        .requester_if(l15_cache_if)
-    );
-    
-    // Raster Engine实例化
-    rvgpu_gpc_raster u_raster (
-        .clk(clk),
-        .rst_n(rst_n),
-        .raster_if(block_raster_if.raster),
-        .l15_if(l15_cache_if[GPC_CONFIG.num_tpc+1].requester)
-    );
     
     // TPC实例化
     genvar i;
@@ -132,8 +86,6 @@ module rvgpu_gpc_top #(
             );
         end
     endgenerate
-    
-    // 接口连接已通过端口直接完成
 
 endmodule : rvgpu_gpc_top
 

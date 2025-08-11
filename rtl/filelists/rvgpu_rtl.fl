@@ -48,6 +48,8 @@ $RVGPU_HARDWARE/rtl/gpc/rvgpu_gpc_block_scheduler.sv
 $RVGPU_HARDWARE/rtl/gpc/rvgpu_gpc_mmu.sv
 $RVGPU_HARDWARE/rtl/gpc/rvgpu_gpc_mmu_tlb.sv
 $RVGPU_HARDWARE/rtl/gpc/rvgpu_gpc_raster.sv
+$RVGPU_HARDWARE/rtl/tpc/rvgpu_tpc_router_node.sv
+$RVGPU_HARDWARE/rtl/gpc/rvgpu_gpc_router.sv
 $RVGPU_HARDWARE/rtl/gpc/rvgpu_gpc_frontend.sv
 $RVGPU_HARDWARE/rtl/gpc/rvgpu_gpc_top.sv
 
@@ -65,6 +67,7 @@ $RVGPU_HARDWARE/rtl/sm/rvgpu_sm_execute_stage.sv
 $RVGPU_HARDWARE/rtl/sm/rvgpu_sm_memory_stage.sv
 $RVGPU_HARDWARE/rtl/sm/rvgpu_sm_writeback_stage.sv
 $RVGPU_HARDWARE/rtl/sm/rvgpu_sm_top.sv
+$RVGPU_HARDWARE/rtl/sm/rvgpu_sm_frontend.sv
 
 // CUDA Core
 $RVGPU_HARDWARE/rtl/cudacore/rvgpu_sm_cuda_core.sv

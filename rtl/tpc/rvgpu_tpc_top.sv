@@ -17,16 +17,12 @@
 `define RVGPU_TPC_TOP_SV
 
 `include "rvgpu_typedef.svh"
+`include "interface_gpc_router.svh"
 `include "gpc_block_tpc_if.svh"
-`include "interface_l15cache.svh"
-`include "rvgpu_internal_noc_if.svh"
-`include "rvgpu_noc_message.svh"
-`include "rvgpu_mmu_if.svh"
 `include "ldst_sm_if.svh"
+`include "interface_l15cache.svh"
+`include "rvgpu_mmu_if.svh"
 
-// TPC顶层模块 - 简化版本
-// 专注于SM管理、任务分发和资源监控
-// 不再包含LDST单元和L0 TLB，这些功能已移至SM内部
 module rvgpu_tpc_top #(
     parameter int NUM_SM = 2,                // 每个TPC中的SM数量
     parameter int MAX_WARPS_PER_SM = 32,     // 每个SM最大warp数
@@ -35,376 +31,70 @@ module rvgpu_tpc_top #(
     input  logic clk,
     input  logic rst_n,
     
-    // Block Scheduler接口
-    gpc_block_tpc_if.tpc tpc_if,
-    
-    // L1.5 Cache接口（汇聚所有SM的缓存请求）
-    interface_l15cache.requester l15_if,
-    
-    // GPC MMU接口（汇聚所有SM的TLB请求）
-    mmu_if.requester_port tlb_if,
-    
-    // GPC TLB更新接口（接收来自MMU的TLB更新）
-    gpc_tlb_update_if.receiver tlb_update_if,
-    
-    // 状态输出（简化）
-    output logic [7:0] active_warps_count,   // 活跃warp数量
-    output logic [7:0] sm_utilization        // SM利用率 (0-100)
+    // 路由器接口
+    interface_gpc_router.up_port upstream_if,      // 连接上游（Frontend或前一个TPC）
+    interface_gpc_router.down_port downstream_if    // 连接下游（下一个TPC，最后一个TPC没有此接口）
 );
-
-    // SM状态定义
-    typedef enum logic [1:0] {
-        SM_IDLE,
-        SM_BUSY,
-        SM_STALLED,
-        SM_ERROR
-    } sm_state_t;
     
-    // SM状态跟踪
-    sm_state_t sm_states[NUM_SM];
-    logic [7:0] sm_active_warps[NUM_SM];      // 每个SM的活跃warp数
-    logic [7:0] sm_pending_requests[NUM_SM];  // 每个SM的未完成请求数
-    logic sm_available[NUM_SM];               // SM是否可用于新任务
+    // SM路由器接口 - 必须在实例化前声明
+    interface_gpc_router sm0_router_if();
+    interface_gpc_router sm1_router_if();
     
-    // 任务分发逻辑
-    logic [$clog2(NUM_SM)-1:0] next_sm_id;   // 下一个分配的SM ID
-    logic [$clog2(NUM_SM)-1:0] round_robin_counter; // 轮询计数器
+    // SM功能接口 - 每个SM需要的接口
+    gpc_block_tpc_if sm0_block_dispatch_if();
+    gpc_block_tpc_if sm1_block_dispatch_if();
+    ldst_sm_if sm0_ldst_if();
+    ldst_sm_if sm1_ldst_if();
+    interface_l15cache sm0_l15_icache_if();
+    interface_l15cache sm1_l15_icache_if();
+    mmu_if sm0_tlb_if();
+    mmu_if sm1_tlb_if();
     
-    // SM接口信号
-    interface_l15cache sm_l15_if[NUM_SM]();     // 每个SM的L1.5 Cache接口
-    mmu_if sm_tlb_if[NUM_SM]();        // 每个SM的TLB接口
-    gpc_tlb_update_if sm_tlb_update_if[NUM_SM](); // 每个SM的TLB更新接口
-    gpc_block_tpc_if sm_dispatch_if[NUM_SM](); // 每个SM的任务分发接口
-    ldst_sm_if sm_ldst_if[NUM_SM]();          // 每个SM的LDST接口（暂时保留）
+    // 内部路由器节点实例
+    rvgpu_tpc_router_node #(
+        .TPC_ID(TPC_ID),
+        .IS_LAST(0)  // 由外部控制是否为最后一个
+    ) u_tpc_router (
+        .clk(clk),
+        .rst_n(rst_n),
+        .upstream_if(upstream_if),
+        .downstream_if(downstream_if),
+        .sm0_if(sm0_router_if),
+        .sm1_if(sm1_router_if)
+    );
     
-    // 循环变量声明
-    int sm_search_i;
-    int sm_init_i;
-    int sm_update_i;
-    int sm_util_i;
-    int sm_active_i;
+    // SM实例化 - 分别实例化每个SM，连接所有必需的接口
+    rvgpu_sm_top #(
+        .SM_ID(0),
+        .WARP_COUNT(MAX_WARPS_PER_SM),
+        .MAX_THREAD_PER_WARP(32),
+        .MAX_ACTIVE_WARPS(16),
+        .NUM_CUDA_CORES(4)
+    ) u_sm0 (
+        .clk(clk),
+        .rst_n(rst_n),
+        .router_if(sm0_router_if.up_port),
+        .block_dispatch_if(sm0_block_dispatch_if.sm),
+        .ldst_if(sm0_ldst_if.sm),
+        .l15_icache_if(sm0_l15_icache_if.requester),
+        .tlb_if(sm0_tlb_if.requester_port)
+    );
     
-    // =========================================================================
-    // SM可用性检查和轮询
-    // =========================================================================
-    
-    always_comb begin
-        next_sm_id = '0;
-        
-        // 轮询查找可用的SM
-        for (sm_search_i = 0; sm_search_i < NUM_SM; sm_search_i++) begin : sm_search_loop
-            int sm_idx = (round_robin_counter + sm_search_i) % NUM_SM;
-            if (sm_available[sm_idx]) begin
-                next_sm_id = sm_idx[$clog2(NUM_SM)-1:0];
-                break;
-            end
-        end
-    end
-    
-    // =========================================================================
-    // 任务分发逻辑
-    // =========================================================================
-    
-    always_ff @(posedge clk) begin
-        if (!rst_n) begin
-            round_robin_counter <= '0;
-            tpc_if.block_ready <= 1'b0;
-            // 复位所有SM接口
-            sm_dispatch_if[0].warp_valid <= 1'b0;
-            sm_dispatch_if[1].warp_valid <= 1'b0;
-        end else begin
-            // 默认状态
-            tpc_if.block_ready <= 1'b0;
-            
-            // 处理来自Block Scheduler的任务
-            if (tpc_if.block_valid && sm_available[next_sm_id]) begin
-                // 将任务分发给选中的SM
-                case (next_sm_id)
-                    0: begin
-                        sm_dispatch_if[0].warp_valid <= 1'b1;
-                        sm_dispatch_if[0].warp_id <= tpc_if.block_id;  // 使用block_id作为warp_id
-                        sm_dispatch_if[0].warp_block_id <= tpc_if.block_id;
-                        sm_dispatch_if[0].warp_program_addr <= tpc_if.program_addr;
-                        sm_dispatch_if[0].warp_arglist_ptr <= tpc_if.arglist_ptr;
-                        sm_dispatch_if[0].warp_argument_size <= tpc_if.argument_size;
-                        sm_dispatch_if[0].thread_mask <= 32'hFFFFFFFF;  // 默认所有线程都活跃
-                        sm_dispatch_if[0].warp_arglist_data <= tpc_if.arglist_data;
-                    end
-                    1: begin
-                        sm_dispatch_if[1].warp_valid <= 1'b1;
-                        sm_dispatch_if[1].warp_id <= tpc_if.block_id;  // 使用block_id作为warp_id
-                        sm_dispatch_if[1].warp_block_id <= tpc_if.block_id;
-                        sm_dispatch_if[1].warp_program_addr <= tpc_if.program_addr;
-                        sm_dispatch_if[1].warp_arglist_ptr <= tpc_if.arglist_ptr;
-                        sm_dispatch_if[1].warp_argument_size <= tpc_if.argument_size;
-                        sm_dispatch_if[1].thread_mask <= 32'hFFFFFFFF;  // 默认所有线程都活跃
-                        sm_dispatch_if[1].warp_arglist_data <= tpc_if.arglist_data;
-                    end
-                endcase
-                
-                // 确认接收任务
-                tpc_if.block_ready <= 1'b1;
-                
-                // 更新轮询计数器
-                round_robin_counter <= (round_robin_counter + 1) % NUM_SM;
-            end
-            
-            // 清除已完成的分发
-            case (0)
-                0: if (sm_dispatch_if[0].warp_valid && sm_dispatch_if[0].warp_ready) sm_dispatch_if[0].warp_valid <= 1'b0;
-            endcase
-            case (1)
-                1: if (sm_dispatch_if[1].warp_valid && sm_dispatch_if[1].warp_ready) sm_dispatch_if[1].warp_valid <= 1'b0;
-            endcase
-        end
-    end
-    
-    // =========================================================================
-    // SM状态监控和管理
-    // =========================================================================
-    
-    always_ff @(posedge clk) begin
-        if (!rst_n) begin
-            for (sm_init_i = 0; sm_init_i < NUM_SM; sm_init_i++) begin : sm_init_loop
-                sm_states[sm_init_i] <= SM_IDLE;
-                sm_active_warps[sm_init_i] <= '0;
-                sm_pending_requests[sm_init_i] <= '0;
-                sm_available[sm_init_i] <= 1'b1;
-            end
-        end else begin
-            for (sm_update_i = 0; sm_update_i < NUM_SM; sm_update_i++) begin : sm_update_loop
-                // 更新SM状态（这里需要从SM获取实际状态）
-                // 简化实现：基于活跃warp数判断状态
-                if (sm_active_warps[sm_update_i] == 0) begin
-                    sm_states[sm_update_i] <= SM_IDLE;
-                    sm_available[sm_update_i] <= 1'b1;
-                end else if (sm_active_warps[sm_update_i] < MAX_WARPS_PER_SM) begin
-                    sm_states[sm_update_i] <= SM_BUSY;
-                    sm_available[sm_update_i] <= 1'b1;  // 仍可接受新任务
-                end else begin
-                    sm_states[sm_update_i] <= SM_BUSY;
-                    sm_available[sm_update_i] <= 1'b0;  // 已满，不能接受新任务
-                end
-                
-                // TODO: 从实际SM模块获取这些状态
-                // 这里是占位符实现
-                case (sm_update_i)
-                    0: if (sm_dispatch_if[0].warp_valid && sm_dispatch_if[0].warp_ready) begin
-                        sm_active_warps[0] <= sm_active_warps[0] + 1;
-                    end
-                    1: if (sm_dispatch_if[1].warp_valid && sm_dispatch_if[1].warp_ready) begin
-                        sm_active_warps[1] <= sm_active_warps[1] + 1;
-                    end
-                endcase
-                
-                // 处理SM完成通知
-                case (sm_update_i)
-                    0: begin
-                        if (sm_dispatch_if[0].complete_valid) begin
-                            if (sm_active_warps[0] > 0) begin
-                                sm_active_warps[0] <= sm_active_warps[0] - 1;
-                            end
-                            sm_dispatch_if[0].complete_ready <= 1'b1;
-                        end else begin
-                            sm_dispatch_if[0].complete_ready <= 1'b0;
-                        end
-                    end
-                    1: begin
-                        if (sm_dispatch_if[1].complete_valid) begin
-                            if (sm_active_warps[1] > 0) begin
-                                sm_active_warps[1] <= sm_active_warps[1] - 1;
-                            end
-                            sm_dispatch_if[1].complete_ready <= 1'b1;
-                        end else begin
-                            sm_dispatch_if[1].complete_ready <= 1'b0;
-                        end
-                    end
-                endcase
-            end
-        end
-    end
-    
-    // =========================================================================
-    // L1.5 Cache请求仲裁（汇聚所有SM的缓存请求）
-    // =========================================================================
-    
-    // 简单轮询仲裁器
-    logic [$clog2(NUM_SM)-1:0] cache_arb_counter;
-    
-    always_ff @(posedge clk) begin
-        if (!rst_n) begin
-            cache_arb_counter <= '0;
-            l15_if.req_valid <= 1'b0;
-        end else begin
-            l15_if.req_valid <= 1'b0;
-            
-            // 轮询检查每个SM的缓存请求
-            for (sm_util_i = 0; sm_util_i < NUM_SM; sm_util_i++) begin : cache_arb_loop
-                int sm_idx = (cache_arb_counter + sm_util_i) % NUM_SM;
-                
-                case (sm_idx)
-                    0: if (sm_l15_if[0].req_valid) begin
-                        // 转发请求到L1.5 Cache
-                        l15_if.req_valid <= 1'b1;
-                        l15_if.req_is_read <= sm_l15_if[0].req_is_read;
-                        l15_if.req_paddr <= sm_l15_if[0].req_paddr;
-                        l15_if.req_size <= sm_l15_if[0].req_size;
-                        l15_if.req_type <= sm_l15_if[0].req_type;
-                        l15_if.req_data <= sm_l15_if[0].req_data;
-                        l15_if.req_mask <= sm_l15_if[0].req_mask;
-                        l15_if.req_id <= {1'b0, sm_l15_if[0].req_id[30:0]};
-                        
-                        // 确认SM请求
-                        sm_l15_if[0].req_ready <= l15_if.req_ready;
-                        
-                        if (l15_if.req_ready) begin
-                            cache_arb_counter <= (cache_arb_counter + 1) % NUM_SM;
-                        end
-                        break;
-                    end
-                    1: if (sm_l15_if[1].req_valid) begin
-                        // 转发请求到L1.5 Cache
-                        l15_if.req_valid <= 1'b1;
-                        l15_if.req_is_read <= sm_l15_if[1].req_is_read;
-                        l15_if.req_paddr <= sm_l15_if[1].req_paddr;
-                        l15_if.req_size <= sm_l15_if[1].req_size;
-                        l15_if.req_type <= sm_l15_if[1].req_type;
-                        l15_if.req_data <= sm_l15_if[1].req_data;
-                        l15_if.req_mask <= sm_l15_if[1].req_mask;
-                        l15_if.req_id <= {1'b1, sm_l15_if[1].req_id[30:0]};
-                        
-                        // 确认SM请求
-                        sm_l15_if[1].req_ready <= l15_if.req_ready;
-                        
-                        if (l15_if.req_ready) begin
-                            cache_arb_counter <= (cache_arb_counter + 1) % NUM_SM;
-                        end
-                        break;
-                    end
-                endcase
-            end
-        end
-    end
-    
-    // L1.5 Cache响应分发
-    always_comb begin
-        // 根据响应ID的高位确定目标SM
-        logic [$clog2(NUM_SM)-1:0] target_sm = l15_if.resp_id[31:31-$clog2(NUM_SM)+1];
-        
-        // 默认值
-        sm_l15_if[0].resp_valid = 1'b0;
-        sm_l15_if[0].resp_data = '0;
-        sm_l15_if[0].resp_status = CACHE_RESP_OKAY;
-        sm_l15_if[0].resp_id = '0;
-        
-        sm_l15_if[1].resp_valid = 1'b0;
-        sm_l15_if[1].resp_data = '0;
-        sm_l15_if[1].resp_status = CACHE_RESP_OKAY;
-        sm_l15_if[1].resp_id = '0;
-        
-        // 根据target_sm分发响应
-        if (l15_if.resp_valid) begin
-            case (target_sm)
-                0: begin
-                    sm_l15_if[0].resp_valid = 1'b1;
-                    sm_l15_if[0].resp_data = l15_if.resp_data;
-                    sm_l15_if[0].resp_status = l15_if.resp_status;
-                    sm_l15_if[0].resp_id = {l15_if.resp_id[30:0], 1'b0};
-                end
-                1: begin
-                    sm_l15_if[1].resp_valid = 1'b1;
-                    sm_l15_if[1].resp_data = l15_if.resp_data;
-                    sm_l15_if[1].resp_status = l15_if.resp_status;
-                    sm_l15_if[1].resp_id = {l15_if.resp_id[30:0], 1'b0};
-                end
-            endcase
-        end
-        
-        // 根据target_sm设置resp_ready
-        case (target_sm)
-            0: l15_if.resp_ready = sm_l15_if[0].resp_ready;
-            1: l15_if.resp_ready = sm_l15_if[1].resp_ready;
-            default: l15_if.resp_ready = 1'b0;
-        endcase
-    end
-    
-    // =========================================================================
-    // TLB请求仲裁（汇聚所有SM的TLB请求）
-    // =========================================================================
-    
-    // 类似的仲裁逻辑用于TLB请求
-    logic [$clog2(NUM_SM)-1:0] tlb_arb_counter;
-    
-    always_ff @(posedge clk) begin
-        if (!rst_n) begin
-            tlb_arb_counter <= '0;
-        end else begin
-            // TLB仲裁逻辑（简化实现）
-            // TODO: 实现完整的TLB请求仲裁
-        end
-    end
-    
-    // =========================================================================
-    // SM实例化
-    // =========================================================================
-    
-    genvar i;
-    generate
-        for (i = 0; i < NUM_SM; i++) begin : sm_gen
-            rvgpu_sm_top #(
-                .SM_ID(i),
-                .WARP_COUNT(MAX_WARPS_PER_SM),
-                .MAX_THREAD_PER_WARP(32),
-                .MAX_ACTIVE_WARPS(16),
-                .NUM_CUDA_CORES(4)
-            ) u_sm (
-                .clk(clk),
-                .rst_n(rst_n),
-                
-                // 任务分发接口
-                .block_dispatch_if(sm_dispatch_if[i].sm),
-                
-                // LDST接口（暂时保留，实际由SM内部L1 Data Cache处理）
-                .ldst_if(sm_ldst_if[i].sm),
-                
-                // L1.5 Cache接口（指令获取）
-                .l15_icache_if(sm_l15_if[i].requester),
-                
-                // TLB接口
-                .tlb_if(sm_tlb_if[i]),
-                
-                // 完成信号
-                .warp_complete(sm_dispatch_if[i].complete_valid),
-                .warp_id(sm_dispatch_if[i].complete_block_id)
-            );
-        end
-    endgenerate
-    
-    // =========================================================================
-    // 状态统计
-    // =========================================================================
-    
-    always_comb begin
-        logic [31:0] total_active_warps;
-        logic [31:0] total_max_warps;
-        int stats_calc_i;
-        
-        total_active_warps = '0;
-        total_max_warps = NUM_SM * MAX_WARPS_PER_SM;
-        
-        for (stats_calc_i = 0; stats_calc_i < NUM_SM; stats_calc_i++) begin : stats_calc_loop
-            total_active_warps += sm_active_warps[stats_calc_i];
-        end
-        
-        active_warps_count = total_active_warps[7:0];
-        
-        // 计算利用率 (0-100)
-        if (total_max_warps > 0) begin
-            sm_utilization = (total_active_warps * 100) / total_max_warps;
-        end else begin
-            sm_utilization = '0;
-        end
-    end
+    rvgpu_sm_top #(
+        .SM_ID(1),
+        .WARP_COUNT(MAX_WARPS_PER_SM),
+        .MAX_THREAD_PER_WARP(32),
+        .MAX_ACTIVE_WARPS(16),
+        .NUM_CUDA_CORES(4)
+    ) u_sm1 (
+        .clk(clk),
+        .rst_n(rst_n),
+        .router_if(sm1_router_if.up_port),
+        .block_dispatch_if(sm1_block_dispatch_if.sm),
+        .ldst_if(sm1_ldst_if.sm),
+        .l15_icache_if(sm1_l15_icache_if.requester),
+        .tlb_if(sm1_tlb_if.requester_port)
+    );
 
 endmodule : rvgpu_tpc_top
 

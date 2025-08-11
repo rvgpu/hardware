@@ -20,6 +20,7 @@
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_noc_message.svh"
 `include "rvgpu_mmu_if.svh"
+`include "interface_gpc_router.svh"
 
 `include "ldst_sm_if.svh"
 `include "gpc_block_tpc_if.svh"
@@ -40,14 +41,10 @@ module rvgpu_gpc_top #(
     rvgpu_internal_noc_if.device noc_if
 );
     
-    // 内部接口声明
-    gpc_block_raster_if      block_raster_if();
-    gpc_block_tpc_if         block_tpc_if[GPC_CONFIG.num_tpc]();
-    interface_l15cache         l15_cache_if[GPC_CONFIG.num_tpc+2]();  // NUM_TPC个TPC + Block Scheduler + Raster
-    mmu_if                   gpc_mmu_if[GPC_CONFIG.num_tpc+1]();    // NUM_TPC个TPC + Block Scheduler
-    gpc_tlb_update_if        l0_tlb_if[GPC_CONFIG.num_tpc]();       // L0 TLB更新接口
+    // 路由器接口连接
+    interface_gpc_router router_chain[GPC_CONFIG.num_tpc+1]();  // +1 for frontend
     
-    // GPC前端实例 - 整合所有GPC功能模块
+    // GPC前端实例 - 整合所有GPC功能模块和内部路由器
     rvgpu_gpc_frontend #(
         .GPC_CONFIG(GPC_CONFIG),
         .GPC_ID(GPC_ID)
@@ -55,18 +52,10 @@ module rvgpu_gpc_top #(
         .clk(clk),
         .rst_n(rst_n),
         .noc_if(noc_if),
-        .block_raster_if(block_raster_if),
-        .block_tpc_if(block_tpc_if),
-        .l15_cache_if(l15_cache_if),
-        .gpc_mmu_if(gpc_mmu_if),
-        .l0_tlb_if(l0_tlb_if)
+        .router_if(router_chain[0].down_port)  // Frontend使用down_port
     );
     
-    // 内部信号
-    logic [7:0] active_warps_count[GPC_CONFIG.num_tpc];  // 每个TPC的活跃warp数量
-    logic [7:0] sm_utilization[GPC_CONFIG.num_tpc];      // 每个TPC的SM利用率
-    
-    // TPC实例化
+    // TPC实例化 - 每个TPC有两个路由器接口
     genvar i;
     generate
         for (i = 0; i < GPC_CONFIG.num_tpc; i++) begin : tpc_gen
@@ -77,12 +66,8 @@ module rvgpu_gpc_top #(
             ) u_tpc (
                 .clk(clk),
                 .rst_n(rst_n),
-                .tpc_if(block_tpc_if[i].tpc),
-                .l15_if(l15_cache_if[i].requester),
-                .tlb_if(gpc_mmu_if[i].requester_port),
-                .tlb_update_if(l0_tlb_if[i].receiver),
-                .active_warps_count(active_warps_count[i]),
-                .sm_utilization(sm_utilization[i])
+                .upstream_if(router_chain[i].up_port),      // TPC使用up_port接收上游
+                .downstream_if(router_chain[i+1].down_port)   // TPC使用down_port连接下游
             );
         end
     endgenerate

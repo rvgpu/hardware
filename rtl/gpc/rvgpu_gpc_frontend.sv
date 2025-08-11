@@ -20,6 +20,7 @@
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_noc_message.svh"
 `include "rvgpu_mmu_if.svh"
+`include "interface_gpc_router.svh"
 
 `include "ldst_sm_if.svh"
 `include "gpc_block_tpc_if.svh"
@@ -31,7 +32,7 @@
 import rvgpu_gpc_pkg::*;
 `endif // RVGPU_GPC_PKG_IMPORTED
 
-// GPC前端模块 - 整合GPC的所有功能模块
+// GPC前端模块 - 整合所有GPC功能模块和内部路由器
 module rvgpu_gpc_frontend #(
     parameter gpc_parameter_t GPC_CONFIG = DEFAULT_GPC_CONFIG,
     parameter int GPC_ID = 0
@@ -42,18 +43,21 @@ module rvgpu_gpc_frontend #(
     // 外部NOC接口
     rvgpu_internal_noc_if.device noc_if,
     
-    // 内部接口声明
-    gpc_block_raster_if      block_raster_if,
-    gpc_block_tpc_if         block_tpc_if[GPC_CONFIG.num_tpc],
-    interface_l15cache       l15_cache_if[GPC_CONFIG.num_tpc+2],  // NUM_TPC个TPC + Block Scheduler + Raster
-    mmu_if                   gpc_mmu_if[GPC_CONFIG.num_tpc+1],    // NUM_TPC个TPC + Block Scheduler
-    gpc_tlb_update_if        l0_tlb_if[GPC_CONFIG.num_tpc]        // L0 TLB更新接口
+    // 路由器接口 - 连接TPC0
+    interface_gpc_router.down_port router_if
 );
     
     // 内部NOC接口
     rvgpu_internal_noc_if    l15_noc_if();                          // L1.5缓存NOC接口
     rvgpu_internal_noc_if    mmu_noc_if();                          // MMU NOC接口
     rvgpu_internal_noc_if    scheduler_noc_if();                    // Scheduler NOC接口
+    
+    // 内部功能模块接口 - 必须声明以支持模块实例化
+    gpc_block_raster_if      block_raster_if();                      // Block Raster接口
+    gpc_block_tpc_if         block_tpc_if[GPC_CONFIG.num_tpc]();    // Block TPC接口
+    interface_l15cache       l15_cache_if[GPC_CONFIG.num_tpc+2]();  // L1.5 Cache接口
+    mmu_if                   gpc_mmu_if[GPC_CONFIG.num_tpc+1]();    // GPC MMU接口
+    gpc_tlb_update_if        l0_tlb_if[GPC_CONFIG.num_tpc]();       // L0 TLB更新接口
     
     // NOC Adapter实例化
     rvgpu_gpc_noc_adapter #(.GPC_ID(GPC_ID)) u_noc_adapter (
@@ -111,6 +115,54 @@ module rvgpu_gpc_frontend #(
         .raster_if(block_raster_if.raster),
         .l15_if(l15_cache_if[GPC_CONFIG.num_tpc+1].requester)
     );
+    
+    // 消息转换逻辑 - 将功能模块的接口转换为路由器接口
+    // 使用优先级逻辑：Block Scheduler > L1.5 Cache > MMU > Raster
+    always_comb begin
+        // 默认值
+        router_if.gpc2sm_valid = 1'b0;
+        router_if.gpc2sm_header = '0;
+        router_if.gpc2sm_data = '0;
+        
+        // 优先级：Block Scheduler > L1.5 Cache > MMU > Raster
+        if (block_tpc_if[0].warp_valid) begin
+            // Block Scheduler消息 - 最高优先级
+            router_if.gpc2sm_valid = 1'b1;
+            router_if.gpc2sm_header.msg_type = ROUTER_MSG_BLOCK_DISP;
+            router_if.gpc2sm_header.dst_id = ROUTER_DST_TPC0_SM0;
+            router_if.gpc2sm_header.msg_id = block_tpc_if[0].warp_id;
+            router_if.gpc2sm_header.addr = block_tpc_if[0].warp_program_addr;
+            router_if.gpc2sm_header.size = {16'h0, block_tpc_if[0].warp_argument_size};
+            router_if.gpc2sm_header.is_read = 1'b0;  // Block分发不是读操作
+            router_if.gpc2sm_header.mask = block_tpc_if[0].thread_mask[3:0];
+            router_if.gpc2sm_data = {224'h0, block_tpc_if[0].warp_arglist_data[31:0]};
+        end else if (l15_cache_if[0].req_valid) begin
+            // L1.5 Cache消息 - 第二优先级
+            router_if.gpc2sm_valid = 1'b1;
+            router_if.gpc2sm_header.msg_type = ROUTER_MSG_L15_REQ;
+            router_if.gpc2sm_header.dst_id = ROUTER_DST_TPC0_SM0;
+            router_if.gpc2sm_header.msg_id = l15_cache_if[0].req_id;
+            router_if.gpc2sm_header.addr = l15_cache_if[0].req_paddr;
+            router_if.gpc2sm_header.size = {12'h0, l15_cache_if[0].req_size};
+            router_if.gpc2sm_header.is_read = l15_cache_if[0].req_is_read;
+            router_if.gpc2sm_header.mask = l15_cache_if[0].req_mask[3:0];
+            router_if.gpc2sm_data = {224'h0, l15_cache_if[0].req_data[31:0]};
+        end else if (gpc_mmu_if[0].req_valid) begin
+            // MMU消息 - 第三优先级
+            router_if.gpc2sm_valid = 1'b1;
+            router_if.gpc2sm_header.msg_type = ROUTER_MSG_MMU_REQ;
+            router_if.gpc2sm_header.dst_id = ROUTER_DST_TPC0_SM0;
+            router_if.gpc2sm_header.msg_id = 8'h00;  // 简化ID
+            router_if.gpc2sm_header.addr = gpc_mmu_if[0].req_vaddr;
+            router_if.gpc2sm_header.size = 16'h0;    // 简化大小
+            router_if.gpc2sm_header.is_read = (gpc_mmu_if[0].req_type == MMU_READ);
+            router_if.gpc2sm_header.mask = 4'h0;     // 简化掩码
+            router_if.gpc2sm_data = 256'h0;          // 简化数据
+        end else begin
+            // 没有消息，保持默认值
+            router_if.gpc2sm_valid = 1'b0;
+        end
+    end
 
 endmodule : rvgpu_gpc_frontend
 

@@ -17,6 +17,11 @@
 `define RVGPU_SM_TOP_SV
 
 `include "rvgpu_typedef.svh"
+`include "interface_gpc_router.svh"
+`include "gpc_block_tpc_if.svh"
+`include "ldst_sm_if.svh"
+`include "interface_l15cache.svh"
+`include "rvgpu_mmu_if.svh"
 `include "interface_sm_fetch_decode.svh"
 `include "interface_sm_decode_exec.svh"
 `include "interface_sm_regfile.svh"
@@ -39,6 +44,9 @@ module rvgpu_sm_top #(
 ) (
     input  logic clk,
     input  logic rst_n,
+    
+    // 路由器接口 - 新增
+    interface_gpc_router.up_port router_if,
     
     // TPC接口
     gpc_block_tpc_if.sm block_dispatch_if,
@@ -727,6 +735,19 @@ module rvgpu_sm_top #(
     // 流水线控制
     assign pipeline_stall = 1'b0; // 简化实现
     assign pipeline_flush = 1'b0; // 简化实现
+    
+    // SM前端模块实例 - 处理路由器接口
+    rvgpu_sm_frontend #(
+        .SM_ID(SM_ID)
+    ) u_sm_frontend (
+        .clk(clk),
+        .rst_n(rst_n),
+        .router_if(router_if),
+        .block_dispatch_if(block_dispatch_if),
+        .ldst_if(ldst_if),
+        .l15_icache_if(l15_icache_if),
+        .tlb_if(tlb_if)
+    );
     
 endmodule : rvgpu_sm_top
 

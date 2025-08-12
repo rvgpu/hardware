@@ -19,10 +19,10 @@
 `include "rvgpu_typedef.svh"
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_noc_message.svh"
-`include "rvgpu_mmu_if.svh"
+`include "types_gpc_router_message.svh"
+`include "interface_gpc_router.svh"
 
 `include "gpc_block_raster_if.svh"
-`include "interface_l15cache.svh"
 
 module rvgpu_gpc_block_scheduler #(
     parameter int GPC_ID = 0,
@@ -36,98 +36,36 @@ module rvgpu_gpc_block_scheduler #(
     // NOC Adapter接口
     rvgpu_internal_noc_if.device noc_if,
     
-    // TPC接口
-    gpc_block_tpc_if.scheduler tpc_if[NUM_TPC],
+    // 路由器接口 - 连接TPC0
+    interface_gpc_router.down_port router_if,
     
     // Raster Engine接口
-    gpc_block_raster_if.scheduler raster_if,
-    
-    // L1.5 Cache接口
-    interface_l15cache.requester l15_if,
-    
-    // MMU接口
-    mmu_if.requester_port mmu_if
+    gpc_block_raster_if.scheduler raster_if
 );
     // 状态机状态
-    typedef enum logic [3:0] {
+    typedef enum logic [2:0] {
         IDLE,
         RESP_JD,
-        REQUEST_MMU,
-        WAIT_MMU,
-        REQUEST_CACHE,
-        WAIT_CACHE,
-        STORE_ARGS,
         DISPATCH_BLOCK,
         WAIT_DISPATCH
     } scheduler_state_t;
     
-    // Block定义
-    typedef struct packed {
-        logic [31:0] block_id;
-        logic [31:0] cluster_id;
-        logic [63:0] program_addr;
-        logic [63:0] arglist_ptr;
-        logic [31:0] argument_size;
-        logic [255:0] arglist_data;
-        logic [31:0] block_x, block_y, block_z;
-        logic [31:0] thread_x, thread_y, thread_z;
-    } block_t;
-    
     // 内部信号
     scheduler_state_t state_r, state_n;
     t_job_cluster current_job_r, current_job_n;
-    logic [63:0] arglist_paddr_r, arglist_paddr_n;
-    logic [3:0] args_counter_r, args_counter_n;
-    logic [63:0] args_r[16];
     logic [31:0] current_block_id_r, current_block_id_n;
     logic [31:0] block_count_r, block_count_n;
-    logic [$clog2(NUM_TPC)-1:0] target_tpc_r, target_tpc_n;
-    block_t current_block_r, current_block_n;
-    logic [7:0] tpc_load_r[NUM_TPC], tpc_load_n[NUM_TPC];
+    logic [7:0] target_sm_r, target_sm_n;  // 直接选择目标SM
+    logic [7:0] rr_counter_r, rr_counter_n;  // 轮询计数器
     
-    // 选择负载最低的TPC
-    function automatic logic [$clog2(NUM_TPC)-1:0] select_tpc(input logic [7:0] load_array[NUM_TPC]);
-        logic [$clog2(NUM_TPC)-1:0] selected_tpc;
-        logic [7:0] min_load;
-        
-        selected_tpc = '0;
-        min_load = load_array[0];
-        
-        for (int i = 1; i < NUM_TPC; i++) begin
-            if (load_array[i] < min_load) begin
-                min_load = load_array[i];
-                selected_tpc = i[$clog2(NUM_TPC)-1:0];
-            end
-        end
-        
-        return selected_tpc;
-    endfunction
-    
-    // 生成Block
-    function automatic block_t create_block(
-        input logic [31:0] block_id,
-        input t_job_cluster job,
-        input logic [63:0] args_array[16]
+    // 轮询选择下一个SM
+    function automatic logic [7:0] select_sm_rr(
+        input logic [7:0] current_counter,
+        input int num_sm
     );
-        block_t block;
-        
-        block.block_id = block_id;
-        block.cluster_id = job.curr_cluster_id;
-        block.program_addr = job.program_ptr;
-        block.arglist_ptr = job.program_ptr + 64'd8;
-        block.argument_size = job.arg_size;
-        // 将args_array转换为256位数据
-        block.arglist_data = {args_array[3], args_array[2], args_array[1], args_array[0]};
-        // block的维度由job_dim.block_x/y/z定义
-        block.block_x = job.job_dim.block_x;
-        block.block_y = job.job_dim.block_y;
-        block.block_z = job.job_dim.block_z;
-        // thread维度暂时使用block维度，后续在SM中会进一步拆分
-        block.thread_x = job.job_dim.block_x;
-        block.thread_y = job.job_dim.block_y;
-        block.thread_z = job.job_dim.block_z;
-        
-        return block;
+        // 简单的轮询：0->1->2->3->4->5->6->7->0...
+        // 确保返回值在有效范围内
+        return (current_counter % num_sm);
     endfunction
     
     // 组合逻辑
@@ -135,13 +73,9 @@ module rvgpu_gpc_block_scheduler #(
         // 默认赋值
         state_n = state_r;
         current_job_n = current_job_r;
-        arglist_paddr_n = arglist_paddr_r;
         current_block_id_n = current_block_id_r;
         block_count_n = block_count_r;
-        target_tpc_n = target_tpc_r;
-        current_block_n = current_block_r;
-        tpc_load_n = tpc_load_r;
-        args_counter_n = args_counter_r;
+        target_sm_n = target_sm_r;
         
         // 接口默认值
         noc_if.s_req_ready = 1'b0;
@@ -151,14 +85,10 @@ module rvgpu_gpc_block_scheduler #(
         noc_if.s_resp_status = 2'b00;
         noc_if.s_resp_last = 1'b0;
         
-        tpc_if[0].block_valid = 1'b0;
-        tpc_if[1].block_valid = 1'b0;
-        tpc_if[2].block_valid = 1'b0;
-        tpc_if[3].block_valid = 1'b0;
+        router_if.gpc2sm_valid = 1'b0;
+        router_if.gpc2sm_msg = '0;
         
         raster_if.cmd_valid = 1'b0;
-        l15_if.req_valid = 1'b0;
-        mmu_if.req_valid = 1'b0;
         
         case (state_r)
             IDLE: begin
@@ -170,7 +100,6 @@ module rvgpu_gpc_block_scheduler #(
                         current_job_n = noc_if.s_req_data;
                         block_count_n = tf_get_total_blocks_in_cluster(noc_if.s_req_data);
                         current_block_id_n = 0;
-                        args_counter_n = 0;
                         state_n = RESP_JD;
                         `GPC_PRINT("Scheduler", $sformatf("Received job cluster: %s", tf_job_cluster_to_string(current_job_n)));
                     end
@@ -186,197 +115,34 @@ module rvgpu_gpc_block_scheduler #(
                 noc_if.s_resp_last = 1'b1;
                 
                 if (noc_if.s_resp_valid && noc_if.s_resp_ready) begin
-                    state_n = REQUEST_MMU;
+                    state_n = DISPATCH_BLOCK;
                     `GPC_PRINT("Scheduler", $sformatf("Sent job cluster response"));
                 end
             end
             
-            REQUEST_MMU: begin
-                // 请求MMU翻译参数列表地址
-                mmu_if.req_valid = 1'b1;
-                mmu_if.req_vaddr = current_job_r.program_ptr + {args_counter_r, 5'b0};
-                mmu_if.req_type = MMU_READ;
-                
-                if (mmu_if.req_valid && mmu_if.req_ready) begin
-                    mmu_if.req_valid = 1'b0;
-                    state_n = WAIT_MMU;
-                    `GPC_PRINT("Scheduler", $sformatf("Requesting MMU translation for args[%d] at %h", args_counter_r, current_job_r.program_ptr + {args_counter_r, 5'b0}));
-                end
-            end
-            
-            WAIT_MMU: begin
-                // 等待MMU响应
-                mmu_if.resp_ready = 1'b1;  // 设置ready信号
-                
-                if (mmu_if.resp_valid && mmu_if.resp_ready) begin
-                    mmu_if.resp_ready = 1'b0;  // 清除ready信号
-                    
-                    if (mmu_if.resp_status == MMU_RESP_OKAY) begin  // 使用MMU状态码
-                        // MMU命中，保存物理地址
-                        arglist_paddr_n = mmu_if.resp_paddr;  // 使用resp_paddr替代resp_ppn
-                        state_n = REQUEST_CACHE;
-                    end else begin
-                        // MMU未命中，返回空闲状态
-                        state_n = IDLE;
-                    end
-                end
-            end
-            
-            REQUEST_CACHE: begin
-                // 请求L1.5 Cache
-                l15_if.req_valid = 1'b1;
-                l15_if.req_is_read = 1'b1;
-                l15_if.req_paddr = arglist_paddr_r;
-                l15_if.req_size = 4'b0100; // 32字节 (256位)
-                l15_if.req_type = CACHE_OP_READ;
-                l15_if.req_data = '0;
-                l15_if.req_mask = '0;
-                l15_if.req_id = '0;
-                
-                if (l15_if.req_valid && l15_if.req_ready) begin
-                    l15_if.req_valid = 1'b0;
-                    state_n = WAIT_CACHE;
-                end
-            end
-            
-            WAIT_CACHE: begin
-                // 等待L1.5 Cache响应
-                l15_if.resp_ready = 1'b1;
-                
-                if (l15_if.resp_valid && l15_if.resp_ready) begin
-                    l15_if.resp_ready = 1'b0;
-                    
-                    // 存储获取到的参数数据
-                    state_n = STORE_ARGS;
-                end
-            end
-            
-            STORE_ARGS: begin
-                // 将256位数据分解为4个64位参数并存储
-                // 从L1.5 Cache获取的数据是256位，包含4个64位参数
-                // 注意：这里不直接更新args_r，而是在时序逻辑中更新
-                
-                args_counter_n = args_counter_r + 4; // 每次+4，因为每次请求4个参数
-                
-                // 检查是否还需要请求更多参数
-                if (args_counter_n < current_job_r.arg_size) begin
-                    // 继续请求下一个参数块
-                    state_n = REQUEST_MMU;
-                end else begin
-                    // 所有参数都已获取，开始分发Block
-                    // 选择目标TPC
-                    target_tpc_n = select_tpc(tpc_load_r);
-                    
-                    // 创建第一个Block
-                    current_block_n = create_block(
-                        current_block_id_r,
-                        current_job_r,
-                        args_r
-                    );
-                    
-                    state_n = DISPATCH_BLOCK;
-                end
-                
-                `GPC_PRINT("Scheduler", $sformatf("Stored args[%0d-%0d], counter=%0d", args_counter_r, args_counter_r + 3, args_counter_n));
-            end
-            
             DISPATCH_BLOCK: begin
-                // 将Block分发给TPC
-                case (target_tpc_r)
-                    0: begin
-                        tpc_if[0].block_valid = 1'b1;
-                        tpc_if[0].block_id = current_block_r.block_id;
-                        tpc_if[0].cluster_id = current_block_r.cluster_id;
-                        tpc_if[0].program_addr = current_block_r.program_addr;
-                        tpc_if[0].arglist_ptr = current_block_r.arglist_ptr;
-                        tpc_if[0].argument_size = current_block_r.argument_size;
-                        tpc_if[0].arglist_data = current_block_r.arglist_data;
-                        tpc_if[0].block_x = current_block_r.block_x;
-                        tpc_if[0].block_y = current_block_r.block_y;
-                        tpc_if[0].block_z = current_block_r.block_z;
-                        tpc_if[0].thread_x = current_block_r.thread_x;
-                        tpc_if[0].thread_y = current_block_r.thread_y;
-                        tpc_if[0].thread_z = current_block_r.thread_z;
-                        
-                        if (tpc_if[0].block_ready) begin
-                            tpc_if[0].block_valid = 1'b0;
-                            
-                            // 更新TPC负载
-                            tpc_load_n[0] = tpc_load_r[0] + 1;
-                            state_n = WAIT_DISPATCH;
-                        end
-                    end
-                    1: begin
-                        tpc_if[1].block_valid = 1'b1;
-                        tpc_if[1].block_id = current_block_r.block_id;
-                        tpc_if[1].cluster_id = current_block_r.cluster_id;
-                        tpc_if[1].program_addr = current_block_r.program_addr;
-                        tpc_if[1].arglist_ptr = current_block_r.arglist_ptr;
-                        tpc_if[1].argument_size = current_block_r.argument_size;
-                        tpc_if[1].arglist_data = current_block_r.arglist_data;
-                        tpc_if[1].block_x = current_block_r.block_x;
-                        tpc_if[1].block_y = current_block_r.block_y;
-                        tpc_if[1].block_z = current_block_r.block_z;
-                        tpc_if[1].thread_x = current_block_r.thread_x;
-                        tpc_if[1].thread_y = current_block_r.thread_y;
-                        tpc_if[1].thread_z = current_block_r.thread_z;
-                        
-                        if (tpc_if[1].block_ready) begin
-                            tpc_if[1].block_valid = 1'b0;
-                            
-                            // 更新TPC负载
-                            tpc_load_n[1] = tpc_load_r[1] + 1;
-                            state_n = WAIT_DISPATCH;
-                        end
-                    end
-                    2: begin
-                        tpc_if[2].block_valid = 1'b1;
-                        tpc_if[2].block_id = current_block_r.block_id;
-                        tpc_if[2].cluster_id = current_block_r.cluster_id;
-                        tpc_if[2].program_addr = current_block_r.program_addr;
-                        tpc_if[2].arglist_ptr = current_block_r.arglist_ptr;
-                        tpc_if[2].argument_size = current_block_r.argument_size;
-                        tpc_if[2].arglist_data = current_block_r.arglist_data;
-                        tpc_if[2].block_x = current_block_r.block_x;
-                        tpc_if[2].block_y = current_block_r.block_y;
-                        tpc_if[2].block_z = current_block_r.block_z;
-                        tpc_if[2].thread_x = current_block_r.thread_x;
-                        tpc_if[2].thread_y = current_block_r.thread_y;
-                        tpc_if[2].thread_z = current_block_r.thread_z;
-                        
-                        if (tpc_if[2].block_ready) begin
-                            tpc_if[2].block_valid = 1'b0;
-                            
-                            // 更新TPC负载
-                            tpc_load_n[2] = tpc_load_r[2] + 1;
-                            state_n = WAIT_DISPATCH;
-                        end
-                    end
-                    3: begin
-                        tpc_if[3].block_valid = 1'b1;
-                        tpc_if[3].block_id = current_block_r.block_id;
-                        tpc_if[3].cluster_id = current_block_r.cluster_id;
-                        tpc_if[3].program_addr = current_block_r.program_addr;
-                        tpc_if[3].arglist_ptr = current_block_r.arglist_ptr;
-                        tpc_if[3].argument_size = current_block_r.argument_size;
-                        tpc_if[3].arglist_data = current_block_r.arglist_data;
-                        tpc_if[3].block_x = current_block_r.block_x;
-                        tpc_if[3].block_y = current_block_r.block_y;
-                        tpc_if[3].block_z = current_block_r.block_z;
-                        tpc_if[3].thread_x = current_block_r.thread_x;
-                        tpc_if[3].thread_y = current_block_r.thread_y;
-                        tpc_if[3].thread_z = current_block_r.thread_z;
-                        
-                        if (tpc_if[3].block_ready) begin
-                            tpc_if[3].block_valid = 1'b0;
-                            
-                            // 更新TPC负载
-                            tpc_load_n[3] = tpc_load_r[3] + 1;
-                            state_n = WAIT_DISPATCH;
-                        end
-                    end
-                    default: state_n = IDLE;
-                endcase
+                // 选择目标SM
+                target_sm_n = select_sm_rr(rr_counter_r, NUM_TPC*2);
+                
+                // 发送消息
+                router_if.gpc2sm_valid = 1'b1;
+                router_if.gpc2sm_msg = build_router_message_block(
+                    ROUTER_MSG_BLOCK_DISP,
+                    ROUTER_DST_TPC0_SM0 + target_sm_n, // 使用新选择的目标SM
+                    current_job_r,
+                    current_block_id_r[15:0]  // 传递block_id
+                );
+                
+                // 等待握手完成
+                if (router_if.gpc2sm_valid && router_if.gpc2sm_ready) begin
+                    // 握手成功，进入下一个状态
+                    state_n = WAIT_DISPATCH;
+                    
+                    // 更新轮询计数器，为下一个block做准备
+                    rr_counter_n = target_sm_n + 1;
+                    
+                    `GPC_PRINT("Scheduler", $sformatf("Dispatched block %d to SM %d", current_block_id_r, target_sm_n));
+                end
             end
             
             WAIT_DISPATCH: begin
@@ -384,21 +150,11 @@ module rvgpu_gpc_block_scheduler #(
                 if (block_count_r > 1) begin
                     block_count_n = block_count_r - 1;
                     current_block_id_n = current_block_id_r + 1;
-                    
-                    // 选择下一个目标TPC
-                    target_tpc_n = select_tpc(tpc_load_n);
-                    
-                    // 创建下一个Block（使用相同的参数）
-                    current_block_n = create_block(
-                        current_block_id_n,
-                        current_job_r,
-                        args_r
-                    );
-                    
                     state_n = DISPATCH_BLOCK;
                 end else begin
                     // 所有Block都已分发，返回空闲状态
                     state_n = IDLE;
+                    `GPC_PRINT("Scheduler", $sformatf("All blocks dispatched, returning to IDLE"));
                 end
             end
             
@@ -411,74 +167,41 @@ module rvgpu_gpc_block_scheduler #(
         if (!rst_n) begin
             state_r <= IDLE;
             current_job_r <= '0;
-            arglist_paddr_r <= '0;
-            args_counter_r <= '0;
             current_block_id_r <= '0;
             block_count_r <= '0;
-            target_tpc_r <= '0;
-            current_block_r <= '0;
-            tpc_load_r[0] <= '0;
-            tpc_load_r[1] <= '0;
-            tpc_load_r[2] <= '0;
-            tpc_load_r[3] <= '0;
-            for (int i = 0; i < 16; i++) begin
-                args_r[i] <= '0;
-            end
+            target_sm_r <= '0;
+            rr_counter_r <= '0;
         end else begin
             state_r <= state_n;
             current_job_r <= current_job_n;
-            arglist_paddr_r <= arglist_paddr_n;
-            args_counter_r <= args_counter_n;
             current_block_id_r <= current_block_id_n;
             block_count_r <= block_count_n;
-            target_tpc_r <= target_tpc_n;
-            current_block_r <= current_block_n;
-            tpc_load_r[0] <= tpc_load_n[0];
-            tpc_load_r[1] <= tpc_load_n[1];
-            tpc_load_r[2] <= tpc_load_n[2];
-            tpc_load_r[3] <= tpc_load_n[3];
-            
-            // 在STORE_ARGS状态下直接更新args_r数组
-            if (state_r == STORE_ARGS) begin
-                // 将256位数据分解为4个64位参数并存储
-                args_r[args_counter_r * 4 + 0] <= l15_if.resp_data[63:0];    // 第1个参数
-                args_r[args_counter_r * 4 + 1] <= l15_if.resp_data[127:64];  // 第2个参数
-                args_r[args_counter_r * 4 + 2] <= l15_if.resp_data[191:128]; // 第3个参数
-                args_r[args_counter_r * 4 + 3] <= l15_if.resp_data[255:192]; // 第4个参数
-            end
-            
-            // TPC完成处理
-            if (tpc_if[0].complete_valid && tpc_if[0].complete_ready) begin
-                if (tpc_load_r[0] > 0) begin
-                    tpc_load_r[0] <= tpc_load_r[0] - 1;
-                end
-            end
-            
-            if (tpc_if[1].complete_valid && tpc_if[1].complete_ready) begin
-                if (tpc_load_r[1] > 0) begin
-                    tpc_load_r[1] <= tpc_load_r[1] - 1;
-                end
-            end
-            
-            if (tpc_if[2].complete_valid && tpc_if[2].complete_ready) begin
-                if (tpc_load_r[2] > 0) begin
-                    tpc_load_r[2] <= tpc_load_r[2] - 1;
-                end
-            end
-            
-            if (tpc_if[3].complete_valid && tpc_if[3].complete_ready) begin
-                if (tpc_load_r[3] > 0) begin
-                    tpc_load_r[3] <= tpc_load_r[3] - 1;
+            target_sm_r <= target_sm_n;
+            rr_counter_r <= rr_counter_n;
+        end
+    end
+    
+    // 监听TPC完成消息（通过路由器）
+    always_ff @(posedge clk) begin
+        if (rst_n) begin
+            if (router_if.sm2gpc_valid && router_if.sm2gpc_ready) begin
+                if (router_if.sm2gpc_msg.msg_type == ROUTER_MSG_BLOCK_COMP) begin
+                    // 解析完成消息
+                    logic [31:0] completed_block_id;
+                    logic [7:0] sm_id;
+                    
+                    // 从完成消息中提取block_id和sm_id
+                    completed_block_id = router_if.sm2gpc_msg.data.raw[31:0];
+                    sm_id = router_if.sm2gpc_msg.data.raw[39:32];
+                    
+                    // 记录完成信息（可选）
+                    `GPC_PRINT("Scheduler", $sformatf("Block %d completed on SM %d", completed_block_id, sm_id));
                 end
             end
         end
     end
     
-    // TPC完成接口
-    assign tpc_if[0].complete_ready = 1'b1;
-    assign tpc_if[1].complete_ready = 1'b1;
-    assign tpc_if[2].complete_ready = 1'b1;
-    assign tpc_if[3].complete_ready = 1'b1;
+    assign router_if.sm2gpc_ready = 1'b1;
 
 endmodule : rvgpu_gpc_block_scheduler
 

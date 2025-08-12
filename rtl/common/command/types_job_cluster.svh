@@ -23,11 +23,12 @@
 //=============================================================================
 
 typedef struct packed {
-    job_dimention_t         job_dim;            // W4[95:0] job_dimention_t (96-bits)
+    job_dimention_t         job_dim;            // W5[95:0] job_dimention_t (96-bits)
+    logic [31:0]            reserved1;          // W4[31:0] reserved (32-bits), 32'h0
     logic [31:0]            curr_cluster_id;    // W3[31:0] current cluster global id (32-bits)
     logic [15:0]            curr_block_id;      // W2[31:16] current block global id (16-bits)
-    logic [4:0]             arg_size;           // W2[15:12] current program argument count (5-bits)
-    logic [11:0]            reserved;           // W2[11:0] reserved (12-bits), 12'h0
+    logic [4:0]             arg_size;           // W2[15:11] current program argument count (5-bits)
+    logic [10:0]            reserved0;          // W2[10:0] reserved (11-bits), 11'h0
     logic [63:0]            program_ptr;        // W0[63:0] program entry address (64-bits)
 } t_job_cluster;
 
@@ -43,10 +44,11 @@ function automatic t_job_cluster tf_build_job_cluster(
 );
     t_job_cluster job_cluster;
     job_cluster.job_dim = job_dim;
+    job_cluster.reserved1 = 32'h0;
     job_cluster.program_ptr = program_ptr;
     job_cluster.curr_cluster_id = curr_cluster_id;
     job_cluster.arg_size = arg_size;
-    job_cluster.reserved = 12'h0;
+    job_cluster.reserved0 = 11'h0;
     job_cluster.curr_block_id = 16'h0;
     return job_cluster;
 endfunction

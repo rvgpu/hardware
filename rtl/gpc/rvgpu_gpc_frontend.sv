@@ -23,7 +23,6 @@
 `include "interface_gpc_router.svh"
 
 `include "ldst_sm_if.svh"
-`include "gpc_block_tpc_if.svh"
 `include "gpc_block_raster_if.svh"
 `include "rvgpu_gpc_pkg.svh"
 
@@ -54,7 +53,6 @@ module rvgpu_gpc_frontend #(
     
     // 内部功能模块接口 - 必须声明以支持模块实例化
     gpc_block_raster_if      block_raster_if();                      // Block Raster接口
-    gpc_block_tpc_if         block_tpc_if[GPC_CONFIG.num_tpc]();    // Block TPC接口
     interface_l15cache       l15_cache_if[GPC_CONFIG.num_tpc+2]();  // L1.5 Cache接口
     mmu_if                   gpc_mmu_if[GPC_CONFIG.num_tpc+1]();    // GPC MMU接口
     gpc_tlb_update_if        l0_tlb_if[GPC_CONFIG.num_tpc]();       // L0 TLB更新接口
@@ -92,51 +90,29 @@ module rvgpu_gpc_frontend #(
         .clk(clk),
         .rst_n(rst_n),
         .noc_if(scheduler_noc_if.device),
-        .tpc_if(block_tpc_if),
-        .raster_if(block_raster_if),
-        .l15_if(l15_cache_if[GPC_CONFIG.num_tpc].requester),
-        .mmu_if(gpc_mmu_if[GPC_CONFIG.num_tpc].requester_port)
+        .router_if(router_if),
+        .raster_if(block_raster_if)
     );
     
-    // L1.5 Cache实例化
-    rvgpu_gpc_l15cache #(
+    // GPC Raster Engine实例
+    rvgpu_gpc_raster #(
         .GPC_ID(GPC_ID)
-    ) u_l15_cache (
-        .clk(clk),
-        .rst_n(rst_n),
-        .noc_if(l15_noc_if.device),
-        .requester_if(l15_cache_if)
-    );
-    
-    // Raster Engine实例化
-    rvgpu_gpc_raster u_raster (
+    ) u_gpc_raster (
         .clk(clk),
         .rst_n(rst_n),
         .raster_if(block_raster_if.raster),
         .l15_if(l15_cache_if[GPC_CONFIG.num_tpc+1].requester)
     );
     
-    // 消息转换逻辑
-    always_comb begin
-        // 优先级：Block Scheduler > L1.5 Cache > MMU > Raster
-        if (block_tpc_if[0].warp_valid) begin
-            // Block Scheduler消息 - 最高优先级
-            router_if.gpc2sm_valid = 1'b1;
-            router_if.gpc2sm_msg = build_router_message_raw(ROUTER_MSG_BLOCK_DISP, ROUTER_DST_TPC0_SM0, {224'h0, block_tpc_if[0].warp_arglist_data[31:0]});
-        end else if (l15_cache_if[0].req_valid) begin
-            // L1.5 Cache消息 - 第二优先级
-            router_if.gpc2sm_valid = 1'b1;
-            router_if.gpc2sm_msg = build_router_message_raw(ROUTER_MSG_L15_REQ, ROUTER_DST_TPC0_SM0, {224'h0, l15_cache_if[0].req_data[31:0]});
-        end else if (gpc_mmu_if[0].req_valid) begin
-            // MMU消息 - 第三优先级
-            router_if.gpc2sm_valid = 1'b1;
-            router_if.gpc2sm_msg = build_router_message_raw(ROUTER_MSG_MMU_REQ, ROUTER_DST_TPC0_SM0, 256'h0);
-        end else begin
-            // 没有消息，保持默认值
-            router_if.gpc2sm_valid = 1'b0;
-            router_if.gpc2sm_msg = build_router_message_raw();
-        end
-    end
+    // GPC L1.5 Cache实例
+    rvgpu_gpc_l15cache #(
+        .GPC_ID(GPC_ID)
+    ) u_gpc_l15cache (
+        .clk(clk),
+        .rst_n(rst_n),
+        .noc_if(l15_noc_if.device),
+        .requester_if(l15_cache_if)
+    );
 
 endmodule : rvgpu_gpc_frontend
 

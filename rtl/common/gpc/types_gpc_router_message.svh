@@ -43,8 +43,11 @@ typedef enum logic [7:0] {
     ROUTER_DST_TPC3_SM1         = 8'h41   // TPC3.SM1
 } e_router_msg_dst_id;
 
+typedef t_job_cluster           t_router_msg_data_block;
+
 typedef union packed {
     logic [255:0]               raw;
+    t_router_msg_data_block     block;
 } u_router_msg_data;
 
 typedef struct packed {
@@ -54,14 +57,34 @@ typedef struct packed {
 } t_router_message;
 
 function automatic t_router_message build_router_message_raw(
-    e_router_msg_type msg_type = ROUTER_MSG_L15_REQ,
-    e_router_msg_dst_id dst_id = ROUTER_DST_NONE,
-    logic [255:0] raw = '0
+    e_router_msg_type           msg_type = ROUTER_MSG_L15_REQ,
+    e_router_msg_dst_id         dst_id = ROUTER_DST_NONE,
+    logic [255:0]               raw = '0
 );
     t_router_message msg;
     msg.msg_type = msg_type;
     msg.dst_id = dst_id;
     msg.data.raw = raw;
+    return msg;
+endfunction
+
+function automatic t_router_message build_router_message_block (
+    e_router_msg_type           msg_type = ROUTER_MSG_BLOCK_DISP,
+    e_router_msg_dst_id         dst_id = ROUTER_DST_NONE,
+    t_job_cluster               job_cluster,
+    logic [15:0]                block_id
+);
+    t_job_cluster job_with_block_id;
+    t_router_message msg;
+    
+    // 复制job_cluster并设置curr_block_id
+    job_with_block_id = job_cluster;
+    job_with_block_id.curr_block_id = block_id;
+    
+    // 构建消息
+    msg.msg_type = msg_type;
+    msg.dst_id = dst_id;
+    msg.data.block = job_with_block_id;
     return msg;
 endfunction
 

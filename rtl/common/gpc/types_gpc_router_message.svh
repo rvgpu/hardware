@@ -18,28 +18,29 @@
 
 `include "rvgpu_typedef.svh"
 
-// GPC内部路由器消息类型（同时表示方向）
+// GPC内部路由器消息类型
 typedef enum logic [3:0] {
-    ROUTER_MSG_L15_REQ,      // L1.5 Cache请求 (downstream)
-    ROUTER_MSG_L15_RESP,     // L1.5 Cache响应 (upstream)
-    ROUTER_MSG_MMU_REQ,      // MMU请求 (downstream)
-    ROUTER_MSG_MMU_RESP,     // MMU响应 (upstream)
-    ROUTER_MSG_BLOCK_DISP,   // Block分发 (downstream)
-    ROUTER_MSG_BLOCK_COMP,   // Block完成 (upstream)
-    ROUTER_MSG_SM_STATUS,    // SM状态更新 (upstream)
-    ROUTER_MSG_TLB_UPDATE    // TLB更新 (downstream)
+    ROUTER_MSG_L15_REQ          = 4'h0,   // L1.5 Cache请求 (downstream)
+    ROUTER_MSG_L15_RESP         = 4'h1,   // L1.5 Cache响应 (upstream)
+    ROUTER_MSG_MMU_REQ          = 4'h2,   // MMU请求 (downstream)
+    ROUTER_MSG_MMU_RESP         = 4'h3,   // MMU响应 (upstream)
+    ROUTER_MSG_BLOCK_DISP       = 4'h4,   // Block分发 (downstream)
+    ROUTER_MSG_BLOCK_COMP       = 4'h5,   // Block完成 (upstream)
+    ROUTER_MSG_SM_STATUS        = 4'h6,   // SM状态更新 (upstream)
+    ROUTER_MSG_TLB_UPDATE       = 4'h7    // TLB更新 (downstream)
 } e_router_msg_type;
 
 typedef enum logic [7:0] {
-    ROUTER_DST_GPC      = 8'h00,  // GPC
-    ROUTER_DST_TPC0_SM0 = 8'h10,  // TPC0.SM0
-    ROUTER_DST_TPC0_SM1 = 8'h11,  // TPC0.SM1
-    ROUTER_DST_TPC1_SM0 = 8'h20,  // TPC1.SM0
-    ROUTER_DST_TPC1_SM1 = 8'h21,  // TPC1.SM1
-    ROUTER_DST_TPC2_SM0 = 8'h30,  // TPC2.SM0
-    ROUTER_DST_TPC2_SM1 = 8'h31,  // TPC2.SM1
-    ROUTER_DST_TPC3_SM0 = 8'h40,  // TPC3.SM0
-    ROUTER_DST_TPC3_SM1 = 8'h41   // TPC3.SM1
+    ROUTER_DST_NONE             = 8'h00,  // 无效
+    ROUTER_DST_GPC              = 8'h01,  // GPC
+    ROUTER_DST_TPC0_SM0         = 8'h10,  // TPC0.SM0
+    ROUTER_DST_TPC0_SM1         = 8'h11,  // TPC0.SM1
+    ROUTER_DST_TPC1_SM0         = 8'h20,  // TPC1.SM0
+    ROUTER_DST_TPC1_SM1         = 8'h21,  // TPC1.SM1
+    ROUTER_DST_TPC2_SM0         = 8'h30,  // TPC2.SM0
+    ROUTER_DST_TPC2_SM1         = 8'h31,  // TPC2.SM1
+    ROUTER_DST_TPC3_SM0         = 8'h40,  // TPC3.SM0
+    ROUTER_DST_TPC3_SM1         = 8'h41   // TPC3.SM1
 } e_router_msg_dst_id;
 
 typedef union packed {
@@ -51,5 +52,17 @@ typedef struct packed {
     e_router_msg_dst_id         dst_id;
     u_router_msg_data           data;
 } t_router_message;
+
+function automatic t_router_message build_router_message_raw(
+    e_router_msg_type msg_type = ROUTER_MSG_L15_REQ,
+    e_router_msg_dst_id dst_id = ROUTER_DST_NONE,
+    logic [255:0] raw = '0
+);
+    t_router_message msg;
+    msg.msg_type = msg_type;
+    msg.dst_id = dst_id;
+    msg.data.raw = raw;
+    return msg;
+endfunction
 
 `endif // TYPES_GPC_ROUTER_MESSAGE_SVH

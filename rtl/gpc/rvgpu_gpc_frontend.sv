@@ -116,37 +116,25 @@ module rvgpu_gpc_frontend #(
         .l15_if(l15_cache_if[GPC_CONFIG.num_tpc+1].requester)
     );
     
-    // 消息转换逻辑 - 将功能模块的接口转换为路由器接口
-    // 使用优先级逻辑：Block Scheduler > L1.5 Cache > MMU > Raster
+    // 消息转换逻辑
     always_comb begin
-        // 默认值
-        router_if.gpc2sm_valid = 1'b0;
-        router_if.gpc2sm_msg.msg_type = ROUTER_MSG_L15_REQ;  // 默认值
-        router_if.gpc2sm_msg.dst_id = ROUTER_DST_TPC0_SM0;   // 默认值
-        router_if.gpc2sm_msg.data = '0;
-        
         // 优先级：Block Scheduler > L1.5 Cache > MMU > Raster
         if (block_tpc_if[0].warp_valid) begin
             // Block Scheduler消息 - 最高优先级
             router_if.gpc2sm_valid = 1'b1;
-            router_if.gpc2sm_msg.msg_type = ROUTER_MSG_BLOCK_DISP;
-            router_if.gpc2sm_msg.dst_id = ROUTER_DST_TPC0_SM0;
-            router_if.gpc2sm_msg.data.raw = {224'h0, block_tpc_if[0].warp_arglist_data[31:0]};
+            router_if.gpc2sm_msg = build_router_message_raw(ROUTER_MSG_BLOCK_DISP, ROUTER_DST_TPC0_SM0, {224'h0, block_tpc_if[0].warp_arglist_data[31:0]});
         end else if (l15_cache_if[0].req_valid) begin
             // L1.5 Cache消息 - 第二优先级
             router_if.gpc2sm_valid = 1'b1;
-            router_if.gpc2sm_msg.msg_type = ROUTER_MSG_L15_REQ;
-            router_if.gpc2sm_msg.dst_id = ROUTER_DST_TPC0_SM0;
-            router_if.gpc2sm_msg.data.raw = {224'h0, l15_cache_if[0].req_data[31:0]};
+            router_if.gpc2sm_msg = build_router_message_raw(ROUTER_MSG_L15_REQ, ROUTER_DST_TPC0_SM0, {224'h0, l15_cache_if[0].req_data[31:0]});
         end else if (gpc_mmu_if[0].req_valid) begin
             // MMU消息 - 第三优先级
             router_if.gpc2sm_valid = 1'b1;
-            router_if.gpc2sm_msg.msg_type = ROUTER_MSG_MMU_REQ;
-            router_if.gpc2sm_msg.dst_id = ROUTER_DST_TPC0_SM0;
-            router_if.gpc2sm_msg.data.raw = 256'h0;          // 简化数据
+            router_if.gpc2sm_msg = build_router_message_raw(ROUTER_MSG_MMU_REQ, ROUTER_DST_TPC0_SM0, 256'h0);
         end else begin
             // 没有消息，保持默认值
             router_if.gpc2sm_valid = 1'b0;
+            router_if.gpc2sm_msg = build_router_message_raw();
         end
     end
 

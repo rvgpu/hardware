@@ -49,19 +49,13 @@ module rvgpu_gpc_router #(
     
     // 消息解析和路由逻辑
     always_comb begin
-        // 默认值
-        up_fifo_if.gpc2sm_msg.msg_type = ROUTER_MSG_L15_REQ;  // 默认值
-        up_fifo_if.gpc2sm_msg.dst_id = ROUTER_DST_TPC0_SM0;   // 默认值
-        up_fifo_if.gpc2sm_msg.data = '0;
         up_fifo_if.gpc2sm_valid = 1'b0;
-        down_fifo_if.gpc2sm_msg.msg_type = ROUTER_MSG_L15_REQ;  // 默认值
-        down_fifo_if.gpc2sm_msg.dst_id = ROUTER_DST_TPC0_SM0;   // 默认值
-        down_fifo_if.gpc2sm_msg.data = '0;
+        up_fifo_if.gpc2sm_msg = build_router_message_raw();
+
         down_fifo_if.gpc2sm_valid = 1'b0;
+        down_fifo_if.gpc2sm_msg = build_router_message_raw();
         
-        // 根据消息类型和来源进行路由
         case (1'b1)
-            // L1.5 Cache消息
             l15_if.gpc2sm_valid: begin
                 if (l15_if.gpc2sm_msg.msg_type == ROUTER_MSG_L15_REQ) begin
                     // 缓存请求 - 转发到TPC路由器

@@ -41,18 +41,14 @@ module rvgpu_tpc_router_node #(
     // 下行消息路由逻辑：从GPC到TPC/SM
     always_comb begin
         // 默认值
-        sm0_if.gpc2sm_msg.msg_type = ROUTER_MSG_L15_REQ;  // 默认值
-        sm0_if.gpc2sm_msg.dst_id = ROUTER_DST_TPC0_SM0;   // 默认值
-        sm0_if.gpc2sm_msg.data = '0;
         sm0_if.gpc2sm_valid = 1'b0;
-        sm1_if.gpc2sm_msg.msg_type = ROUTER_MSG_L15_REQ;  // 默认值
-        sm1_if.gpc2sm_msg.dst_id = ROUTER_DST_TPC0_SM0;   // 默认值
-        sm1_if.gpc2sm_msg.data = '0;
+        sm0_if.gpc2sm_msg = build_router_message_raw();
+
         sm1_if.gpc2sm_valid = 1'b0;
-        downstream_if.gpc2sm_msg.msg_type = ROUTER_MSG_L15_REQ;  // 默认值
-        downstream_if.gpc2sm_msg.dst_id = ROUTER_DST_TPC0_SM0;   // 默认值
-        downstream_if.gpc2sm_msg.data = '0;
+        sm1_if.gpc2sm_msg = build_router_message_raw();
+
         downstream_if.gpc2sm_valid = 1'b0;
+        downstream_if.gpc2sm_msg = build_router_message_raw();
         
         // 根据目标ID和消息类型进行路由
         if (upstream_if.gpc2sm_valid) begin
@@ -93,10 +89,9 @@ module rvgpu_tpc_router_node #(
     // 上行响应消息路由逻辑：从SM/TPC到GPC
     always_comb begin
         // 默认值
-        upstream_if.sm2gpc_msg.msg_type = ROUTER_MSG_L15_RESP;  // 默认值
-        upstream_if.sm2gpc_msg.dst_id = ROUTER_DST_GPC;          // 默认值
-        upstream_if.sm2gpc_msg.data = '0;
         upstream_if.sm2gpc_valid = 1'b0;
+        upstream_if.sm2gpc_msg = build_router_message_raw();
+
         sm0_if.sm2gpc_ready = 1'b0;
         sm1_if.sm2gpc_ready = 1'b0;
         downstream_if.sm2gpc_ready = 1'b0;

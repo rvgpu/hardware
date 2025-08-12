@@ -44,7 +44,7 @@ module rvgpu_sm_frontend #(
     always_comb begin
         // 根据消息类型路由到相应的功能模块
         if (router_if.gpc2sm_valid) begin
-            case (router_if.gpc2sm_header.msg_type)
+            case (router_if.gpc2sm_msg.msg_type)
                 ROUTER_MSG_BLOCK_DISP: begin
                     router_if.gpc2sm_ready = 1'b1; // 临时处理
                 end
@@ -72,33 +72,24 @@ module rvgpu_sm_frontend #(
     always_comb begin
         // 默认值
         router_if.sm2gpc_valid = 1'b0;
-        router_if.sm2gpc_header = '0;
-        router_if.sm2gpc_data = '0;
+        router_if.sm2gpc_msg.msg_type = ROUTER_MSG_L15_RESP;  // 默认值
+        router_if.sm2gpc_msg.dst_id = ROUTER_DST_GPC;          // 默认值
+        router_if.sm2gpc_msg.data = '0;
         
         // 优先级：L1.5响应 > MMU响应 > LDST响应
         if (l15_icache_if.resp_valid) begin
             // L1.5 Cache响应
             router_if.sm2gpc_valid = 1'b1;
-            router_if.sm2gpc_header.msg_type = ROUTER_MSG_L15_RESP;
-            router_if.sm2gpc_header.dst_id = ROUTER_DST_GPC;
-            router_if.sm2gpc_header.msg_id = l15_icache_if.resp_id[7:0];
-            router_if.sm2gpc_header.addr = 64'h0;
-            router_if.sm2gpc_header.size = 16'h0;
-            router_if.sm2gpc_header.is_read = 1'b0;
-            router_if.sm2gpc_header.mask = 4'h0;
-            router_if.sm2gpc_data = {224'h0, l15_icache_if.resp_data};
+            router_if.sm2gpc_msg.msg_type = ROUTER_MSG_L15_RESP;
+            router_if.sm2gpc_msg.dst_id = ROUTER_DST_GPC;
+            router_if.sm2gpc_msg.data.raw = {224'h0, l15_icache_if.resp_data};
             
         end else if (tlb_if.resp_valid) begin
             // MMU响应
             router_if.sm2gpc_valid = 1'b1;
-            router_if.sm2gpc_header.msg_type = ROUTER_MSG_MMU_RESP;
-            router_if.sm2gpc_header.dst_id = ROUTER_DST_GPC;
-            router_if.sm2gpc_header.msg_id = 8'h0;
-            router_if.sm2gpc_header.addr = 64'h0;
-            router_if.sm2gpc_header.size = 16'h0;
-            router_if.sm2gpc_header.is_read = 1'b0;
-            router_if.sm2gpc_header.mask = 4'h0;
-            router_if.sm2gpc_data = {224'h0, 32'h0};
+            router_if.sm2gpc_msg.msg_type = ROUTER_MSG_MMU_RESP;
+            router_if.sm2gpc_msg.dst_id = ROUTER_DST_GPC;
+            router_if.sm2gpc_msg.data.raw = {224'h0, 32'h0};
             
         end else begin
             // 没有响应，设置所有ready信号

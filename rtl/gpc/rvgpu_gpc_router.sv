@@ -50,72 +50,66 @@ module rvgpu_gpc_router #(
     // 消息解析和路由逻辑
     always_comb begin
         // 默认值
-        up_fifo_if.down_header = '0;
-        up_fifo_if.down_data = '0;
-        up_fifo_if.down_valid = 1'b0;
-        down_fifo_if.down_header = '0;
-        down_fifo_if.down_data = '0;
-        down_fifo_if.down_valid = 1'b0;
+        up_fifo_if.gpc2sm_msg.msg_type = ROUTER_MSG_L15_REQ;  // 默认值
+        up_fifo_if.gpc2sm_msg.dst_id = ROUTER_DST_TPC0_SM0;   // 默认值
+        up_fifo_if.gpc2sm_msg.data = '0;
+        up_fifo_if.gpc2sm_valid = 1'b0;
+        down_fifo_if.gpc2sm_msg.msg_type = ROUTER_MSG_L15_REQ;  // 默认值
+        down_fifo_if.gpc2sm_msg.dst_id = ROUTER_DST_TPC0_SM0;   // 默认值
+        down_fifo_if.gpc2sm_msg.data = '0;
+        down_fifo_if.gpc2sm_valid = 1'b0;
         
         // 根据消息类型和来源进行路由
         case (1'b1)
             // L1.5 Cache消息
-            l15_if.down_valid: begin
-                if (l15_if.down_header.msg_type == ROUTER_MSG_L15_REQ) begin
+            l15_if.gpc2sm_valid: begin
+                if (l15_if.gpc2sm_msg.msg_type == ROUTER_MSG_L15_REQ) begin
                     // 缓存请求 - 转发到TPC路由器
-                    down_fifo_if.down_header = l15_if.down_header;
-                    down_fifo_if.down_data = l15_if.down_data;
-                    down_fifo_if.down_valid = l15_if.down_valid;
+                    down_fifo_if.gpc2sm_msg = l15_if.gpc2sm_msg;
+                    down_fifo_if.gpc2sm_valid = l15_if.gpc2sm_valid;
                 end else begin
                     // 缓存响应 - 转发到上游FIFO
-                    up_fifo_if.down_header = l15_if.down_header;
-                    up_fifo_if.down_data = l15_if.down_data;
-                    up_fifo_if.down_valid = l15_if.down_valid;
+                    up_fifo_if.gpc2sm_msg = l15_if.gpc2sm_msg;
+                    up_fifo_if.gpc2sm_valid = l15_if.gpc2sm_valid;
                 end
             end
             
             // MMU消息
-            mmu_if.down_valid: begin
-                if (mmu_if.down_header.msg_type == ROUTER_MSG_MMU_REQ) begin
+            mmu_if.gpc2sm_valid: begin
+                if (mmu_if.gpc2sm_msg.msg_type == ROUTER_MSG_MMU_REQ) begin
                     // MMU请求 - 转发到TPC路由器
-                    down_fifo_if.down_header = mmu_if.down_header;
-                    down_fifo_if.down_data = mmu_if.down_data;
-                    down_fifo_if.down_valid = mmu_if.down_valid;
+                    down_fifo_if.gpc2sm_msg = mmu_if.gpc2sm_msg;
+                    down_fifo_if.gpc2sm_valid = mmu_if.gpc2sm_valid;
                 end else begin
                     // MMU响应 - 转发到上游FIFO
-                    up_fifo_if.down_header = mmu_if.down_header;
-                    up_fifo_if.down_data = mmu_if.down_data;
-                    up_fifo_if.down_valid = mmu_if.down_valid;
+                    up_fifo_if.gpc2sm_msg = mmu_if.gpc2sm_msg;
+                    up_fifo_if.gpc2sm_valid = mmu_if.gpc2sm_valid;
                 end
             end
             
             // Block Scheduler消息
-            block_if.down_valid: begin
-                if (block_if.down_header.msg_type == ROUTER_MSG_BLOCK_DISP) begin
+            block_if.gpc2sm_valid: begin
+                if (block_if.gpc2sm_msg.msg_type == ROUTER_MSG_BLOCK_DISP) begin
                     // Block分发 - 转发到TPC路由器
-                    down_fifo_if.down_header = block_if.down_header;
-                    down_fifo_if.down_data = block_if.down_data;
-                    down_fifo_if.down_valid = block_if.down_valid;
+                    down_fifo_if.gpc2sm_msg = block_if.gpc2sm_msg;
+                    down_fifo_if.gpc2sm_valid = block_if.gpc2sm_valid;
                 end else begin
                     // Block完成 - 转发到上游FIFO
-                    up_fifo_if.down_header = block_if.down_header;
-                    up_fifo_if.down_data = block_if.down_data;
-                    up_fifo_if.down_valid = block_if.down_valid;
+                    up_fifo_if.gpc2sm_msg = block_if.gpc2sm_msg;
+                    up_fifo_if.gpc2sm_valid = block_if.gpc2sm_valid;
                 end
             end
             
             // Raster消息
-            raster_if.down_valid: begin
-                if (raster_if.down_header.msg_type == ROUTER_MSG_TLB_UPDATE) begin
+            raster_if.gpc2sm_valid: begin
+                if (raster_if.gpc2sm_msg.msg_type == ROUTER_MSG_TLB_UPDATE) begin
                     // TLB更新 - 转发到TPC路由器
-                    down_fifo_if.down_header = raster_if.down_header;
-                    down_fifo_if.down_data = raster_if.down_data;
-                    down_fifo_if.down_valid = raster_if.down_valid;
+                    down_fifo_if.gpc2sm_msg = raster_if.gpc2sm_msg;
+                    down_fifo_if.gpc2sm_valid = raster_if.gpc2sm_valid;
                 end else begin
                     // 其他Raster消息 - 转发到上游FIFO
-                    up_fifo_if.down_header = raster_if.down_header;
-                    up_fifo_if.down_data = raster_if.down_data;
-                    up_fifo_if.down_valid = raster_if.down_valid;
+                    up_fifo_if.gpc2sm_msg = raster_if.gpc2sm_msg;
+                    up_fifo_if.gpc2sm_valid = raster_if.gpc2sm_valid;
                 end
             end
         endcase
@@ -123,12 +117,12 @@ module rvgpu_gpc_router #(
     
     // 上游FIFO - 缓存来自TPC的响应消息
     rvgpu_fifo_basic_if #(
-        .DATA_WIDTH(256 + $bits(router_msg_header_t)),
+        .DATA_WIDTH(256 + $bits(e_router_msg_type) + $bits(e_router_msg_dst_id)),
         .INDEX_BITS(5)  // 深度32
     ) up_fifo_basic_if();
     
     rvgpu_fifo_basic #(
-        .DATA_WIDTH(256 + $bits(router_msg_header_t)),
+        .DATA_WIDTH(256 + $bits(e_router_msg_type) + $bits(e_router_msg_dst_id)),
         .INDEX_BITS(5)
     ) u_up_fifo (
         .clk(clk),
@@ -138,12 +132,12 @@ module rvgpu_gpc_router #(
     
     // 下游FIFO - 缓存发往TPC的请求消息
     rvgpu_fifo_basic_if #(
-        .DATA_WIDTH(256 + $bits(router_msg_header_t)),
-        .INDEX_BITS(5)  // 深度32
+        .DATA_WIDTH(256 + $bits(e_router_msg_type) + $bits(e_router_msg_dst_id)),
+        .INDEX_BITS(5)
     ) down_fifo_basic_if();
     
     rvgpu_fifo_basic #(
-        .DATA_WIDTH(256 + $bits(router_msg_header_t)),
+        .DATA_WIDTH(256 + $bits(e_router_msg_type) + $bits(e_router_msg_dst_id)),
         .INDEX_BITS(5)
     ) u_down_fifo (
         .clk(clk),
@@ -154,14 +148,14 @@ module rvgpu_gpc_router #(
     // FIFO接口连接逻辑
     always_comb begin
         // 上游FIFO连接
-        up_fifo_basic_if.write_en = up_fifo_if.down_valid;
-        up_fifo_basic_if.write_data = {up_fifo_if.down_data, up_fifo_if.down_header};
-        up_fifo_if.down_ready = !up_fifo_basic_if.full;
+        up_fifo_basic_if.write_en = up_fifo_if.gpc2sm_valid;
+        up_fifo_basic_if.write_data = {up_fifo_if.gpc2sm_msg.data.raw, up_fifo_if.gpc2sm_msg.msg_type, up_fifo_if.gpc2sm_msg.dst_id};
+        up_fifo_if.gpc2sm_ready = !up_fifo_basic_if.full;
         
         // 下游FIFO连接
-        down_fifo_basic_if.write_en = down_fifo_if.down_valid;
-        down_fifo_basic_if.write_data = {down_fifo_if.down_data, down_fifo_if.down_header};
-        down_fifo_if.down_ready = !down_fifo_basic_if.full;
+        down_fifo_basic_if.write_en = down_fifo_if.gpc2sm_valid;
+        down_fifo_basic_if.write_data = {down_fifo_if.gpc2sm_msg.data.raw, down_fifo_if.gpc2sm_msg.msg_type, down_fifo_if.gpc2sm_msg.dst_id};
+        down_fifo_if.gpc2sm_ready = !down_fifo_basic_if.full;
         
         // 从FIFO读取数据
         up_fifo_basic_if.read_en = 1'b0;  // 暂时不使用
@@ -171,13 +165,12 @@ module rvgpu_gpc_router #(
     // 将FIFO输出连接到TPC路由器接口
     always_comb begin
         // 下游FIFO -> TPC路由器（现在可以驱动tpc_router_if的信号）
-        tpc_router_if.down_header = down_fifo_if.down_header;
-        tpc_router_if.down_data = down_fifo_if.down_data;
-        tpc_router_if.down_valid = down_fifo_if.down_valid;
-        down_fifo_if.down_ready = tpc_router_if.down_ready;
+        tpc_router_if.gpc2sm_msg = down_fifo_if.gpc2sm_msg;
+        tpc_router_if.gpc2sm_valid = down_fifo_if.gpc2sm_valid;
+        down_fifo_if.gpc2sm_ready = tpc_router_if.gpc2sm_ready;
         
         // 上游FIFO -> 功能模块（通过ready信号控制）
-        up_fifo_if.down_ready = 1'b1; // 简化处理，实际可能需要更复杂的控制逻辑
+        up_fifo_if.gpc2sm_ready = 1'b1; // 简化处理，实际可能需要更复杂的控制逻辑
     end
 
 endmodule : rvgpu_gpc_router

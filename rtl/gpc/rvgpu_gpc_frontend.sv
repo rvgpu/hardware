@@ -121,43 +121,29 @@ module rvgpu_gpc_frontend #(
     always_comb begin
         // 默认值
         router_if.gpc2sm_valid = 1'b0;
-        router_if.gpc2sm_header = '0;
-        router_if.gpc2sm_data = '0;
+        router_if.gpc2sm_msg.msg_type = ROUTER_MSG_L15_REQ;  // 默认值
+        router_if.gpc2sm_msg.dst_id = ROUTER_DST_TPC0_SM0;   // 默认值
+        router_if.gpc2sm_msg.data = '0;
         
         // 优先级：Block Scheduler > L1.5 Cache > MMU > Raster
         if (block_tpc_if[0].warp_valid) begin
             // Block Scheduler消息 - 最高优先级
             router_if.gpc2sm_valid = 1'b1;
-            router_if.gpc2sm_header.msg_type = ROUTER_MSG_BLOCK_DISP;
-            router_if.gpc2sm_header.dst_id = ROUTER_DST_TPC0_SM0;
-            router_if.gpc2sm_header.msg_id = block_tpc_if[0].warp_id;
-            router_if.gpc2sm_header.addr = block_tpc_if[0].warp_program_addr;
-            router_if.gpc2sm_header.size = {16'h0, block_tpc_if[0].warp_argument_size};
-            router_if.gpc2sm_header.is_read = 1'b0;  // Block分发不是读操作
-            router_if.gpc2sm_header.mask = block_tpc_if[0].thread_mask[3:0];
-            router_if.gpc2sm_data = {224'h0, block_tpc_if[0].warp_arglist_data[31:0]};
+            router_if.gpc2sm_msg.msg_type = ROUTER_MSG_BLOCK_DISP;
+            router_if.gpc2sm_msg.dst_id = ROUTER_DST_TPC0_SM0;
+            router_if.gpc2sm_msg.data.raw = {224'h0, block_tpc_if[0].warp_arglist_data[31:0]};
         end else if (l15_cache_if[0].req_valid) begin
             // L1.5 Cache消息 - 第二优先级
             router_if.gpc2sm_valid = 1'b1;
-            router_if.gpc2sm_header.msg_type = ROUTER_MSG_L15_REQ;
-            router_if.gpc2sm_header.dst_id = ROUTER_DST_TPC0_SM0;
-            router_if.gpc2sm_header.msg_id = l15_cache_if[0].req_id;
-            router_if.gpc2sm_header.addr = l15_cache_if[0].req_paddr;
-            router_if.gpc2sm_header.size = {12'h0, l15_cache_if[0].req_size};
-            router_if.gpc2sm_header.is_read = l15_cache_if[0].req_is_read;
-            router_if.gpc2sm_header.mask = l15_cache_if[0].req_mask[3:0];
-            router_if.gpc2sm_data = {224'h0, l15_cache_if[0].req_data[31:0]};
+            router_if.gpc2sm_msg.msg_type = ROUTER_MSG_L15_REQ;
+            router_if.gpc2sm_msg.dst_id = ROUTER_DST_TPC0_SM0;
+            router_if.gpc2sm_msg.data.raw = {224'h0, l15_cache_if[0].req_data[31:0]};
         end else if (gpc_mmu_if[0].req_valid) begin
             // MMU消息 - 第三优先级
             router_if.gpc2sm_valid = 1'b1;
-            router_if.gpc2sm_header.msg_type = ROUTER_MSG_MMU_REQ;
-            router_if.gpc2sm_header.dst_id = ROUTER_DST_TPC0_SM0;
-            router_if.gpc2sm_header.msg_id = 8'h00;  // 简化ID
-            router_if.gpc2sm_header.addr = gpc_mmu_if[0].req_vaddr;
-            router_if.gpc2sm_header.size = 16'h0;    // 简化大小
-            router_if.gpc2sm_header.is_read = (gpc_mmu_if[0].req_type == MMU_READ);
-            router_if.gpc2sm_header.mask = 4'h0;     // 简化掩码
-            router_if.gpc2sm_data = 256'h0;          // 简化数据
+            router_if.gpc2sm_msg.msg_type = ROUTER_MSG_MMU_REQ;
+            router_if.gpc2sm_msg.dst_id = ROUTER_DST_TPC0_SM0;
+            router_if.gpc2sm_msg.data.raw = 256'h0;          // 简化数据
         end else begin
             // 没有消息，保持默认值
             router_if.gpc2sm_valid = 1'b0;

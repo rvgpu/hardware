@@ -23,11 +23,12 @@
 //=============================================================================
 
 typedef struct packed {
-    job_dimention_t         job_dim;            // [255:160] job_dimention_t (96-bits)
-    logic [31:0]            curr_cluster_id;    // [159:128] current cluster global id (32-bits)
-    logic [4:0]             arg_size;           // [227:223] current program argument count (5-bits)
-    logic [27:0]            reserved;           // [255:228] reserved (28-bits), 28'h0
-    logic [63:0]            program_ptr;        // [223:160] program entry address (64-bits), argument list address is program_ptr + 8
+    job_dimention_t         job_dim;            // W4[95:0] job_dimention_t (96-bits)
+    logic [31:0]            curr_cluster_id;    // W3[31:0] current cluster global id (32-bits)
+    logic [15:0]            curr_block_id;      // W2[31:16] current block global id (16-bits)
+    logic [4:0]             arg_size;           // W2[15:12] current program argument count (5-bits)
+    logic [11:0]            reserved;           // W2[11:0] reserved (12-bits), 12'h0
+    logic [63:0]            program_ptr;        // W0[63:0] program entry address (64-bits)
 } t_job_cluster;
 
 //=============================================================================
@@ -45,7 +46,8 @@ function automatic t_job_cluster tf_build_job_cluster(
     job_cluster.program_ptr = program_ptr;
     job_cluster.curr_cluster_id = curr_cluster_id;
     job_cluster.arg_size = arg_size;
-    job_cluster.reserved = 28'h0;
+    job_cluster.reserved = 12'h0;
+    job_cluster.curr_block_id = 16'h0;
     return job_cluster;
 endfunction
 
@@ -56,9 +58,10 @@ endfunction
 function automatic string tf_job_cluster_to_string(
     input t_job_cluster job_cluster
 );
-    return $sformatf("program_ptr: %h, curr_cluster_id: %d, arg_size: %d, dim: {grid: {%d, %d, %d}, cluster: {%d, %d, %d}, block: {%d, %d, %d}}", 
+    return $sformatf("program_ptr: %h, curr_cluster_id: %d, curr_block_id: %d, arg_size: %d, dim: {grid: {%d, %d, %d}, cluster: {%d, %d, %d}, block: {%d, %d, %d}}", 
             job_cluster.program_ptr, 
             job_cluster.curr_cluster_id, 
+            job_cluster.curr_block_id,
             job_cluster.arg_size,
             job_cluster.job_dim.grid_x, job_cluster.job_dim.grid_y, job_cluster.job_dim.grid_z,
             job_cluster.job_dim.cluster_x, job_cluster.job_dim.cluster_y, job_cluster.job_dim.cluster_z,
@@ -73,12 +76,6 @@ function automatic logic [31:0] tf_get_total_blocks_in_cluster(
     input t_job_cluster job_cluster
 );
     return (job_cluster.job_dim.cluster_x * job_cluster.job_dim.cluster_y * job_cluster.job_dim.cluster_z);
-endfunction
-
-function automatic logic [31:0] tf_get_total_clusters_in_grid(
-    input t_job_cluster job_cluster
-);
-    return (job_cluster.job_dim.grid_x * job_cluster.job_dim.grid_y * job_cluster.job_dim.grid_z);
 endfunction
 
 `endif // TYPES_JOB_CLUSTER_SVH 

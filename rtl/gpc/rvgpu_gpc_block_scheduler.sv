@@ -85,15 +85,6 @@ module rvgpu_gpc_block_scheduler #(
     block_t current_block_r, current_block_n;
     logic [7:0] tpc_load_r[NUM_TPC], tpc_load_n[NUM_TPC];
     
-    // 解析Job Cluster获取Block数量
-    function automatic logic [31:0] calculate_block_count(input t_job_cluster job);
-        logic [31:0] total_blocks;
-        
-        // 使用已有的辅助函数计算cluster中的block总数
-        total_blocks = tf_get_total_blocks_in_cluster(job);
-        return total_blocks;
-    endfunction
-    
     // 选择负载最低的TPC
     function automatic logic [$clog2(NUM_TPC)-1:0] select_tpc(input logic [7:0] load_array[NUM_TPC]);
         logic [$clog2(NUM_TPC)-1:0] selected_tpc;
@@ -177,7 +168,7 @@ module rvgpu_gpc_block_scheduler #(
                 if (noc_if.s_req_valid && noc_if.s_req_ready) begin
                     if (get_noc_header_msg_type(noc_header_t'(noc_if.s_req_header)) == MSG_COMPUTE_REQ) begin
                         current_job_n = noc_if.s_req_data;
-                        block_count_n = calculate_block_count(noc_if.s_req_data);
+                        block_count_n = tf_get_total_blocks_in_cluster(noc_if.s_req_data);
                         current_block_id_n = 0;
                         args_counter_n = 0;
                         state_n = RESP_JD;

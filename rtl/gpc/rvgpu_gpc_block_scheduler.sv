@@ -75,7 +75,7 @@ module rvgpu_gpc_block_scheduler #(
     
     // 内部信号
     scheduler_state_t state_r, state_n;
-    job_cluster_t current_job_r, current_job_n;
+    t_job_cluster current_job_r, current_job_n;
     logic [63:0] arglist_paddr_r, arglist_paddr_n;
     logic [3:0] args_counter_r, args_counter_n;
     logic [63:0] args_r[16];
@@ -86,11 +86,11 @@ module rvgpu_gpc_block_scheduler #(
     logic [7:0] tpc_load_r[NUM_TPC], tpc_load_n[NUM_TPC];
     
     // 解析Job Cluster获取Block数量
-    function automatic logic [31:0] calculate_block_count(input job_cluster_t job);
+    function automatic logic [31:0] calculate_block_count(input t_job_cluster job);
         logic [31:0] total_blocks;
         
         // 使用已有的辅助函数计算cluster中的block总数
-        total_blocks = get_total_blocks_in_cluster(job);
+        total_blocks = tf_get_total_blocks_in_cluster(job);
         return total_blocks;
     endfunction
     
@@ -115,7 +115,7 @@ module rvgpu_gpc_block_scheduler #(
     // 生成Block
     function automatic block_t create_block(
         input logic [31:0] block_id,
-        input job_cluster_t job,
+        input t_job_cluster job,
         input logic [63:0] args_array[16]
     );
         block_t block;
@@ -181,7 +181,7 @@ module rvgpu_gpc_block_scheduler #(
                         current_block_id_n = 0;
                         args_counter_n = 0;
                         state_n = RESP_JD;
-                        `GPC_PRINT("Scheduler", $sformatf("Received job cluster: %s", job_cluster_to_string(current_job_n)));
+                        `GPC_PRINT("Scheduler", $sformatf("Received job cluster: %s", tf_job_cluster_to_string(current_job_n)));
                     end
                 end
             end

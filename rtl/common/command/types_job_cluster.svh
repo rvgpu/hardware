@@ -13,13 +13,13 @@
 // limitations under the License.
 //=============================================================================
 
-`ifndef RVGPU_JOB_CLUSTER_BLOCK_SVH
-`define RVGPU_JOB_CLUSTER_BLOCK_SVH
+`ifndef TYPES_JOB_CLUSTER_SVH
+`define TYPES_JOB_CLUSTER_SVH
 
 `include "rvgpu_command_package.svh"
 
 //=============================================================================
-// job_cluster_t 结构体定义
+// t_job_cluster 结构体定义
 //=============================================================================
 
 typedef struct packed {
@@ -28,19 +28,19 @@ typedef struct packed {
     logic [4:0]             arg_size;           // [227:223] current program argument count (5-bits)
     logic [27:0]            reserved;           // [255:228] reserved (28-bits), 28'h0
     logic [63:0]            program_ptr;        // [223:160] program entry address (64-bits), argument list address is program_ptr + 8
-} job_cluster_t;
+} t_job_cluster;
 
 //=============================================================================
 // 构建函数
 //=============================================================================
 
-function automatic job_cluster_t build_job_cluster(
+function automatic t_job_cluster tf_build_job_cluster(
     input job_dimention_t   job_dim,
     input logic [63:0]      program_ptr,
     input logic [31:0]      curr_cluster_id,
     input logic [4:0]       arg_size
 );
-    job_cluster_t job_cluster;
+    t_job_cluster job_cluster;
     job_cluster.job_dim = job_dim;
     job_cluster.program_ptr = program_ptr;
     job_cluster.curr_cluster_id = curr_cluster_id;
@@ -53,8 +53,8 @@ endfunction
 // 字符串转换函数
 //=============================================================================
 
-function automatic string job_cluster_to_string(
-    input job_cluster_t job_cluster
+function automatic string tf_job_cluster_to_string(
+    input t_job_cluster job_cluster
 );
     return $sformatf("program_ptr: %h, curr_cluster_id: %d, arg_size: %d, dim: {grid: {%d, %d, %d}, cluster: {%d, %d, %d}, block: {%d, %d, %d}}", 
             job_cluster.program_ptr, 
@@ -69,16 +69,16 @@ endfunction
 // 辅助函数
 //=============================================================================
 
-function automatic logic [31:0] get_total_blocks_in_cluster(
-    input job_cluster_t job_cluster
+function automatic logic [31:0] tf_get_total_blocks_in_cluster(
+    input t_job_cluster job_cluster
 );
     return (job_cluster.job_dim.cluster_x * job_cluster.job_dim.cluster_y * job_cluster.job_dim.cluster_z);
 endfunction
 
-function automatic logic [31:0] get_total_clusters_in_grid(
-    input job_cluster_t job_cluster
+function automatic logic [31:0] tf_get_total_clusters_in_grid(
+    input t_job_cluster job_cluster
 );
     return (job_cluster.job_dim.grid_x * job_cluster.job_dim.grid_y * job_cluster.job_dim.grid_z);
 endfunction
 
-`endif // RVGPU_JOB_CLUSTER_BLOCK_SVH 
+`endif // TYPES_JOB_CLUSTER_SVH 

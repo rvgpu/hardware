@@ -20,7 +20,7 @@
 `include "rvgpu_control_unit_if.svh"
 `include "rvgpu_internal_noc_if.svh"
 `include "rvgpu_command_package.svh"
-`include "rvgpu_job_cluster_block.svh"
+`include "types_job_cluster.svh"
 `include "rvgpu_debug.svh"
 
 `ifndef RVGPU_CONTROL_UNIT_PKG_IMPORTED
@@ -70,7 +70,7 @@ module rvgpu_job_dispatcher #(
     logic [63:0] command_addr_r, command_addr_n;
     logic [31:0] total_clusters_r, total_clusters_n;  // 修改：总 cluster 数
     logic [31:0] cluster_idx_r, cluster_idx_n;  // 修改：cluster 索引
-    job_cluster_t job_cluster_r, job_cluster_n;  // 修改：job_cluster_t
+    t_job_cluster job_cluster_r, job_cluster_n;
     cluster_gpc_entry_t cluster_gpc_fifo_r [7:0], cluster_gpc_fifo_n [7:0];  // 修改：cluster-GPC 对应关系
     logic [2:0] fifo_head_r, fifo_head_n, fifo_tail_r, fifo_tail_n;
     logic [7:0] error_status_r, error_status_n;
@@ -226,8 +226,7 @@ module rvgpu_job_dispatcher #(
                     noc_node_id_t selected_gpc;
                     selected_gpc = next_gpc_sel(gpc_busy_r, gpc_sel_r);
                     
-                    // 构建 job_cluster_t
-                    job_cluster_n = build_job_cluster(
+                    job_cluster_n = tf_build_job_cluster(
                         command_r.compute.header.job_dim,
                         command_r.compute.prog.program_addr,
                         curr_cluster_id_r,

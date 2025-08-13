@@ -10,7 +10,7 @@
 
 // Common FIFO
 $RVGPU_HARDWARE/rtl/common/fifo/rvgpu_fifo_basic.sv
-// $RVGPU_HARDWARE/rtl/common/fifo/rvgpu_fifo_stream.sv
+$RVGPU_HARDWARE/rtl/common/fifo/rvgpu_fifo_stream.sv
 
 // Common SRAM
 $RVGPU_HARDWARE/rtl/common/sram/rvgpu_sram_sp_sim.sv

@@ -18,6 +18,7 @@
 
 `include "rvgpu_typedef.svh"
 `include "interface_gpc_router.svh"
+`include "types_gpc_router_message.svh"
 
 // TPC路由器节点 - 智能路由消息到SM或下游TPC
 module rvgpu_tpc_router_node #(
@@ -125,8 +126,7 @@ module rvgpu_tpc_router_node #(
             sm0_if.sm2gpc_ready = 1'b0;
             sm1_if.sm2gpc_ready = 1'b0;
         end else begin
-            // 没有上行消息，设置所有ready信号
-            upstream_if.sm2gpc_valid = 1'b0;
+            // 没有上行消息时，设置所有ready信号为高，表示可以接收消息
             sm0_if.sm2gpc_ready = 1'b1;
             sm1_if.sm2gpc_ready = 1'b1;
             if (!IS_LAST) downstream_if.sm2gpc_ready = 1'b1;
@@ -139,6 +139,14 @@ module rvgpu_tpc_router_node #(
         upstream_if.gpc2sm_ready = (sm0_if.gpc2sm_ready && sm1_if.gpc2sm_ready && 
                                    (IS_LAST || downstream_if.gpc2sm_ready));
         
+        // 上行ready信号 - 当没有消息时，向上游报告ready，表示可以接收消息
+        // 当有消息时，ready信号在消息路由逻辑中已经正确设置
+        if (!sm0_if.sm2gpc_valid && !sm1_if.sm2gpc_valid && 
+            (IS_LAST || !downstream_if.sm2gpc_valid)) begin
+            upstream_if.gpc2sm_ready = 1'b1;
+        end
+        // 注意：当有消息时，upstream_if.sm2gpc_ready在消息路由逻辑中已经被正确设置
+        // 这里不需要else分支，因为消息路由逻辑会覆盖这个值
     end
     
 endmodule : rvgpu_tpc_router_node

@@ -22,7 +22,7 @@
 `include "function_cache_lru.svh"
 `include "rvgpu_noc_message.svh"
 
-`include "rvgpu_fifo_if.svh"
+`include "interface_fifo_basic.svh"
 `include "types_l15cache_buffer.svh"
 `include "interface_l15cache.svh"
 `include "interface_l15cache_controller.svh"
@@ -47,14 +47,14 @@ module rvgpu_gpc_l15cache_request_buffer #(
     localparam int REQUESTER_BITS   = $clog2(L15CACHE_NUM_REQUESTERS);
     
     // Request FIFO interface
-    rvgpu_fifo_basic_if #(
+    interface_fifo_basic #(
         .DATA_WIDTH(REQ_DATA_WIDTH),
         .INDEX_BITS(REQ_BUFFER_BITS)
     ) req_fifo_if();
     
     // Source (requester id) FIFO interface to track response routing
     localparam int SRC_ID_WIDTH = REQUESTER_BITS;
-    rvgpu_fifo_basic_if #(
+    interface_fifo_basic #(
         .DATA_WIDTH(SRC_ID_WIDTH),
         .INDEX_BITS(REQ_BUFFER_BITS)
     ) src_fifo_if();

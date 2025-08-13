@@ -20,7 +20,7 @@
 `include "rvgpu_debug.svh"
 `include "rvgpu_l2cache_if.svh"
 `include "rvgpu_internal_noc_if.svh"
-`include "rvgpu_fifo_if.svh"
+`include "interface_fifo_basic.svh"
 `include "rvgpu_l2cache_types.svh"
 `include "function_cache_lru.svh"
 
@@ -97,7 +97,7 @@ module rvgpu_l2cache_controller (
     logic line_write_valid_r, line_write_valid_nxt;
     
     // Request FIFO interface
-    rvgpu_fifo_basic_if #(
+    interface_fifo_basic #(
         .DATA_WIDTH(REQ_DATA_WIDTH),
         .INDEX_BITS(REQ_QUEUE_BITS)
     ) req_fifo_if();

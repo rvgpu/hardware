@@ -26,7 +26,7 @@
 `include "interface_l15cache_data.svh"
 `include "rvgpu_debug.svh"
 `include "rvgpu_noc_debug.svh"
-`include "rvgpu_fifo_if.svh"
+`include "interface_fifo_basic.svh"
 `include "types_l15cache_controller.svh"
 `include "interface_l15cache_controller.svh"
 
@@ -115,7 +115,7 @@ module rvgpu_gpc_l15cache_controller #(
     logic line_write_valid_r, line_write_valid_nxt;
     
     // Request FIFO interface
-    rvgpu_fifo_basic_if #(
+    interface_fifo_basic #(
         .DATA_WIDTH(REQ_DATA_WIDTH),
         .INDEX_BITS(REQ_QUEUE_BITS)
     ) req_fifo_if();

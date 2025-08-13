@@ -14,7 +14,7 @@
 //=============================================================================
 
 `include "rvgpu_fifo_pkg.svh"
-`include "rvgpu_fifo_if.svh"
+`include "interface_fifo_stream.svh"
 
 module rvgpu_fifo_stream #(
   parameter int unsigned DATA_WIDTH     = rvgpu_fifo_pkg::DEFAULT_DATA_WIDTH,
@@ -22,7 +22,7 @@ module rvgpu_fifo_stream #(
 ) (
   input  wire clk,                    // 时钟信号
   input  wire rst_n,                  // 低电平复位信号
-  rvgpu_fifo_stream_if.fifo_port fifo_if // FIFO接口
+  interface_fifo_stream.fifo_port fifo_if // FIFO接口
 );
 
   //=============================================================================

@@ -24,7 +24,7 @@
 `include "rvgpu_constant.svh"
 `include "rvgpu_mmu_common.svh"
 `include "rvgpu_noc_message.svh"
-`include "rvgpu_fifo_if.svh"
+`include "interface_fifo_basic.svh"
 
 module rvgpu_mmu (
     // Clock and Reset Interface
@@ -175,7 +175,7 @@ module rvgpu_mmu (
     //=============================================================================
     
     // Basic FIFO接口实例
-    rvgpu_fifo_basic_if #(
+    interface_fifo_basic #(
         .DATA_WIDTH(REQ_BUFFER_ENTRY_BITS),
         .INDEX_BITS(REQ_BUFFER_INDEX_BITS)
     ) req_fifo_if();

@@ -13,7 +13,7 @@
 // limitations under the License.
 //=============================================================================
 
-`include "rvgpu_fifo_if.svh"
+`include "interface_fifo_basic.svh"
 
 module rvgpu_fifo_basic #(
   parameter int unsigned DATA_WIDTH = 32,    // 数据位宽
@@ -21,7 +21,7 @@ module rvgpu_fifo_basic #(
 ) (
   input  wire                    clk,        // 时钟信号
   input  wire                    rst_n,      // 低电平复位信号
-  rvgpu_fifo_basic_if.fifo_port  fifo_if     // FIFO接口
+  interface_fifo_basic.fifo_port  fifo_if     // FIFO接口
 );
 
   //=============================================================================

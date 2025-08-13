@@ -19,7 +19,7 @@
 `include "rvgpu_typedef.svh"
 `include "interface_gpc_router.svh"
 `include "rvgpu_gpc_pkg.svh"
-`include "rvgpu_fifo_if.svh"
+`include "interface_fifo_basic.svh"
 
 `ifndef RVGPU_GPC_PKG_IMPORTED
 `define RVGPU_GPC_PKG_IMPORTED
@@ -43,7 +43,7 @@ module rvgpu_gpc_router #(
     interface_gpc_router.down_port tpc_router_if
 );
     // 上游FIFO - 缓存来自TPC的响应消息
-    rvgpu_fifo_basic_if #(
+    interface_fifo_basic #(
         .DATA_WIDTH($bits(t_router_message)),  // 268位 = 4+8+256
         .INDEX_BITS(5)  // 深度32
     ) up_fifo_basic_if();
@@ -58,7 +58,7 @@ module rvgpu_gpc_router #(
     );
     
     // 下游FIFO - 缓存发往TPC的请求消息
-    rvgpu_fifo_basic_if #(
+    interface_fifo_basic #(
         .DATA_WIDTH($bits(t_router_message)),
         .INDEX_BITS(5)
     ) down_fifo_basic_if();

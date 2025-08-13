@@ -13,10 +13,10 @@
 // limitations under the License.
 //=============================================================================
 
-`ifndef RVGPU_FIFO_IF_SVH
-`define RVGPU_FIFO_IF_SVH
+`ifndef INTERFACE_FIFO_STREAM_SVH
+`define INTERFACE_FIFO_STREAM_SVH
 
-interface rvgpu_fifo_stream_if #(
+interface interface_fifo_stream #(
   parameter int unsigned DATA_WIDTH = 32,
   parameter int unsigned FIFO_DEPTH = 16
 );
@@ -50,42 +50,6 @@ interface rvgpu_fifo_stream_if #(
     input  state_oh
   );
 
-endinterface : rvgpu_fifo_stream_if
+endinterface : interface_fifo_stream
 
-//=============================================================================
-// Basic FIFO接口定义
-//=============================================================================
-interface rvgpu_fifo_basic_if #(
-  parameter int unsigned DATA_WIDTH = 32,
-  parameter int unsigned INDEX_BITS = 8
-);
-  // 写入接口
-  logic                    write_en;
-  logic [DATA_WIDTH-1:0]   write_data;
-  
-  // 读取接口
-  logic                    read_en;
-  logic [DATA_WIDTH-1:0]   read_data;
-  
-  // 状态输出
-  logic                    full;
-  logic                    empty;
-  
-  // 接口定义
-  modport fifo_port (
-    input  write_en, write_data,
-    input  read_en,
-    output read_data,
-    output full, empty
-  );
-  
-  modport use_port (
-    output write_en, write_data,
-    output read_en,
-    input  read_data,
-    input  full, empty
-  );
-
-endinterface : rvgpu_fifo_basic_if
-
-`endif // RVGPU_FIFO_IF_SVH 
+`endif // INTERFACE_FIFO_STREAM_SVH

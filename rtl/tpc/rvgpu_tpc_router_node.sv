@@ -139,8 +139,6 @@ module rvgpu_tpc_router_node #(
         upstream_if.gpc2sm_ready = (sm0_if.gpc2sm_ready && sm1_if.gpc2sm_ready && 
                                    (IS_LAST || downstream_if.gpc2sm_ready));
         
-        // 注意：downstream_if.gpc2sm_ready 是输入端口，不能被驱动
-        // 下游TPC的ready信号由其自身控制，我们只能读取它
     end
     
 endmodule : rvgpu_tpc_router_node

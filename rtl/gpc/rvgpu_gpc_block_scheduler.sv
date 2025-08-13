@@ -76,6 +76,7 @@ module rvgpu_gpc_block_scheduler #(
         current_block_id_n = current_block_id_r;
         block_count_n = block_count_r;
         target_sm_n = target_sm_r;
+        rr_counter_n = rr_counter_r;
         
         // 接口默认值
         noc_if.s_req_ready = 1'b0;
@@ -122,7 +123,7 @@ module rvgpu_gpc_block_scheduler #(
             
             DISPATCH_BLOCK: begin
                 // 选择目标SM
-                target_sm_n = select_sm_rr(rr_counter_r, NUM_TPC*2);
+                target_sm_n = select_sm_rr(rr_counter_r, NUM_TPC * 2);
                 
                 // 发送消息
                 router_if.gpc2sm_valid = 1'b1;

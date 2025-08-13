@@ -141,7 +141,7 @@ module rvgpu_gpc_router #(
         .fifo_if(down_fifo_basic_if.fifo_port)
     );
     
-    // FIFO接口连接逻辑
+    // FIFO接口连接逻辑 - 合并到一个always_comb块中
     always_comb begin
         // 上游FIFO连接
         up_fifo_basic_if.write_en = up_fifo_if.gpc2sm_valid;
@@ -155,15 +155,11 @@ module rvgpu_gpc_router #(
         
         // 从FIFO读取数据
         up_fifo_basic_if.read_en = 1'b0;  // 暂时不使用
-        down_fifo_basic_if.read_en = 1'b0; // 暂时不使用
-    end
-    
-    // 将FIFO输出连接到TPC路由器接口
-    always_comb begin
-        // 下游FIFO -> TPC路由器（现在可以驱动tpc_router_if的信号）
+        down_fifo_basic_if.read_en = tpc_router_if.gpc2sm_ready;  // TPC准备好时读取
+        
+        // 将FIFO输出连接到TPC路由器接口
         tpc_router_if.gpc2sm_msg = down_fifo_basic_if.read_data;  // 从FIFO读取数据
         tpc_router_if.gpc2sm_valid = !down_fifo_basic_if.empty;   // FIFO非空时有效
-        down_fifo_basic_if.read_en = tpc_router_if.gpc2sm_ready;  // TPC准备好时读取
         
         // 上游FIFO -> 功能模块（通过ready信号控制）
         up_fifo_if.gpc2sm_ready = 1'b1; // 简化处理，实际可能需要更复杂的控制逻辑

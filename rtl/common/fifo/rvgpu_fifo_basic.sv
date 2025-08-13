@@ -28,82 +28,107 @@ module rvgpu_fifo_basic #(
   // 参数计算
   //=============================================================================
   localparam int unsigned FIFO_DEPTH = (1 << INDEX_BITS);  // FIFO深度 = 2^INDEX_BITS
-  localparam int unsigned PTR_WIDTH = INDEX_BITS + 1;      // 指针位宽 (比索引多1位用于满空判断)
+  localparam int unsigned PTR_WIDTH = INDEX_BITS;          // 指针位宽
   
   //=============================================================================
   // 内部信号定义
   //=============================================================================
-  // 指针寄存器 (使用PTR_WIDTH位，比实际索引多1位)
-  logic [PTR_WIDTH-1:0] write_ptr_r;   // 写指针寄存器
-  logic [PTR_WIDTH-1:0] read_ptr_r;    // 读指针寄存器
-  
-  // 指针下一状态
-  logic [PTR_WIDTH-1:0] write_ptr_next;  // 写指针下一状态
-  logic [PTR_WIDTH-1:0] read_ptr_next;   // 读指针下一状态
-  
-  // 索引信号 (用于数据存储的索引)
-  logic [INDEX_BITS-1:0] write_index;   // 写索引
-  logic [INDEX_BITS-1:0] read_index;    // 读索引
+  // 双指针系统
+  logic [PTR_WIDTH-1:0] write_ptr_r;   // 写指针
+  logic [PTR_WIDTH-1:0] read_ptr_r;    // 读指针
+  logic [PTR_WIDTH:0] element_count_r;  // 当前元素数量
   
   // 数据存储
-  logic [DATA_WIDTH-1:0] data_r [FIFO_DEPTH-1:0];  // 数据存储数组
+  logic [DATA_WIDTH-1:0] data_r [FIFO_DEPTH-1:0];
+  
+  // 控制信号
+  logic write_valid, read_valid;
+  logic write_ready, read_ready;
   
   //=============================================================================
-  // 指针逻辑
+  // 指针管理逻辑
   //=============================================================================
-  // 写指针递增逻辑 (循环指针)
-  assign write_ptr_next = (write_ptr_r == (1 << INDEX_BITS) - 1) ? '0 : write_ptr_r + 1'b1;
-  
-  // 读指针递增逻辑 (循环指针)
-  assign read_ptr_next = (read_ptr_r == (1 << INDEX_BITS) - 1) ? '0 : read_ptr_r + 1'b1;
-  
-  //=============================================================================
-  // 指针寄存器
-  //=============================================================================
+  // 写指针递增 - 环形缓冲
   always_ff @(posedge clk) begin
     if (!rst_n) begin
-      write_ptr_r  <= '0;
-      read_ptr_r   <= '0;
-    end else begin
-      // 写指针更新
-      if (fifo_if.write_en) begin
-        write_ptr_r <= write_ptr_next;
+      write_ptr_r <= '0;
+    end else if (write_valid && write_ready) begin
+      if (write_ptr_r == FIFO_DEPTH - 1) begin
+        write_ptr_r <= '0;  // 环形回绕
+      end else begin
+        write_ptr_r <= write_ptr_r + 1'b1;
       end
-      
-      // 读指针更新
-      if (fifo_if.read_en) begin
-        read_ptr_r <= read_ptr_next;
+    end
+  end
+  
+  // 读指针递增 - 环形缓冲
+  always_ff @(posedge clk) begin
+    if (!rst_n) begin
+      read_ptr_r <= '0;
+    end else if (read_valid && read_ready) begin
+      if (read_ptr_r == FIFO_DEPTH - 1) begin
+        read_ptr_r <= '0;  // 环形回绕
+      end else begin
+        read_ptr_r <= read_ptr_r + 1'b1;
       end
     end
   end
   
   //=============================================================================
-  // 满空状态逻辑
+  // 元素计数器
   //=============================================================================
-  // 空状态: 写指针等于读指针
-  assign fifo_if.empty = (write_ptr_r == read_ptr_r);
+  always_ff @(posedge clk) begin
+    if (!rst_n) begin
+      element_count_r <= '0;
+    end else begin
+      case ({write_valid && write_ready, read_valid && read_ready})
+        2'b10: begin  // 只写
+          if (element_count_r < FIFO_DEPTH) begin
+            element_count_r <= element_count_r + 1'b1;
+          end
+        end
+        2'b01: begin  // 只读
+          if (element_count_r > 0) begin
+            element_count_r <= element_count_r - 1'b1;
+          end
+        end
+        2'b11: begin  // 同时读写
+          // 元素数量保持不变
+        end
+        default: begin
+          // 无操作
+        end
+      endcase
+    end
+  end
   
-  // 满状态: 写指针等于读指针的下一位置
-  assign fifo_if.full = (write_ptr_r == read_ptr_next);
+  //=============================================================================
+  // 满空判断逻辑
+  //=============================================================================
+  assign fifo_if.empty = (element_count_r == 0);
+  assign fifo_if.full = (element_count_r == FIFO_DEPTH);
   
   //=============================================================================
-  // 索引计算
+  // 流控制逻辑
   //=============================================================================
-  // 直接使用指针的低INDEX_BITS位作为索引
-  assign write_index = write_ptr_r[INDEX_BITS-1:0];
-  assign read_index  = read_ptr_r[INDEX_BITS-1:0];
+  assign write_ready = !fifo_if.full;
+  assign read_ready = !fifo_if.empty;
+  
+  // 接口连接
+  assign write_valid = fifo_if.write_en;
+  assign read_valid = fifo_if.read_en;
   
   //=============================================================================
   // 数据存储逻辑
   //=============================================================================
   // 数据写入
   always_ff @(posedge clk) begin
-    if (fifo_if.write_en) begin
-      data_r[write_index] <= fifo_if.write_data;
+    if (write_valid && write_ready) begin
+      data_r[write_ptr_r] <= fifo_if.write_data;
     end
   end
   
-  // 数据读取 (组合逻辑)
-  assign fifo_if.read_data = data_r[read_index];
+  // 数据读取
+  assign fifo_if.read_data = data_r[read_ptr_r];
 
 endmodule : rvgpu_fifo_basic 

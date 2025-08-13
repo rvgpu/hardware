@@ -142,7 +142,7 @@ module rvgpu_gpc_block_scheduler #(
                     // 更新轮询计数器，为下一个block做准备
                     rr_counter_n = target_sm_n + 1;
                     
-                    `GPC_PRINT("Scheduler", $sformatf("Dispatched block %d to SM %d", current_block_id_r, target_sm_n));
+                    `GPC_PRINT("Scheduler", $sformatf("Dispatched block %-d to SM %-d", current_block_id_r, target_sm_n));
                 end
             end
             

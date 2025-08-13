@@ -49,66 +49,64 @@ module rvgpu_gpc_router #(
     
     // 消息解析和路由逻辑
     always_comb begin
+        // 默认值
         up_fifo_if.gpc2sm_valid = 1'b0;
         up_fifo_if.gpc2sm_msg = build_router_message_raw();
         
         down_fifo_if.gpc2sm_valid = 1'b0;
         down_fifo_if.gpc2sm_msg = build_router_message_raw();
         
-        // 根据消息类型和来源进行路由
-        case (1'b1)
-            // L1.5 Cache消息
-            l15_if.gpc2sm_valid: begin
-                if (l15_if.gpc2sm_msg.msg_type == ROUTER_MSG_L15_REQ) begin
-                    // 缓存请求 - 转发到TPC路由器
-                    down_fifo_if.gpc2sm_msg = l15_if.gpc2sm_msg;
-                    down_fifo_if.gpc2sm_valid = l15_if.gpc2sm_valid;
-                end else begin
-                    // 缓存响应 - 转发到上游FIFO
-                    up_fifo_if.gpc2sm_msg = l15_if.gpc2sm_msg;
-                    up_fifo_if.gpc2sm_valid = l15_if.gpc2sm_valid;
-                end
+        // 优先级仲裁：Block Scheduler > L1.5 Cache > MMU > Raster
+        // 只有当对应的FIFO不满时才接受消息
+        
+        // Block Scheduler消息 - 最高优先级
+        if (block_if.gpc2sm_valid && !down_fifo_basic_if.full) begin
+            if (block_if.gpc2sm_msg.msg_type == ROUTER_MSG_BLOCK_DISP) begin
+                // Block分发 - 转发到TPC路由器
+                down_fifo_if.gpc2sm_msg = block_if.gpc2sm_msg;
+                down_fifo_if.gpc2sm_valid = block_if.gpc2sm_valid;
+            end else begin
+                // Block完成 - 转发到上游FIFO
+                up_fifo_if.gpc2sm_msg = block_if.gpc2sm_msg;
+                up_fifo_if.gpc2sm_valid = block_if.gpc2sm_valid;
             end
-            
-            // MMU消息
-            mmu_if.gpc2sm_valid: begin
-                if (mmu_if.gpc2sm_msg.msg_type == ROUTER_MSG_MMU_REQ) begin
-                    // MMU请求 - 转发到TPC路由器
-                    down_fifo_if.gpc2sm_msg = mmu_if.gpc2sm_msg;
-                    down_fifo_if.gpc2sm_valid = mmu_if.gpc2sm_valid;
-                end else begin
-                    // MMU响应 - 转发到上游FIFO
-                    up_fifo_if.gpc2sm_msg = mmu_if.gpc2sm_msg;
-                    up_fifo_if.gpc2sm_valid = mmu_if.gpc2sm_valid;
-                end
+        end
+        // L1.5 Cache消息 - 第二优先级
+        else if (l15_if.gpc2sm_valid && !down_fifo_basic_if.full) begin
+            if (l15_if.gpc2sm_msg.msg_type == ROUTER_MSG_L15_REQ) begin
+                // 缓存请求 - 转发到TPC路由器
+                down_fifo_if.gpc2sm_msg = l15_if.gpc2sm_msg;
+                down_fifo_if.gpc2sm_valid = l15_if.gpc2sm_valid;
+            end else begin
+                // 缓存响应 - 转发到上游FIFO
+                up_fifo_if.gpc2sm_msg = l15_if.gpc2sm_msg;
+                up_fifo_if.gpc2sm_valid = l15_if.gpc2sm_valid;
             end
-            
-            // Block Scheduler消息
-            block_if.gpc2sm_valid: begin
-                if (block_if.gpc2sm_msg.msg_type == ROUTER_MSG_BLOCK_DISP) begin
-                    // Block分发 - 转发到TPC路由器
-                    down_fifo_if.gpc2sm_msg = block_if.gpc2sm_msg;
-                    down_fifo_if.gpc2sm_valid = block_if.gpc2sm_valid;
-                end else begin
-                    // Block完成 - 转发到上游FIFO
-                    up_fifo_if.gpc2sm_msg = block_if.gpc2sm_msg;
-                    up_fifo_if.gpc2sm_valid = block_if.gpc2sm_valid;
-                end
+        end
+        // MMU消息 - 第三优先级
+        else if (mmu_if.gpc2sm_valid && !down_fifo_basic_if.full) begin
+            if (mmu_if.gpc2sm_msg.msg_type == ROUTER_MSG_MMU_REQ) begin
+                // MMU请求 - 转发到TPC路由器
+                down_fifo_if.gpc2sm_msg = mmu_if.gpc2sm_msg;
+                down_fifo_if.gpc2sm_valid = mmu_if.gpc2sm_valid;
+            end else begin
+                // MMU响应 - 转发到上游FIFO
+                up_fifo_if.gpc2sm_msg = mmu_if.gpc2sm_msg;
+                up_fifo_if.gpc2sm_valid = mmu_if.gpc2sm_valid;
             end
-            
-            // Raster消息
-            raster_if.gpc2sm_valid: begin
-                if (raster_if.gpc2sm_msg.msg_type == ROUTER_MSG_TLB_UPDATE) begin
-                    // TLB更新 - 转发到TPC路由器
-                    down_fifo_if.gpc2sm_msg = raster_if.gpc2sm_msg;
-                    down_fifo_if.gpc2sm_valid = raster_if.gpc2sm_valid;
-                end else begin
-                    // 其他Raster消息 - 转发到上游FIFO
-                    up_fifo_if.gpc2sm_msg = raster_if.gpc2sm_msg;
-                    up_fifo_if.gpc2sm_valid = raster_if.gpc2sm_valid;
-                end
+        end
+        // Raster消息 - 最低优先级
+        else if (raster_if.gpc2sm_valid && !down_fifo_basic_if.full) begin
+            if (raster_if.gpc2sm_msg.msg_type == ROUTER_MSG_TLB_UPDATE) begin
+                // TLB更新 - 转发到TPC路由器
+                down_fifo_if.gpc2sm_msg = raster_if.gpc2sm_msg;
+                down_fifo_if.gpc2sm_valid = raster_if.gpc2sm_valid;
+            end else begin
+                // 其他Raster消息 - 转发到上游FIFO
+                up_fifo_if.gpc2sm_msg = raster_if.gpc2sm_msg;
+                up_fifo_if.gpc2sm_valid = raster_if.gpc2sm_valid;
             end
-        endcase
+        end
     end
     
     // 上游FIFO - 缓存来自TPC的响应消息
@@ -162,7 +160,17 @@ module rvgpu_gpc_router #(
         tpc_router_if.gpc2sm_valid = !down_fifo_basic_if.empty;   // FIFO非空时有效
         
         // 上游FIFO -> 功能模块（通过ready信号控制）
-        up_fifo_if.gpc2sm_ready = 1'b1; // 简化处理，实际可能需要更复杂的控制逻辑
+        up_fifo_if.gpc2sm_ready = 1'b1;
+    end
+    
+    // 驱动所有up_port接口的gpc2sm_ready信号
+    always_comb begin
+        // 所有功能模块接口的ready信号都基于下游FIFO的状态
+        // 只有当FIFO不满时才报告ready
+        l15_if.gpc2sm_ready = !down_fifo_basic_if.full;      // L1.5 Cache
+        mmu_if.gpc2sm_ready = !down_fifo_basic_if.full;      // MMU
+        block_if.gpc2sm_ready = !down_fifo_basic_if.full;    // Block Scheduler
+        raster_if.gpc2sm_ready = !down_fifo_basic_if.full;   // Raster
     end
 
 endmodule : rvgpu_gpc_router

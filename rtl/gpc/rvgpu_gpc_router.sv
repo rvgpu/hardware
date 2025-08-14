@@ -27,7 +27,6 @@ import rvgpu_gpc_pkg::*;
 `endif // RVGPU_GPC_PKG_IMPORTED
 
 module rvgpu_gpc_router #(
-    parameter gpc_parameter_t GPC_CONFIG = DEFAULT_GPC_CONFIG,
     parameter int GPC_ID = 0
 ) (
     input  logic clk,
@@ -40,7 +39,7 @@ module rvgpu_gpc_router #(
     interface_gpc_router.left_port raster_if,
     
     // TPC路由器接口
-    interface_gpc_router.right_port tpc_router_if
+    interface_gpc_router.right_port right_if
 );
     // 上游FIFO - 缓存来自TPC的响应消息
     interface_fifo_stream #(
@@ -123,12 +122,12 @@ module rvgpu_gpc_router #(
     // FIFO读取和输出连接逻辑
     //=============================================================================
     always_comb begin
-        // 从down_fifo读取数据到tpc_router_if
-        down_fifo_stream_if.rd_ready = tpc_router_if.down_ready;  // TPC准备好时读取
+        // 从down_fifo读取数据到right_if
+        down_fifo_stream_if.rd_ready = right_if.down_ready;  // TPC准备好时读取
         
         // 将down_fifo输出连接到TPC路由器接口
-        tpc_router_if.down_msg = down_fifo_stream_if.rd_data;     // 从FIFO读取数据
-        tpc_router_if.down_valid = down_fifo_stream_if.rd_valid;  // FIFO有数据时有效
+        right_if.down_msg = down_fifo_stream_if.rd_data;     // 从FIFO读取数据
+        right_if.down_valid = down_fifo_stream_if.rd_valid;  // FIFO有数据时有效
         
         // 上游FIFO暂时不使用，但保持接口完整性
         up_fifo_stream_if.rd_ready = 1'b0;  // 暂时不使用

@@ -88,7 +88,6 @@ module rvgpu_gpc_frontend #(
     
     // GPC路由器实例 - 连接Block Scheduler和TPC路由器链
     rvgpu_gpc_router #(
-        .GPC_CONFIG(GPC_CONFIG),
         .GPC_ID(GPC_ID)
     ) u_gpc_router (
         .clk(clk),
@@ -97,7 +96,7 @@ module rvgpu_gpc_frontend #(
         .mmu_if(mmu_router_if.left_port),                   // MMU路由器接口
         .block_if(block_scheduler_router_if.left_port),      // Block Scheduler使用left_port发送消息
         .raster_if(raster_router_if.left_port),              // Raster路由器接口
-        .tpc_router_if(router_if)                          // 连接到TPC路由器链
+        .right_if(router_if)                          // 连接到TPC路由器链
     );
     
     // GPC Block Scheduler实例

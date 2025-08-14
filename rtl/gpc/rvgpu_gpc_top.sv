@@ -52,7 +52,7 @@ module rvgpu_gpc_top #(
         .clk(clk),
         .rst_n(rst_n),
         .noc_if(noc_if),
-        .router_if(router_chain[0].down_port)  // Frontend使用down_port
+        .router_if(router_chain[0].right_port)  // Frontend使用right_port
     );
     
     // TPC实例化 - 每个TPC有两个路由器接口
@@ -66,8 +66,8 @@ module rvgpu_gpc_top #(
             ) u_tpc (
                 .clk(clk),
                 .rst_n(rst_n),
-                .upstream_if(router_chain[i].up_port),      // TPC使用up_port接收上游
-                .downstream_if(router_chain[i+1].down_port)   // TPC使用down_port连接下游
+                .upstream_if(router_chain[i].left_port),      // TPC使用left_port接收上游
+                .downstream_if(router_chain[i+1].right_port)   // TPC使用right_port连接下游
             );
         end
     endgenerate

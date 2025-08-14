@@ -19,28 +19,37 @@
 `include "rvgpu_typedef.svh"
 `include "types_gpc_router_message.svh"
 
+// Router结构如下:
+//     GPC               TPC0.router           TPC1.router
+// +-----------+        +------------+        +------------+
+// | up_fifo   +r <--- l+            +r <--- l+            + <---  ... 
+// | down_fifo +r ---> l+            +r ---> l+            + --->  ...
+// +-----------+        +--+-----+---+        +--+-----+---+
+//                         |     |               |     |
+//                        SM0   SM1             SM0   SM1
+
 interface interface_gpc_router;
-    t_router_message            gpc2sm_msg;
-    logic                       gpc2sm_valid;
-    logic                       gpc2sm_ready;
+    t_router_message            down_msg;
+    logic                       down_valid;
+    logic                       down_ready;
     
-    t_router_message            sm2gpc_msg;
-    logic                       sm2gpc_valid;
-    logic                       sm2gpc_ready;
+    t_router_message            up_msg;
+    logic                       up_valid;
+    logic                       up_ready;
     
     // Modport定义
-    modport up_port (
-        input  gpc2sm_msg, gpc2sm_valid,
-        output gpc2sm_ready,
-        output sm2gpc_msg, sm2gpc_valid,
-        input  sm2gpc_ready
+    modport left_port (
+        input  down_msg, down_valid,
+        output down_ready,
+        output up_msg, up_valid,
+        input  up_ready
     );
     
-    modport down_port (
-        output gpc2sm_msg, gpc2sm_valid,
-        input  gpc2sm_ready,
-        input  sm2gpc_msg, sm2gpc_valid, 
-        output sm2gpc_ready         
+    modport right_port (
+        output down_msg, down_valid,
+        input  down_ready,
+        input  up_msg, up_valid, 
+        output up_ready         
     );
     
 endinterface : interface_gpc_router

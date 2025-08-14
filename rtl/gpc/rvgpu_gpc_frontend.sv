@@ -43,7 +43,7 @@ module rvgpu_gpc_frontend #(
     rvgpu_internal_noc_if.device noc_if,
     
     // 路由器接口 - 连接TPC0
-    interface_gpc_router.down_port router_if
+    interface_gpc_router.right_port router_if
 );
     
     // 内部NOC接口
@@ -93,10 +93,10 @@ module rvgpu_gpc_frontend #(
     ) u_gpc_router (
         .clk(clk),
         .rst_n(rst_n),
-        .l15_if(l15_router_if.up_port),                   // L1.5 Cache路由器接口
-        .mmu_if(mmu_router_if.up_port),                   // MMU路由器接口
-        .block_if(block_scheduler_router_if.up_port),      // Block Scheduler使用up_port发送消息
-        .raster_if(raster_router_if.up_port),              // Raster路由器接口
+        .l15_if(l15_router_if.left_port),                   // L1.5 Cache路由器接口
+        .mmu_if(mmu_router_if.left_port),                   // MMU路由器接口
+        .block_if(block_scheduler_router_if.left_port),      // Block Scheduler使用left_port发送消息
+        .raster_if(raster_router_if.left_port),              // Raster路由器接口
         .tpc_router_if(router_if)                          // 连接到TPC路由器链
     );
     
@@ -110,7 +110,7 @@ module rvgpu_gpc_frontend #(
         .clk(clk),
         .rst_n(rst_n),
         .noc_if(scheduler_noc_if.device),
-        .router_if(block_scheduler_router_if.down_port),   // Block Scheduler使用down_port接收消息
+        .router_if(block_scheduler_router_if.right_port),   // Block Scheduler使用right_port接收消息
         .raster_if(block_raster_if)
     );
     

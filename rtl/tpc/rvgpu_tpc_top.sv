@@ -32,8 +32,8 @@ module rvgpu_tpc_top #(
     input  logic rst_n,
     
     // 路由器接口
-    interface_gpc_router.up_port upstream_if,      // 连接上游（Frontend或前一个TPC）
-    interface_gpc_router.down_port downstream_if    // 连接下游（下一个TPC，最后一个TPC没有此接口）
+    interface_gpc_router.left_port upstream_if,      // 连接上游（Frontend或前一个TPC）
+    interface_gpc_router.right_port downstream_if    // 连接下游（下一个TPC，最后一个TPC没有此接口）
 );
     
     // SM路由器接口 - 必须在实例化前声明
@@ -73,7 +73,7 @@ module rvgpu_tpc_top #(
     ) u_sm0 (
         .clk(clk),
         .rst_n(rst_n),
-        .router_if(sm0_router_if.up_port),
+        .router_if(sm0_router_if.left_port),
         .block_dispatch_if(sm0_block_dispatch_if.sm),
         .ldst_if(sm0_ldst_if.sm),
         .l15_icache_if(sm0_l15_icache_if.requester),
@@ -89,7 +89,7 @@ module rvgpu_tpc_top #(
     ) u_sm1 (
         .clk(clk),
         .rst_n(rst_n),
-        .router_if(sm1_router_if.up_port),
+        .router_if(sm1_router_if.left_port),
         .block_dispatch_if(sm1_block_dispatch_if.sm),
         .ldst_if(sm1_ldst_if.sm),
         .l15_icache_if(sm1_l15_icache_if.requester),

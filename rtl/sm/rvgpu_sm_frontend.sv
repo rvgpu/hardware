@@ -31,7 +31,7 @@ module rvgpu_sm_frontend #(
     input  logic rst_n,
     
     // 路由器接口
-    interface_gpc_router.up_port router_if,
+    interface_gpc_router.left_port router_if,
     
     // 功能模块接口
     gpc_block_tpc_if.sm block_dispatch_if,
@@ -43,28 +43,28 @@ module rvgpu_sm_frontend #(
     // 消息解析和路由逻辑
     always_comb begin
         // 根据消息类型路由到相应的功能模块
-        if (router_if.gpc2sm_valid) begin
-            case (router_if.gpc2sm_msg.msg_type)
+        if (router_if.down_valid) begin
+            case (router_if.down_msg.msg_type)
                 ROUTER_MSG_BLOCK_DISP: begin
-                    router_if.gpc2sm_ready = 1'b1; // 临时处理
+                    router_if.down_ready = 1'b1; // 临时处理
                 end
                 
                 ROUTER_MSG_L15_REQ: begin
                     // L1.5 Cache请求 - 路由到L1.5 Cache
-                    router_if.gpc2sm_ready = 1'b1; // 临时处理
+                    router_if.down_ready = 1'b1; // 临时处理
                 end
                 
                 ROUTER_MSG_MMU_REQ: begin
-                    router_if.gpc2sm_ready = 1'b1; // 临时处理
+                    router_if.down_ready = 1'b1; // 临时处理
                 end
                 
                 default: begin
-                    router_if.gpc2sm_ready = 1'b1;
+                    router_if.down_ready = 1'b1;
                 end
             endcase
         end else begin
             // 没有消息，设置所有ready信号
-            router_if.gpc2sm_ready = 1'b1;
+            router_if.down_ready = 1'b1;
         end
     end
     
@@ -73,17 +73,17 @@ module rvgpu_sm_frontend #(
         // 优先级：L1.5响应 > MMU响应 > LDST响应
         if (l15_icache_if.resp_valid) begin
             // L1.5 Cache响应
-            router_if.sm2gpc_valid = 1'b1;
-            router_if.sm2gpc_msg = build_router_message_raw(ROUTER_MSG_L15_RESP, ROUTER_DST_GPC, {224'h0, l15_icache_if.resp_data});
+            router_if.up_valid = 1'b1;
+            router_if.up_msg = build_router_message_raw(ROUTER_MSG_L15_RESP, ROUTER_DST_GPC, {224'h0, l15_icache_if.resp_data});
             
         end else if (tlb_if.resp_valid) begin
             // MMU响应
-            router_if.sm2gpc_valid = 1'b1;
-            router_if.sm2gpc_msg = build_router_message_raw(ROUTER_MSG_MMU_RESP, ROUTER_DST_GPC, {224'h0, 32'h0});
+            router_if.up_valid = 1'b1;
+            router_if.up_msg = build_router_message_raw(ROUTER_MSG_MMU_RESP, ROUTER_DST_GPC, {224'h0, 32'h0});
             
         end else begin
-            router_if.sm2gpc_valid = 1'b0;
-            router_if.sm2gpc_msg = build_router_message_raw();
+            router_if.up_valid = 1'b0;
+            router_if.up_msg = build_router_message_raw();
         end
     end
 

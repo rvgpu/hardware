@@ -37,7 +37,7 @@ module rvgpu_gpc_block_scheduler #(
     rvgpu_internal_noc_if.device noc_if,
     
     // 路由器接口 - 连接TPC0
-    interface_gpc_router.down_port router_if,
+    interface_gpc_router.right_port router_if,
     
     // Raster Engine接口
     gpc_block_raster_if.scheduler raster_if
@@ -86,8 +86,8 @@ module rvgpu_gpc_block_scheduler #(
         noc_if.s_resp_status = 2'b00;
         noc_if.s_resp_last = 1'b0;
         
-        router_if.gpc2sm_valid = 1'b0;
-        router_if.gpc2sm_msg = '0;
+        router_if.down_valid = 1'b0;
+        router_if.down_msg = '0;
         
         raster_if.cmd_valid = 1'b0;
         
@@ -126,8 +126,8 @@ module rvgpu_gpc_block_scheduler #(
                 target_sm_n = select_sm_rr(rr_counter_r, NUM_TPC * 2);
                 
                 // 发送消息
-                router_if.gpc2sm_valid = 1'b1;
-                router_if.gpc2sm_msg = build_router_message_block(
+                router_if.down_valid = 1'b1;
+                router_if.down_msg = build_router_message_block(
                     ROUTER_MSG_BLOCK_DISP,
                     ROUTER_DST_TPC0_SM0 + target_sm_n, // 使用新选择的目标SM
                     current_job_r,
@@ -135,7 +135,7 @@ module rvgpu_gpc_block_scheduler #(
                 );
                 
                 // 等待握手完成
-                if (router_if.gpc2sm_valid && router_if.gpc2sm_ready) begin
+                if (router_if.down_valid && router_if.down_ready) begin
                     // 握手成功，进入下一个状态
                     state_n = WAIT_DISPATCH;
                     
@@ -185,15 +185,15 @@ module rvgpu_gpc_block_scheduler #(
     // 监听TPC完成消息（通过路由器）
     always_ff @(posedge clk) begin
         if (rst_n) begin
-            if (router_if.sm2gpc_valid && router_if.sm2gpc_ready) begin
-                if (router_if.sm2gpc_msg.msg_type == ROUTER_MSG_BLOCK_COMP) begin
+            if (router_if.up_valid && router_if.up_ready) begin
+                if (router_if.up_msg.msg_type == ROUTER_MSG_BLOCK_COMP) begin
                     // 解析完成消息
                     logic [31:0] completed_block_id;
                     logic [7:0] sm_id;
                     
                     // 从完成消息中提取block_id和sm_id
-                    completed_block_id = router_if.sm2gpc_msg.data.raw[31:0];
-                    sm_id = router_if.sm2gpc_msg.data.raw[39:32];
+                    completed_block_id = router_if.up_msg.data.raw[31:0];
+                    sm_id = router_if.up_msg.data.raw[39:32];
                     
                     // 记录完成信息（可选）
                     `GPC_PRINT("Scheduler", $sformatf("Block %d completed on SM %d", completed_block_id, sm_id));
@@ -202,7 +202,7 @@ module rvgpu_gpc_block_scheduler #(
         end
     end
     
-    assign router_if.sm2gpc_ready = 1'b1;
+    assign router_if.up_ready = 1'b1;
 
 endmodule : rvgpu_gpc_block_scheduler
 

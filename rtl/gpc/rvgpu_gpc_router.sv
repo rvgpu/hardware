@@ -34,13 +34,13 @@ module rvgpu_gpc_router #(
     input  logic rst_n,
     
     // 功能模块接口
-    interface_gpc_router.up_port l15_if,
-    interface_gpc_router.up_port mmu_if,
-    interface_gpc_router.up_port block_if,
-    interface_gpc_router.up_port raster_if,
+    interface_gpc_router.left_port l15_if,
+    interface_gpc_router.left_port mmu_if,
+    interface_gpc_router.left_port block_if,
+    interface_gpc_router.left_port raster_if,
     
     // TPC路由器接口
-    interface_gpc_router.down_port tpc_router_if
+    interface_gpc_router.right_port tpc_router_if
 );
     // 上游FIFO - 缓存来自TPC的响应消息
     interface_fifo_stream #(
@@ -82,40 +82,40 @@ module rvgpu_gpc_router #(
         down_fifo_stream_if.wr_data = build_router_message_raw();
         
         // 默认ready信号 - 默认为低，只有被选中的模块才能握手
-        l15_if.gpc2sm_ready = 1'b0;
-        mmu_if.gpc2sm_ready = 1'b0;
-        block_if.gpc2sm_ready = 1'b0;
-        raster_if.gpc2sm_ready = 1'b0;
+        l15_if.down_ready = 1'b0;
+        mmu_if.down_ready = 1'b0;
+        block_if.down_ready = 1'b0;
+        raster_if.down_ready = 1'b0;
         
         // 优先级仲裁：Block Scheduler > L1.5 Cache > MMU > Raster
-        // 所有gpc2sm消息都直接写入下游FIFO，发送到TPC
-        if (block_if.gpc2sm_valid && down_fifo_stream_if.wr_ready) begin
+        // 所有down消息都直接写入下游FIFO，发送到TPC
+        if (block_if.down_valid && down_fifo_stream_if.wr_ready) begin
             // Block Scheduler消息 - 最高优先级
-            down_fifo_stream_if.wr_data = block_if.gpc2sm_msg;
-            down_fifo_stream_if.wr_valid = block_if.gpc2sm_valid;
+            down_fifo_stream_if.wr_data = block_if.down_msg;
+            down_fifo_stream_if.wr_valid = block_if.down_valid;
             // 只有Block的ready为高，其他模块的ready为低
-            block_if.gpc2sm_ready = 1'b1;
+            block_if.down_ready = 1'b1;
         end
         // L1.5 Cache消息 - 第二优先级
-        else if (l15_if.gpc2sm_valid && down_fifo_stream_if.wr_ready) begin
-            down_fifo_stream_if.wr_data = l15_if.gpc2sm_msg;
-            down_fifo_stream_if.wr_valid = l15_if.gpc2sm_valid;
+        else if (l15_if.down_valid && down_fifo_stream_if.wr_ready) begin
+            down_fifo_stream_if.wr_data = l15_if.down_msg;
+            down_fifo_stream_if.wr_valid = l15_if.down_valid;
             // 只有L1.5 Cache的ready为高，其他模块的ready为低
-            l15_if.gpc2sm_ready = 1'b1;
+            l15_if.down_ready = 1'b1;
         end
         // MMU消息 - 第三优先级
-        else if (mmu_if.gpc2sm_valid && down_fifo_stream_if.wr_ready) begin
-            down_fifo_stream_if.wr_data = mmu_if.gpc2sm_msg;
-            down_fifo_stream_if.wr_valid = mmu_if.gpc2sm_valid;
+        else if (mmu_if.down_valid && down_fifo_stream_if.wr_ready) begin
+            down_fifo_stream_if.wr_data = mmu_if.down_msg;
+            down_fifo_stream_if.wr_valid = mmu_if.down_valid;
             // 只有MMU的ready为高，其他模块的ready为低
-            mmu_if.gpc2sm_ready = 1'b1;
+            mmu_if.down_ready = 1'b1;
         end
         // Raster消息 - 最低优先级
-        else if (raster_if.gpc2sm_valid && down_fifo_stream_if.wr_ready) begin
-            down_fifo_stream_if.wr_data = raster_if.gpc2sm_msg;
-            down_fifo_stream_if.wr_valid = raster_if.gpc2sm_valid;
+        else if (raster_if.down_valid && down_fifo_stream_if.wr_ready) begin
+            down_fifo_stream_if.wr_data = raster_if.down_msg;
+            down_fifo_stream_if.wr_valid = raster_if.down_valid;
             // 只有Raster的ready为高，其他模块的ready为低
-            raster_if.gpc2sm_ready = 1'b1;
+            raster_if.down_ready = 1'b1;
         end
     end
     
@@ -124,11 +124,11 @@ module rvgpu_gpc_router #(
     //=============================================================================
     always_comb begin
         // 从down_fifo读取数据到tpc_router_if
-        down_fifo_stream_if.rd_ready = tpc_router_if.gpc2sm_ready;  // TPC准备好时读取
+        down_fifo_stream_if.rd_ready = tpc_router_if.down_ready;  // TPC准备好时读取
         
         // 将down_fifo输出连接到TPC路由器接口
-        tpc_router_if.gpc2sm_msg = down_fifo_stream_if.rd_data;     // 从FIFO读取数据
-        tpc_router_if.gpc2sm_valid = down_fifo_stream_if.rd_valid;  // FIFO有数据时有效
+        tpc_router_if.down_msg = down_fifo_stream_if.rd_data;     // 从FIFO读取数据
+        tpc_router_if.down_valid = down_fifo_stream_if.rd_valid;  // FIFO有数据时有效
         
         // 上游FIFO暂时不使用，但保持接口完整性
         up_fifo_stream_if.rd_ready = 1'b0;  // 暂时不使用

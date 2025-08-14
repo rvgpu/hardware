@@ -46,7 +46,7 @@ module rvgpu_sm_top #(
     input  logic rst_n,
     
     // 路由器接口 - 新增
-    interface_gpc_router.up_port router_if,
+    interface_gpc_router.left_port router_if,
     
     // TPC接口
     gpc_block_tpc_if.sm block_dispatch_if,

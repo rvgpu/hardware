@@ -29,58 +29,72 @@ module rvgpu_tpc_router_node #(
     input  logic rst_n,
     
     // 上游接口（连接前一个节点或GPC路由器）
-    interface_gpc_router.up_port upstream_if,
+    interface_gpc_router.left_port upstream_if,
     
     // 下游接口（连接下一个TPC，最后一个TPC没有此接口）
-    interface_gpc_router.down_port downstream_if,
+    interface_gpc_router.right_port downstream_if,
     
     // SM接口
-    interface_gpc_router.down_port sm0_if,
-    interface_gpc_router.down_port sm1_if
+    interface_gpc_router.right_port sm0_if,
+    interface_gpc_router.right_port sm1_if
 );
+    
+    // 内部信号：下游接口是否准备好接收消息
+    logic downstream_ready;
+    logic sm0_ready, sm1_ready;
+    
+    // 计算下游接口的ready状态
+    assign downstream_ready = IS_LAST ? 1'b1 : downstream_if.down_ready;
+    assign sm0_ready = sm0_if.down_ready;
+    assign sm1_ready = sm1_if.down_ready;
     
     // 下行消息路由逻辑：从GPC到TPC/SM
     always_comb begin
-        // 默认值
-        sm0_if.gpc2sm_valid = 1'b0;
-        sm0_if.gpc2sm_msg = build_router_message_raw();
+        // 默认值 - 所有接口都不接收消息
+        sm0_if.down_valid = 1'b0;
+        sm0_if.down_msg = build_router_message_raw();
 
-        sm1_if.gpc2sm_valid = 1'b0;
-        sm1_if.gpc2sm_msg = build_router_message_raw();
+        sm1_if.down_valid = 1'b0;
+        sm1_if.down_msg = build_router_message_raw();
 
-        downstream_if.gpc2sm_valid = 1'b0;
-        downstream_if.gpc2sm_msg = build_router_message_raw();
+        downstream_if.down_valid = 1'b0;
+        downstream_if.down_msg = build_router_message_raw();
         
-        // 根据目标ID和消息类型进行路由
-        if (upstream_if.gpc2sm_valid) begin
-            case (upstream_if.gpc2sm_msg.dst_id[7:4])
+        // 只有当上游有有效消息时才进行路由
+        if (upstream_if.down_valid) begin
+            // 根据目标ID进行路由
+            case (upstream_if.down_msg.dst_id[7:4])
                 TPC_ID: begin
                     // 消息目标是当前TPC
-                    case (upstream_if.gpc2sm_msg.dst_id[3:2])
+                    case (upstream_if.down_msg.dst_id[3:2])
                         2'b00: begin
                             // 目标SM0
-                            sm0_if.gpc2sm_msg = upstream_if.gpc2sm_msg;
-                            sm0_if.gpc2sm_valid = upstream_if.gpc2sm_valid;
+                            if (sm0_ready) begin
+                                sm0_if.down_msg = upstream_if.down_msg;
+                                sm0_if.down_valid = 1'b1;
+                            end
                         end
                         2'b01: begin
                             // 目标SM1
-                            sm1_if.gpc2sm_msg = upstream_if.gpc2sm_msg;
-                            sm1_if.gpc2sm_valid = upstream_if.gpc2sm_valid;
+                            if (sm1_ready) begin
+                                sm1_if.down_msg = upstream_if.down_msg;
+                                sm1_if.down_valid = 1'b1;
+                            end
                         end
                         default: begin
                             // 无效的SM ID，转发到下游
-                            if (!IS_LAST) begin
-                                downstream_if.gpc2sm_msg = upstream_if.gpc2sm_msg;
-                                downstream_if.gpc2sm_valid = upstream_if.gpc2sm_valid;
+                            if (!IS_LAST && downstream_ready) begin
+                                downstream_if.down_msg = upstream_if.down_msg;
+                                downstream_if.down_valid = 1'b1;
                             end
                         end
                     endcase
                 end
                 default: begin
                     // 消息目标是其他TPC，转发到下游
-                    if (!IS_LAST) begin
-                        downstream_if.gpc2sm_msg = upstream_if.gpc2sm_msg;
-                        downstream_if.gpc2sm_valid = upstream_if.gpc2sm_valid;
+                    if (!IS_LAST && downstream_ready) begin
+                        downstream_if.down_msg = upstream_if.down_msg;
+                        downstream_if.down_valid = 1'b1;
                     end
                 end
             endcase
@@ -90,63 +104,42 @@ module rvgpu_tpc_router_node #(
     // 上行响应消息路由逻辑：从SM/TPC到GPC
     always_comb begin
         // 默认值
-        upstream_if.sm2gpc_valid = 1'b0;
-        upstream_if.sm2gpc_msg = build_router_message_raw();
+        upstream_if.up_valid = 1'b0;
+        upstream_if.up_msg = build_router_message_raw();
 
-        sm0_if.sm2gpc_ready = 1'b0;
-        sm1_if.sm2gpc_ready = 1'b0;
-        downstream_if.sm2gpc_ready = 1'b0;
+        sm0_if.up_ready = 1'b0;
+        sm1_if.up_ready = 1'b0;
+        downstream_if.up_ready = 1'b0;
         
-        // 优先级：SM0 > SM1 > downstream
-        if (sm0_if.sm2gpc_valid) begin
-            // SM0有上行消息，优先发送
-            upstream_if.sm2gpc_msg = sm0_if.sm2gpc_msg;
-            upstream_if.sm2gpc_valid = sm0_if.sm2gpc_valid;
-            sm0_if.sm2gpc_ready = upstream_if.sm2gpc_ready;
-            
-            // 其他接口不发送
-            sm1_if.sm2gpc_ready = 1'b0;
-            if (!IS_LAST) downstream_if.sm2gpc_ready = 1'b0;
-        end else if (sm1_if.sm2gpc_valid) begin
-            // SM1有上行消息，其次发送
-            upstream_if.sm2gpc_msg = sm1_if.sm2gpc_msg;
-            upstream_if.sm2gpc_valid = sm1_if.sm2gpc_valid;
-            sm1_if.sm2gpc_ready = upstream_if.sm2gpc_ready;
-            
-            // 其他接口不发送
-            sm0_if.sm2gpc_ready = 1'b0;
-            if (!IS_LAST) downstream_if.sm2gpc_ready = 1'b0;
-        end else if (!IS_LAST && downstream_if.sm2gpc_valid) begin
-            // 下游TPC有上行消息，最后发送
-            upstream_if.sm2gpc_msg = downstream_if.sm2gpc_msg;
-            upstream_if.sm2gpc_valid = downstream_if.sm2gpc_valid;
-            downstream_if.sm2gpc_ready = upstream_if.sm2gpc_ready;
-            
-            // SM接口不发送
-            sm0_if.sm2gpc_ready = 1'b0;
-            sm1_if.sm2gpc_ready = 1'b0;
+        // 轮询调度：公平地处理所有上行消息
+        if (sm0_if.up_valid && upstream_if.up_ready) begin
+            // SM0有上行消息且上游准备好接收
+            upstream_if.up_msg = sm0_if.up_msg;
+            upstream_if.up_valid = 1'b1;
+            sm0_if.up_ready = 1'b1;
+        end else if (sm1_if.up_valid && upstream_if.up_ready) begin
+            // SM1有上行消息且上游准备好接收
+            upstream_if.up_msg = sm1_if.up_msg;
+            upstream_if.up_valid = 1'b1;
+            sm1_if.up_ready = 1'b1;
+        end else if (!IS_LAST && downstream_if.up_valid && upstream_if.up_ready) begin
+            // 下游TPC有上行消息且上游准备好接收
+            upstream_if.up_msg = downstream_if.up_msg;
+            upstream_if.up_valid = 1'b1;
+            downstream_if.up_ready = 1'b1;
         end else begin
-            // 没有上行消息时，设置所有ready信号为高，表示可以接收消息
-            sm0_if.sm2gpc_ready = 1'b1;
-            sm1_if.sm2gpc_ready = 1'b1;
-            if (!IS_LAST) downstream_if.sm2gpc_ready = 1'b1;
+            // 没有上行消息或上游不准备好时，设置所有ready信号为高
+            // 这样下游接口可以随时发送消息
+            sm0_if.up_ready = 1'b1;
+            sm1_if.up_ready = 1'b1;
+            if (!IS_LAST) downstream_if.up_ready = 1'b1;
         end
     end
     
-    // Ready信号连接逻辑
+    // 上游ready信号逻辑：只有当所有下游接口都准备好时才向上游报告ready
     always_comb begin
-        // 下行ready信号 - 只有当所有下游接口都准备好时才向上游报告ready
-        upstream_if.gpc2sm_ready = (sm0_if.gpc2sm_ready && sm1_if.gpc2sm_ready && 
-                                   (IS_LAST || downstream_if.gpc2sm_ready));
-        
-        // 上行ready信号 - 当没有消息时，向上游报告ready，表示可以接收消息
-        // 当有消息时，ready信号在消息路由逻辑中已经正确设置
-        if (!sm0_if.sm2gpc_valid && !sm1_if.sm2gpc_valid && 
-            (IS_LAST || !downstream_if.sm2gpc_valid)) begin
-            upstream_if.gpc2sm_ready = 1'b1;
-        end
-        // 注意：当有消息时，upstream_if.sm2gpc_ready在消息路由逻辑中已经被正确设置
-        // 这里不需要else分支，因为消息路由逻辑会覆盖这个值
+        // 下行ready：只有当所有下游接口都准备好时才向上游报告ready
+        upstream_if.down_ready = sm0_ready && sm1_ready && downstream_ready;
     end
     
 endmodule : rvgpu_tpc_router_node

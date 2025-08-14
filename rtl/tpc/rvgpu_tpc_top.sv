@@ -18,14 +18,9 @@
 
 `include "rvgpu_typedef.svh"
 `include "interface_gpc_router.svh"
-`include "gpc_block_tpc_if.svh"
-`include "ldst_sm_if.svh"
-`include "interface_l15cache.svh"
-`include "rvgpu_mmu_if.svh"
+`include "rvgpu_config.svh"
 
 module rvgpu_tpc_top #(
-    parameter int NUM_SM = 2,                // 每个TPC中的SM数量
-    parameter int MAX_WARPS_PER_SM = 32,     // 每个SM最大warp数
     parameter int TPC_ID = 0                 // TPC ID
 ) (
     input  logic clk,
@@ -40,20 +35,10 @@ module rvgpu_tpc_top #(
     interface_gpc_router sm0_router_if();
     interface_gpc_router sm1_router_if();
     
-    // SM功能接口 - 每个SM需要的接口
-    gpc_block_tpc_if sm0_block_dispatch_if();
-    gpc_block_tpc_if sm1_block_dispatch_if();
-    ldst_sm_if sm0_ldst_if();
-    ldst_sm_if sm1_ldst_if();
-    interface_l15cache sm0_l15_icache_if();
-    interface_l15cache sm1_l15_icache_if();
-    mmu_if sm0_tlb_if();
-    mmu_if sm1_tlb_if();
-    
     // 内部路由器节点实例
     rvgpu_tpc_router_node #(
         .TPC_ID(TPC_ID),
-        .IS_LAST(0)  // 由外部控制是否为最后一个
+        .IS_LAST(TPC_ID == (`CONFIG_GPC_TPC_NUMBER - 1))  // 动态判断是否为最后一个TPC
     ) u_tpc_router (
         .clk(clk),
         .rst_n(rst_n),
@@ -63,37 +48,21 @@ module rvgpu_tpc_top #(
         .sm1_if(sm1_router_if)
     );
     
-    // SM实例化 - 分别实例化每个SM，连接所有必需的接口
+    // SM实例化
     rvgpu_sm_top #(
-        .SM_ID(0),
-        .WARP_COUNT(MAX_WARPS_PER_SM),
-        .MAX_THREAD_PER_WARP(32),
-        .MAX_ACTIVE_WARPS(16),
-        .NUM_CUDA_CORES(4)
+        .SM_ID(0)
     ) u_sm0 (
         .clk(clk),
         .rst_n(rst_n),
-        .router_if(sm0_router_if.left_port),
-        .block_dispatch_if(sm0_block_dispatch_if.sm),
-        .ldst_if(sm0_ldst_if.sm),
-        .l15_icache_if(sm0_l15_icache_if.requester),
-        .tlb_if(sm0_tlb_if.requester_port)
+        .router_if(sm0_router_if.left_port)
     );
     
     rvgpu_sm_top #(
-        .SM_ID(1),
-        .WARP_COUNT(MAX_WARPS_PER_SM),
-        .MAX_THREAD_PER_WARP(32),
-        .MAX_ACTIVE_WARPS(16),
-        .NUM_CUDA_CORES(4)
+        .SM_ID(1)
     ) u_sm1 (
         .clk(clk),
         .rst_n(rst_n),
-        .router_if(sm1_router_if.left_port),
-        .block_dispatch_if(sm1_block_dispatch_if.sm),
-        .ldst_if(sm1_ldst_if.sm),
-        .l15_icache_if(sm1_l15_icache_if.requester),
-        .tlb_if(sm1_tlb_if.requester_port)
+        .router_if(sm1_router_if.left_port)
     );
 
 endmodule : rvgpu_tpc_top

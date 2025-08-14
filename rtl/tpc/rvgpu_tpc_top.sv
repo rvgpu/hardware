@@ -57,8 +57,8 @@ module rvgpu_tpc_top #(
     ) u_tpc_router (
         .clk(clk),
         .rst_n(rst_n),
-        .upstream_if(upstream_if),
-        .downstream_if(downstream_if),
+        .left_if(upstream_if),
+        .right_if(downstream_if),
         .sm0_if(sm0_router_if),
         .sm1_if(sm1_router_if)
     );

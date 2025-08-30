@@ -17,8 +17,11 @@
 `define RVGPU_SM_TOP_SV
 
 `include "rvgpu_typedef.svh"
-`include "interface_gpc_router.svh"
+`include "rvgpu_config.svh"
 `include "types_gpc_router_message.svh"
+`include "interface_gpc_router.svh"
+`include "interface_sm_warp_dispatch.svh"
+`include "interface_sm_l1cache.svh"
 
 module rvgpu_sm_top #(
     parameter int SM_ID = 0                    // SM ID
@@ -29,57 +32,56 @@ module rvgpu_sm_top #(
     interface_gpc_router.left_port router_if
 );
 
-    // =========================================================================
-    // 内部信号声明
-    // =========================================================================
+    // ============================================================================
+    // 使用宏定义
+    // ============================================================================
+    localparam int WARP_COUNT = `CONFIG_SM_WARP_COUNT;        // 支持的warp数量
+    localparam int THREAD_COUNT = `CONFIG_WARP_THREAD_NUMBER;  // 每个warp的线程数
+    localparam int CUDA_CORE_COUNT = `CONFIG_SM_CUDA_CORE_COUNT; // CUDA核心数量
     
-    // 简化的SM状态
-    logic sm_ready;
-    logic sm_busy;
+    // ============================================================================
+    // 内部接口声明
+    // ============================================================================
     
-    // =========================================================================
-    // 基本逻辑
-    // =========================================================================
+    // Warp分发接口 - Frontend <-> CUDA Core
+    interface_sm_warp_dispatch warp_dispatch_if[CUDA_CORE_COUNT]();
     
-    // SM状态管理
-    always_ff @(posedge clk) begin
-        if (!rst_n) begin
-            sm_ready <= 1'b1;
-            sm_busy <= 1'b0;
-        end else begin
-            // 简化的状态更新逻辑
-            if (router_if.down_valid && router_if.down_ready) begin
-                // 接收到下行消息
-                sm_busy <= 1'b1;
-                sm_ready <= 1'b0;
-            end
-            
-            if (router_if.up_valid && router_if.up_ready) begin
-                // 发送上行消息
-                sm_busy <= 1'b0;
-                sm_ready <= 1'b1;
-            end
+    // L1 Cache接口 - CUDA Core <-> L1 Cache
+    interface_sm_l1cache l1_cache_if[CUDA_CORE_COUNT]();
+    
+    // ============================================================================
+    // SM Frontend模块实例化 - 负责Block拆分为warp的调度和L1缓存管理
+    // ============================================================================
+    rvgpu_sm_frontend #(
+        .SM_ID(SM_ID)
+    ) u_sm_frontend (
+        .clk(clk),
+        .rst_n(rst_n),
+        .router_if(router_if),
+        .warp_dispatch_if(warp_dispatch_if),
+        .l1_cache_if(l1_cache_if)
+    );
+
+    // ============================================================================
+    // CUDA Core模块实例化
+    // ============================================================================
+    genvar i;
+    generate
+        for (i = 0; i < CUDA_CORE_COUNT; i = i + 1) begin : cuda_core_gen
+            // CUDA Core单元实例化
+            rvgpu_cudacore_top #(
+                .CORE_ID(i),
+                .WARP_COUNT(WARP_COUNT),
+                .THREAD_COUNT(THREAD_COUNT)
+            ) u_cuda_core (
+                .clk(clk),
+                .rst_n(rst_n),
+                .warp_dispatch_if(warp_dispatch_if[i]),
+                .l1_cache_if(l1_cache_if[i])
+            );
         end
-    end
-    
-    // 路由器接口处理
-    always_comb begin
-        // 默认值
-        router_if.down_ready = sm_ready;  // 只有准备好时才接收下行消息
-        router_if.up_valid = 1'b0;
-        router_if.up_msg = build_router_message_raw();
-        
-        // 如果有下行消息且我们准备好，则处理
-        if (router_if.down_valid && sm_ready) begin
-            // 这里可以添加消息处理逻辑
-            // 暂时只是简单地向上游发送确认
-            router_if.up_valid = 1'b1;
-            router_if.up_msg = build_router_message_raw();  // 需要实现这个函数
-        end
-    end
-    
+    endgenerate
+
 endmodule : rvgpu_sm_top
 
-`endif // RVGPU_SM_TOP_SV 
-
-
+`endif // RVGPU_SM_TOP_SV

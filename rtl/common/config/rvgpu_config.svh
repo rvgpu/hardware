@@ -38,6 +38,12 @@
 `define CONFIG_WARP_THREAD_NUMBER           32     // 每个WARP的线程数
 
 //=============================================================================
+// SM(Streaming Multiprocessor) Configuration
+//=============================================================================
+`define CONFIG_SM_WARP_COUNT                32     // 每个SM支持的warp数量
+`define CONFIG_SM_CUDA_CORE_COUNT           4      // 每个SM的CUDA Core数量
+
+//=============================================================================
 // L2Cache Configuration
 //=============================================================================
 `define CONFIG_L2CACHE_SLICE_NUMBER         1

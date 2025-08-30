@@ -13,32 +13,38 @@
 // limitations under the License.
 //=============================================================================
 
-`ifndef INTERFACE_SM_WARP_DISPATCH_SVH
-`define INTERFACE_SM_WARP_DISPATCH_SVH
+`ifndef INTERFACE_SM_BLOCK_SCHEDULER_SVH
+`define INTERFACE_SM_BLOCK_SCHEDULER_SVH
 
 `include "rvgpu_typedef.svh"
 `include "rvgpu_config.svh"
 `include "types_job_cluster.svh"
 
-interface interface_sm_warp_dispatch;
-    t_job_cluster job_cluster;
-    logic [31:0] warp_id;
-    
+// Block Scheduler接口
+// 用于router_arbiter与block_scheduler之间的通信
+interface interface_sm_block_scheduler;
+    // Block任务信号
     logic valid;
+    t_job_cluster data;
     logic ready;
     
-    // 调度器端口
-    modport frontend_port (
-        output valid, warp_id, job_cluster,
-        input  ready
+    // Block完成信号
+    logic block_complete;
+    t_job_cluster completed_job_cluster;
+    
+    // Router端口 - 发送Block任务，接收Block完成信号
+    modport router_port (
+        output valid, data,
+        input  ready,
+        input  block_complete, completed_job_cluster
     );
     
-    // Core端口
-    modport core_port (
-        input  valid, warp_id, job_cluster,
-        output ready
+    // Scheduler端口 - 接收Block任务，发送Block完成信号
+    modport scheduler_port (
+        input  valid, data,
+        output ready,
+        output block_complete, completed_job_cluster
     );
-    
 endinterface
 
-`endif // INTERFACE_SM_WARP_DISPATCH_SVH
+`endif // INTERFACE_SM_BLOCK_SCHEDULER_SVH

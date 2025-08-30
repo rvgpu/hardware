@@ -17,75 +17,72 @@
 `define RVGPU_SM_FRONTEND_SV
 
 `include "rvgpu_typedef.svh"
+`include "rvgpu_config.svh"
 `include "interface_gpc_router.svh"
-`include "gpc_block_tpc_if.svh"
-`include "ldst_sm_if.svh"
-`include "interface_l15cache.svh"
-`include "rvgpu_mmu_if.svh"
+`include "types_gpc_router_message.svh"
+`include "interface_sm_warp_dispatch.svh"
+`include "interface_sm_l1cache.svh"
+`include "interface_fifo_stream.svh"
+`include "rvgpu_fifo_pkg.svh"
 
-// SM前端模块 - 处理路由器接口的接收和发送
 module rvgpu_sm_frontend #(
     parameter int SM_ID = 0
 ) (
     input  logic clk,
     input  logic rst_n,
     
-    // 路由器接口
+    // 外部路由器接口
     interface_gpc_router.left_port router_if,
     
-    // 功能模块接口
-    gpc_block_tpc_if.sm block_dispatch_if,
-    ldst_sm_if.sm ldst_if,
-    interface_l15cache.requester l15_icache_if,
-    mmu_if.requester_port tlb_if
+    // Warp分发接口 - 连接CUDA Core
+    interface_sm_warp_dispatch.frontend_port warp_dispatch_if[`CONFIG_SM_CUDA_CORE_COUNT],
+    
+    // L1 Cache接口 - 连接CUDA Core
+    interface_sm_l1cache.cache l1_cache_if[`CONFIG_SM_CUDA_CORE_COUNT]
 );
+
+    interface_gpc_router router_block_scheduler_if();
+    interface_gpc_router router_l1cache_if();
     
-    // 消息解析和路由逻辑
-    always_comb begin
-        // 根据消息类型路由到相应的功能模块
-        if (router_if.down_valid) begin
-            case (router_if.down_msg.msg_type)
-                ROUTER_MSG_BLOCK_DISP: begin
-                    router_if.down_ready = 1'b1; // 临时处理
-                end
-                
-                ROUTER_MSG_L15_REQ: begin
-                    // L1.5 Cache请求 - 路由到L1.5 Cache
-                    router_if.down_ready = 1'b1; // 临时处理
-                end
-                
-                ROUTER_MSG_MMU_REQ: begin
-                    router_if.down_ready = 1'b1; // 临时处理
-                end
-                
-                default: begin
-                    router_if.down_ready = 1'b1;
-                end
-            endcase
-        end else begin
-            // 没有消息，设置所有ready信号
-            router_if.down_ready = 1'b1;
-        end
-    end
+    // ============================================================================
+    // 路由器仲裁器实例化
+    // ============================================================================
     
-    // 响应消息发送逻辑
-    always_comb begin
-        // 优先级：L1.5响应 > MMU响应 > LDST响应
-        if (l15_icache_if.resp_valid) begin
-            // L1.5 Cache响应
-            router_if.up_valid = 1'b1;
-            router_if.up_msg = build_router_message_raw(ROUTER_MSG_L15_RESP, ROUTER_DST_GPC, {224'h0, l15_icache_if.resp_data});
-            
-        end else if (tlb_if.resp_valid) begin
-            // MMU响应
-            router_if.up_valid = 1'b1;
-            router_if.up_msg = build_router_message_raw(ROUTER_MSG_MMU_RESP, ROUTER_DST_GPC, {224'h0, 32'h0});
-            
-        end else begin
-            router_if.up_valid = 1'b0;
-            router_if.up_msg = build_router_message_raw();
-        end
-    end
+    rvgpu_sm_router_arbiter #(
+        .SM_ID(SM_ID)
+    ) u_router_arbiter (
+        .clk(clk),
+        .rst_n(rst_n),
+        .router_if(router_if),
+        .block_scheduler_if(router_block_scheduler_if.right_port),
+        .l1cache_if(router_l1cache_if.right_port)
+    );
+    
+    // ============================================================================
+    // Block调度器实例化
+    // ============================================================================
+    
+    rvgpu_sm_block_scheduler #(
+        .SM_ID(SM_ID)
+    ) u_block_scheduler (
+        .clk(clk),
+        .rst_n(rst_n),
+        .router_if(router_block_scheduler_if.left_port),
+        .warp_dispatch_if(warp_dispatch_if)
+    );
+    
+    // ============================================================================
+    // L1 Cache顶层模块实例化
+    // ============================================================================
+    
+    rvgpu_sm_l1_cache_top #(
+        .SM_ID(SM_ID)
+    ) u_l1_cache_top (
+        .clk(clk),
+        .rst_n(rst_n),
+        .router_if(router_l1cache_if.left_port),
+        .core_if(l1_cache_if)
+    );
 
 endmodule : rvgpu_sm_frontend
 

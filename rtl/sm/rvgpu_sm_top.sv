@@ -24,7 +24,7 @@
 `include "interface_sm_l1cache.svh"
 
 module rvgpu_sm_top #(
-    parameter int SM_ID = 0                    // SM ID
+    parameter int SM_ID = 0
 ) (
     input  logic clk,
     input  logic rst_n,
@@ -32,26 +32,13 @@ module rvgpu_sm_top #(
     interface_gpc_router.left_port router_if
 );
 
-    // ============================================================================
-    // 使用宏定义
-    // ============================================================================
-    localparam int WARP_COUNT = `CONFIG_SM_WARP_COUNT;        // 支持的warp数量
-    localparam int THREAD_COUNT = `CONFIG_WARP_THREAD_NUMBER;  // 每个warp的线程数
-    localparam int CUDA_CORE_COUNT = `CONFIG_SM_CUDA_CORE_COUNT; // CUDA核心数量
-    
-    // ============================================================================
-    // 内部接口声明
-    // ============================================================================
+    localparam int CUDA_CORE_COUNT = `CONFIG_SM_CUDA_CORE_COUNT;
     
     // Warp分发接口 - Frontend <-> CUDA Core
-    interface_sm_warp_dispatch warp_dispatch_if[CUDA_CORE_COUNT]();
-    
+    interface_sm_warp_dispatch warp_dispatch_if[CUDA_CORE_COUNT]();    
     // L1 Cache接口 - CUDA Core <-> L1 Cache
     interface_sm_l1cache l1_cache_if[CUDA_CORE_COUNT]();
     
-    // ============================================================================
-    // SM Frontend模块实例化 - 负责Block拆分为warp的调度和L1缓存管理
-    // ============================================================================
     rvgpu_sm_frontend #(
         .SM_ID(SM_ID)
     ) u_sm_frontend (
@@ -62,17 +49,12 @@ module rvgpu_sm_top #(
         .l1_cache_if(l1_cache_if)
     );
 
-    // ============================================================================
-    // CUDA Core模块实例化
-    // ============================================================================
     genvar i;
     generate
         for (i = 0; i < CUDA_CORE_COUNT; i = i + 1) begin : cuda_core_gen
-            // CUDA Core单元实例化
             rvgpu_cudacore_top #(
                 .CORE_ID(i),
-                .WARP_COUNT(WARP_COUNT),
-                .THREAD_COUNT(THREAD_COUNT)
+                .SM_ID(SM_ID)
             ) u_cuda_core (
                 .clk(clk),
                 .rst_n(rst_n),

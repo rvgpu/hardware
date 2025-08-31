@@ -23,8 +23,7 @@
 
 module rvgpu_cudacore_top #(
     parameter int CORE_ID = 0,          // CUDA Core ID
-    parameter int WARP_COUNT = 32,      // 支持的warp数量  
-    parameter int THREAD_COUNT = 32     // 每个warp的线程数
+    parameter int SM_ID = 0            // SM ID
 ) (
     input  logic clk,
     input  logic rst_n,
@@ -35,6 +34,8 @@ module rvgpu_cudacore_top #(
     // L1 Cache接口 - 连接到L1 Cache
     interface_sm_l1cache.core l1_cache_if
 );
+    localparam int WARP_COUNT = `CONFIG_SM_WARP_COUNT;
+    localparam int THREAD_COUNT = `CONFIG_WARP_THREAD_NUMBER;
 
     // 设置准备好接收新的Warp
     assign warp_dispatch_if.ready = 1'b1;  // 始终准备好接收新的Warp

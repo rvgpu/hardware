@@ -37,7 +37,8 @@ VCS_FLAGS := -full64 -sverilog +v2k \
 	-work $(OUT_DIR)/work \
 	-cm_dir $(OUT_DIR)/cm \
 	-cm_name $(OUT_DIR)/coverage \
-	+define+RVGPU_HARDWARE=$(RVGPU_HARDWARE)
+	+define+RVGPU_HARDWARE=$(RVGPU_HARDWARE) \
+	-timescale=1ns/1ps
 
 # 文件列表和包含目录
 RTL_FILELIST := $(RTL_DIR)/filelists/rvgpu_rtl.fl

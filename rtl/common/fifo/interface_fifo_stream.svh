@@ -20,12 +20,12 @@ interface interface_fifo_stream #(
   parameter int unsigned DATA_WIDTH = 32,
   parameter int unsigned FIFO_DEPTH = 16
 );
-  // 写入接口 (Stream风格)
+  // 写入接口
   logic                    wr_valid;
   logic                    wr_ready;
   logic [DATA_WIDTH-1:0]   wr_data;
   
-  // 读取接口 (Stream风格)
+  // 读取接口
   logic                    rd_valid;
   logic                    rd_ready;
   logic [DATA_WIDTH-1:0]   rd_data;
@@ -33,7 +33,6 @@ interface interface_fifo_stream #(
   // 状态输出
   logic [FIFO_DEPTH:0]    state_oh;
   
-  // 握手信号
   modport fifo_port (
     input  wr_valid, wr_data,
     output wr_ready,

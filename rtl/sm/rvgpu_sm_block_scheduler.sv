@@ -39,41 +39,17 @@ module rvgpu_sm_block_scheduler #(
     interface_sm_warp_dispatch.frontend_port warp_dispatch_if[`CONFIG_SM_CUDA_CORE_COUNT]
 );
 
-    // ============================================================================
-    // 使用宏定义
-    // ============================================================================
-    localparam int WARP_COUNT = `CONFIG_SM_WARP_COUNT;        // 支持的warp数量
-    localparam int THREAD_COUNT = `CONFIG_WARP_THREAD_NUMBER;  // 每个warp的线程数
-    localparam int CUDA_CORE_COUNT = `CONFIG_SM_CUDA_CORE_COUNT; // CUDA核心数量
-    
-    // ============================================================================
-    // 内部FIFO接口
-    // ============================================================================
-    
-    // Block分发FIFO接口
-    interface_fifo_stream #(.DATA_WIDTH($bits(t_job_cluster)), .FIFO_DEPTH(4)) block_fifo_if();
-    
-    // ============================================================================
-    // FIFO实例化
-    // ============================================================================
-    
-    // Block分发FIFO
-    rvgpu_fifo_stream #(
-        .DATA_WIDTH($bits(t_job_cluster)),
-        .FIFO_DEPTH(4)
-    ) u_block_fifo (
-        .clk(clk),
-        .rst_n(rst_n),
-        .fifo_if(block_fifo_if)
-    );
-    
+    localparam int WARP_COUNT = `CONFIG_SM_WARP_COUNT;
+    localparam int THREAD_COUNT = `CONFIG_WARP_THREAD_NUMBER;
+    localparam int CUDA_CORE_COUNT = `CONFIG_SM_CUDA_CORE_COUNT;
+
     // ============================================================================
     // 内部信号
     // ============================================================================
     
     // Block和Warp调度相关信号
     logic [CUDA_CORE_COUNT-1:0] core_ready;
-    logic [3:0] next_core_id;  // 下一个要分配的CUDA Core ID
+    logic [3:0] next_core_id;
     
     // 当前正在处理的Block任务
     t_job_cluster current_job_cluster;
@@ -89,21 +65,6 @@ module rvgpu_sm_block_scheduler #(
     // ============================================================================
     // Router接口处理
     // ============================================================================
-    
-    // 处理从router接收到的消息
-    always_comb begin
-        // 默认值
-        router_if.down_ready = 1'b0;
-        block_fifo_if.wr_valid = 1'b0;
-        block_fifo_if.wr_data = '0;
-        
-        if (router_if.down_valid && router_if.down_msg.msg_type == ROUTER_MSG_BLOCK_DISP) begin
-            // 将Block分发消息写入FIFO
-            block_fifo_if.wr_valid = 1'b1;
-            block_fifo_if.wr_data = router_if.down_msg.data.block;
-            router_if.down_ready = block_fifo_if.wr_ready;
-        end
-    end
     
     // 处理发送到router的消息
     always_comb begin
@@ -138,7 +99,6 @@ module rvgpu_sm_block_scheduler #(
     // 状态机定义
     typedef enum logic [1:0] {
         IDLE,           // 空闲状态
-        RECV_BLOCK,     // 接收Block任务
         DISPATCH_WARPS, // 分发Warps
         WAIT_COMPLETE   // 等待完成
     } block_state_t;
@@ -164,10 +124,10 @@ module rvgpu_sm_block_scheduler #(
                 IDLE: begin
                     block_complete <= 1'b0;
                     
-                    if (block_fifo_if.rd_valid) begin
+                    if (router_if.down_valid && router_if.down_msg.msg_type == ROUTER_MSG_BLOCK_DISP) begin
                         // 接收新的Block任务
                         t_job_cluster job_cluster;
-                        job_cluster = t_job_cluster'(block_fifo_if.rd_data);
+                        job_cluster = router_if.down_msg.data.block;
                         current_job_cluster <= job_cluster;
                         job_valid <= 1'b1;
                         current_block_id <= job_cluster.curr_block_id;
@@ -204,10 +164,10 @@ module rvgpu_sm_block_scheduler #(
         next_block_state = block_state;
         next_core_id = 0;
         
-        // FIFO接口默认值
-        block_fifo_if.rd_ready = 1'b0;
+        // 路由器接口默认值
+        router_if.down_ready = 1'b0;
         
-        // warp分发接口默认值 - 使用单独的赋值语句
+        // warp分发接口默认值 - 使用显式赋值
         warp_dispatch_if[0].valid = 1'b0;
         warp_dispatch_if[0].warp_id = '0;
         warp_dispatch_if[0].job_cluster = '0;
@@ -227,52 +187,66 @@ module rvgpu_sm_block_scheduler #(
         case (block_state)
             IDLE: begin
                 // 准备接收新的Block任务
-                block_fifo_if.rd_ready = 1'b1;
+                router_if.down_ready = 1'b1;
                 
-                if (block_fifo_if.rd_valid) begin
+                if (router_if.down_valid && router_if.down_msg.msg_type == ROUTER_MSG_BLOCK_DISP) begin
                     next_block_state = DISPATCH_WARPS;
                 end
             end
             
             DISPATCH_WARPS: begin
-                // 使用组合逻辑找到可用的CUDA Core
-                if (core_ready[0]) begin
-                    next_core_id = 4'd0;
-                end else if (core_ready[1]) begin
-                    next_core_id = 4'd1;
-                end else if (core_ready[2]) begin
-                    next_core_id = 4'd2;
-                end else if (core_ready[3]) begin
-                    next_core_id = 4'd3;
-                end else begin
-                    next_core_id = 4'd0; // 默认值
-                end
+                // 使用优先编码器找到第一个可用的CUDA Core
+                if (core_ready[0])      next_core_id = 4'd0;
+                else if (core_ready[1]) next_core_id = 4'd1;
+                else if (core_ready[2]) next_core_id = 4'd2;
+                else if (core_ready[3]) next_core_id = 4'd3;
+                else                    next_core_id = 4'd0; // 默认值
                 
                 // 如果找到可用Core且还有warp需要分发
                 if (next_warp_id < warp_count_per_block) begin
-                    // 使用条件赋值替代变量索引
-                    if (next_core_id == 4'd0 && core_ready[0]) begin
-                        warp_dispatch_if[0].valid = 1'b1;
-                        warp_dispatch_if[0].warp_id = next_warp_id;
-                        warp_dispatch_if[0].job_cluster = current_job_cluster;
-                        next_block_state = DISPATCH_WARPS;
-                    end else if (next_core_id == 4'd1 && core_ready[1]) begin
-                        warp_dispatch_if[1].valid = 1'b1;
-                        warp_dispatch_if[1].warp_id = next_warp_id;
-                        warp_dispatch_if[1].job_cluster = current_job_cluster;
-                        next_block_state = DISPATCH_WARPS;
-                    end else if (next_core_id == 4'd2 && core_ready[2]) begin
-                        warp_dispatch_if[2].valid = 1'b1;
-                        warp_dispatch_if[2].warp_id = next_warp_id;
-                        warp_dispatch_if[2].job_cluster = current_job_cluster;
-                        next_block_state = DISPATCH_WARPS;
-                    end else if (next_core_id == 4'd3 && core_ready[3]) begin
-                        warp_dispatch_if[3].valid = 1'b1;
-                        warp_dispatch_if[3].warp_id = next_warp_id;
-                        warp_dispatch_if[3].job_cluster = current_job_cluster;
-                        next_block_state = DISPATCH_WARPS;
-                    end
-                end else if (next_warp_id >= warp_count_per_block) begin
+                    // 使用case语句为每个core分配warp
+                    case (next_core_id)
+                        4'd0: begin
+                            if (core_ready[0]) begin
+                                warp_dispatch_if[0].valid = 1'b1;
+                                warp_dispatch_if[0].warp_id = next_warp_id;
+                                warp_dispatch_if[0].job_cluster = current_job_cluster;
+                                next_block_state = DISPATCH_WARPS;
+                            end
+                        end
+                        
+                        4'd1: begin
+                            if (core_ready[1]) begin
+                                warp_dispatch_if[1].valid = 1'b1;
+                                warp_dispatch_if[1].warp_id = next_warp_id;
+                                warp_dispatch_if[1].job_cluster = current_job_cluster;
+                                next_block_state = DISPATCH_WARPS;
+                            end
+                        end
+                        
+                        4'd2: begin
+                            if (core_ready[2]) begin
+                                warp_dispatch_if[2].valid = 1'b1;
+                                warp_dispatch_if[2].warp_id = next_warp_id;
+                                warp_dispatch_if[2].job_cluster = current_job_cluster;
+                                next_block_state = DISPATCH_WARPS;
+                            end
+                        end
+                        
+                        4'd3: begin
+                            if (core_ready[3]) begin
+                                warp_dispatch_if[3].valid = 1'b1;
+                                warp_dispatch_if[3].warp_id = next_warp_id;
+                                warp_dispatch_if[3].job_cluster = current_job_cluster;
+                                next_block_state = DISPATCH_WARPS;
+                            end
+                        end
+                        
+                        default: begin
+                            // 不做任何事
+                        end
+                    endcase
+                end else begin
                     // 所有warp已分发，等待完成
                     next_block_state = WAIT_COMPLETE;
                 end

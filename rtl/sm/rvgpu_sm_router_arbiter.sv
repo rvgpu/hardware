@@ -38,147 +38,125 @@ module rvgpu_sm_router_arbiter #(
     // L1 Cache路由接口
     interface_gpc_router.right_port l1cache_if
 );
+    // ============================================================================
+    // 常量定义
+    // ============================================================================
+    localparam int ROUTER_MSG_WIDTH = $bits(t_router_message);
+    localparam int DOWN_FIFO_DEPTH = 8;
+    localparam int UP_FIFO_DEPTH = 4;
 
-    // ============================================================================
-    // 使用宏定义
-    // ============================================================================
-    localparam int WARP_COUNT = `CONFIG_SM_WARP_COUNT;
-    localparam int THREAD_COUNT = `CONFIG_WARP_THREAD_NUMBER;
-    localparam int CUDA_CORE_COUNT = `CONFIG_SM_CUDA_CORE_COUNT;
     
     // ============================================================================
     // 内部FIFO接口
     // ============================================================================
     
-    // Block分发FIFO接口
-    interface_fifo_stream #(.DATA_WIDTH(256), .FIFO_DEPTH(4)) block_fifo_if();
-    
-    // L1 Cache请求FIFO接口
-    interface_fifo_stream #(.DATA_WIDTH(256), .FIFO_DEPTH(8)) l1_req_fifo_if();
-    
-    // ============================================================================
-    // FIFO实例化
-    // ============================================================================
-    
-    // Block分发FIFO
-    rvgpu_fifo_stream #(
-        .DATA_WIDTH(256),
-        .FIFO_DEPTH(4)
-    ) u_block_fifo (
+    // 下行FIFO - 从router_if到下游模块
+    interface_fifo_stream #(.DATA_WIDTH(ROUTER_MSG_WIDTH), .FIFO_DEPTH(DOWN_FIFO_DEPTH)) down_fifo_if();
+    rvgpu_fifo_stream #(.DATA_WIDTH(ROUTER_MSG_WIDTH), .FIFO_DEPTH(DOWN_FIFO_DEPTH)) u_down_fifo (
         .clk(clk),
         .rst_n(rst_n),
-        .fifo_if(block_fifo_if)
+        .fifo_if(down_fifo_if)
     );
     
-    // L1 Cache请求FIFO
-    rvgpu_fifo_stream #(
-        .DATA_WIDTH(256),
-        .FIFO_DEPTH(8)
-    ) u_l1_req_fifo (
+    // 上行FIFO - 从下游模块到router_if
+    interface_fifo_stream #(.DATA_WIDTH(ROUTER_MSG_WIDTH), .FIFO_DEPTH(UP_FIFO_DEPTH)) up_fifo_if();
+    rvgpu_fifo_stream #(.DATA_WIDTH(ROUTER_MSG_WIDTH), .FIFO_DEPTH(UP_FIFO_DEPTH)) u_up_fifo (
         .clk(clk),
         .rst_n(rst_n),
-        .fifo_if(l1_req_fifo_if)
+        .fifo_if(up_fifo_if)
     );
-    
+
     // ============================================================================
-    // 内部信号
-    // ============================================================================
-    
-    // 路由器消息处理状态
-    typedef enum logic [1:0] {
-        IDLE,           // 空闲状态
-        RECV_MSG,       // 接收消息
-        SEND_MSG,       // 发送消息
-        WAIT_ACK        // 等待确认
-    } router_state_t;
-    
-    router_state_t current_state, next_state;
-    
-    // 接收到的消息类型
-    e_router_msg_type recv_msg_type;
-    
-    // 临时存储接收到的消息
-    t_router_message recv_msg;
-    
-    // 目标选择
-    logic is_block_scheduler_msg;
-    logic is_l1cache_msg;
-    
-    // ============================================================================
-    // 消息类型判断
+    // 路由器接口连接 - 使用内部FIFO缓存
     // ============================================================================
     
-    // 判断消息是发给Block调度器还是L1 Cache
+    // 下行消息接收 (从外部router到下行FIFO)
     always_comb begin
-        is_block_scheduler_msg = 1'b0;
-        is_l1cache_msg = 1'b0;
+        // 默认值
+        router_if.down_ready = down_fifo_if.wr_ready;
+        down_fifo_if.wr_valid = router_if.down_valid;
+        down_fifo_if.wr_data = router_if.down_msg;
+    end
+    
+    // 下行消息分发 (从下行FIFO到下游模块)
+    always_comb begin
+        // 默认值
+        block_scheduler_if.down_valid = 1'b0;
+        block_scheduler_if.down_msg = '0;
+        l1cache_if.down_valid = 1'b0;
+        l1cache_if.down_msg = '0;
+        down_fifo_if.rd_ready = 1'b0;
         
-        if (router_if.down_valid) begin
-            case (router_if.down_msg.msg_type)
+        // 只有当FIFO有数据时才进行分发
+        if (down_fifo_if.rd_valid) begin
+            // 将FIFO数据转换为router消息类型
+            t_router_message router_msg;
+            router_msg = t_router_message'(down_fifo_if.rd_data);
+            
+            // 根据消息类型决定发送到哪个模块
+            case (router_msg.msg_type)
                 ROUTER_MSG_BLOCK_DISP: begin
-                    is_block_scheduler_msg = 1'b1;
+                    // Block调度器消息
+                    if (block_scheduler_if.down_ready) begin
+                        block_scheduler_if.down_valid = 1'b1;
+                        block_scheduler_if.down_msg = router_msg;
+                        down_fifo_if.rd_ready = 1'b1;
+                    end
                 end
                 
                 ROUTER_MSG_L15_RESP: begin
-                    is_l1cache_msg = 1'b1;
+                    // L1 Cache消息
+                    if (l1cache_if.down_ready) begin
+                        l1cache_if.down_valid = 1'b1;
+                        l1cache_if.down_msg = router_msg;
+                        down_fifo_if.rd_ready = 1'b1;
+                    end
                 end
                 
                 default: begin
-                    // 不支持的消息类型
+                    // 不支持的消息类型，直接丢弃
+                    down_fifo_if.rd_ready = 1'b1;
                 end
             endcase
         end
     end
     
-    // ============================================================================
-    // 路由器接口连接
-    // ============================================================================
-    
-    // 下行消息路由 (从外部router到内部模块)
+    // 上行消息仲裁 (从内部模块到上行FIFO)
     always_comb begin
         // 默认值
-        router_if.down_ready = 1'b0;
-        block_scheduler_if.down_valid = 1'b0;
-        block_scheduler_if.down_msg = '0;
-        l1cache_if.down_valid = 1'b0;
-        l1cache_if.down_msg = '0;
+        up_fifo_if.wr_valid = 1'b0;
+        up_fifo_if.wr_data = '0;
+        block_scheduler_if.up_ready = 1'b0;
+        l1cache_if.up_ready = 1'b0;
         
-        if (router_if.down_valid) begin
-            if (is_block_scheduler_msg) begin
-                // 发送给Block调度器
-                block_scheduler_if.down_valid = 1'b1;
-                block_scheduler_if.down_msg = router_if.down_msg;
-                router_if.down_ready = block_scheduler_if.down_ready;
-            end else if (is_l1cache_msg) begin
-                // 发送给L1 Cache
-                l1cache_if.down_valid = 1'b1;
-                l1cache_if.down_msg = router_if.down_msg;
-                router_if.down_ready = l1cache_if.down_ready;
-            end else begin
-                // 不支持的消息类型，直接丢弃
-                router_if.down_ready = 1'b1;
-            end
+        // 简单优先级仲裁：Block调度器优先级高于L1 Cache
+        if (block_scheduler_if.up_valid && up_fifo_if.wr_ready) begin
+            // Block调度器的上行消息
+            up_fifo_if.wr_valid = 1'b1;
+            // 将router消息转换为FIFO数据类型
+            up_fifo_if.wr_data = ROUTER_MSG_WIDTH'(block_scheduler_if.up_msg);
+            block_scheduler_if.up_ready = 1'b1;
+        end else if (l1cache_if.up_valid && up_fifo_if.wr_ready) begin
+            // L1 Cache的上行消息
+            up_fifo_if.wr_valid = 1'b1;
+            // 将router消息转换为FIFO数据类型
+            up_fifo_if.wr_data = ROUTER_MSG_WIDTH'(l1cache_if.up_msg);
+            l1cache_if.up_ready = 1'b1;
         end
     end
     
-    // 上行消息路由 (从内部模块到外部router)
+    // 上行消息发送 (从上行FIFO到外部router)
     always_comb begin
         // 默认值
         router_if.up_valid = 1'b0;
         router_if.up_msg = '0;
-        block_scheduler_if.up_ready = 1'b0;
-        l1cache_if.up_ready = 1'b0;
+        up_fifo_if.rd_ready = 1'b0;
         
-        if (block_scheduler_if.up_valid) begin
-            // Block调度器的上行消息
+        // 当上行FIFO有数据且router准备好接收时，发送数据
+        if (up_fifo_if.rd_valid && router_if.up_ready) begin
             router_if.up_valid = 1'b1;
-            router_if.up_msg = block_scheduler_if.up_msg;
-            block_scheduler_if.up_ready = router_if.up_ready;
-        end else if (l1cache_if.up_valid) begin
-            // L1 Cache的上行消息
-            router_if.up_valid = 1'b1;
-            router_if.up_msg = l1cache_if.up_msg;
-            l1cache_if.up_ready = router_if.up_ready;
+            router_if.up_msg = up_fifo_if.rd_data;
+            up_fifo_if.rd_ready = 1'b1;
         end
     end
 

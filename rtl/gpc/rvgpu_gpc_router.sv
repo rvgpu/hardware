@@ -41,14 +41,16 @@ module rvgpu_gpc_router #(
     // TPC路由器接口
     interface_gpc_router.right_port right_if
 );
+    localparam int ROUTER_MESSAGE_WIDTH = $bits(t_router_message);
+
     // 上游FIFO - 缓存来自TPC的响应消息
     interface_fifo_stream #(
-        .DATA_WIDTH($bits(t_router_message)),  // 268位 = 4+8+256
+        .DATA_WIDTH(ROUTER_MESSAGE_WIDTH),  // 268位 = 4+8+256
         .FIFO_DEPTH(32)  // 深度32
     ) up_fifo_stream_if();
     
     rvgpu_fifo_stream #(
-        .DATA_WIDTH($bits(t_router_message)),
+        .DATA_WIDTH(ROUTER_MESSAGE_WIDTH),
         .FIFO_DEPTH(32)
     ) u_up_fifo (
         .clk(clk),
@@ -58,12 +60,12 @@ module rvgpu_gpc_router #(
     
     // 下游FIFO - 缓存发往TPC的请求消息
     interface_fifo_stream #(
-        .DATA_WIDTH($bits(t_router_message)),
+        .DATA_WIDTH(ROUTER_MESSAGE_WIDTH),
         .FIFO_DEPTH(32)
     ) down_fifo_stream_if();
     
     rvgpu_fifo_stream #(
-        .DATA_WIDTH($bits(t_router_message)),
+        .DATA_WIDTH(ROUTER_MESSAGE_WIDTH),
         .FIFO_DEPTH(32)
     ) u_down_fifo (
         .clk(clk),
